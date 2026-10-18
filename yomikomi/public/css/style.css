@@ -1693,8 +1693,12 @@ img {
 
 /* Long Strip Mode (Webtoon Continuous Stream) */
 .reader-viewport.long-strip-mode {
+  display: block;
+  width: 100%;
+  max-width: 850px;
+  margin: 0 auto;
+  padding: 4.5rem 0 6rem 0;
   gap: 0;
-  justify-content: flex-start;
 }
 
 .reader-page-wrapper {
@@ -1702,6 +1706,7 @@ img {
   max-width: 850px;
   width: 100%;
   display: block;
+  flex-shrink: 0;
   margin: 0 auto;
   padding: 0;
   background: transparent;

@@ -10,6 +10,20 @@ const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(express.json());
+
+// Explicit PWA routes with no-cache headers for sw.js
+app.get('/sw.js', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Content-Type', 'application/javascript; charset=UTF-8');
+  res.setHeader('Service-Worker-Allowed', '/');
+  res.sendFile(path.join(__dirname, 'public', 'sw.js'));
+});
+
+app.get('/manifest.json', (req, res) => {
+  res.setHeader('Content-Type', 'application/manifest+json; charset=UTF-8');
+  res.sendFile(path.join(__dirname, 'public', 'manifest.json'));
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Disk cache folder for cover images (safe for cloud environments)

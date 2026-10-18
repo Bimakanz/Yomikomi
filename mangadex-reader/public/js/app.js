@@ -49,6 +49,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initOfflineQueueUI();
   initOfflineDownloadControls();
   updateAllCollectionBadges();
+  initPWA();
 
   // Load initial data
   loadPopularManga();
@@ -3740,4 +3741,163 @@ async function renderOfflineLibraryView() {
   });
 
   initIcons();
+}
+
+// ==========================================
+// PROGRESSIVE WEB APP (PWA) & OFFLINE ENGINE
+// ==========================================
+
+let deferredPWAInstallPrompt = null;
+
+// Immediately register beforeinstallprompt so we don't miss early triggers
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPWAInstallPrompt = e;
+  console.log('[Yomikomi PWA] beforeinstallprompt event captured');
+
+  // Trigger UI display if DOM is ready
+  const btnNav = document.getElementById('btn-install-app');
+  const wrapDrawer = document.getElementById('drawer-install-wrap');
+  if (btnNav && !isPWARunningStandalone()) btnNav.classList.remove('hidden');
+  if (wrapDrawer && !isPWARunningStandalone()) wrapDrawer.classList.remove('hidden');
+  initIcons();
+});
+
+function isPWARunningStandalone() {
+  return (
+    window.matchMedia('(display-mode: standalone)').matches ||
+    window.navigator.standalone === true ||
+    document.referrer.includes('android-app://')
+  );
+}
+
+function isDeviceIOS() {
+  const ua = window.navigator.userAgent.toLowerCase();
+  return /iphone|ipad|ipod/.test(ua) && !window.MSStream;
+}
+
+function registerAppServiceWorker() {
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker
+        .register('/sw.js', { scope: '/' })
+        .then((reg) => {
+          console.log('[Yomikomi PWA] Service Worker aktif! Scope:', reg.scope);
+        })
+        .catch((err) => {
+          console.warn('[Yomikomi PWA] Registrasi Service Worker gagal:', err);
+        });
+    });
+  }
+}
+
+function initPWA() {
+  // 1. Register Service Worker for Offline App Shell
+  registerAppServiceWorker();
+
+  const installBtnNav = document.getElementById('btn-install-app');
+  const installWrapDrawer = document.getElementById('drawer-install-wrap');
+  const installBtnDrawer = document.getElementById('drawer-btn-install');
+  const iosModal = document.getElementById('ios-install-modal');
+  const btnCloseIosModal = document.getElementById('btn-close-ios-modal');
+  const btnIosUnderstand = document.getElementById('btn-ios-understand');
+
+  const hideAllInstallButtons = () => {
+    if (installBtnNav) installBtnNav.classList.add('hidden');
+    if (installWrapDrawer) installWrapDrawer.classList.add('hidden');
+  };
+
+  const showAllInstallButtons = () => {
+    if (installBtnNav) installBtnNav.classList.remove('hidden');
+    if (installWrapDrawer) installWrapDrawer.classList.remove('hidden');
+    initIcons();
+  };
+
+  // 2. Hide buttons if user is ALREADY running standalone PWA
+  if (isPWARunningStandalone()) {
+    hideAllInstallButtons();
+    return;
+  }
+
+  // 3. Show buttons immediately if beforeinstallprompt already fired or if iOS Safari
+  if (deferredPWAInstallPrompt) {
+    showAllInstallButtons();
+  } else if (isDeviceIOS()) {
+    showAllInstallButtons();
+  }
+
+  // 4. Handle install button clicks
+  const handleInstallClick = async () => {
+    if (deferredPWAInstallPrompt) {
+      // Native Chromium / Android prompt
+      try {
+        deferredPWAInstallPrompt.prompt();
+        const choice = await deferredPWAInstallPrompt.userChoice;
+        console.log('[Yomikomi PWA] Pilihan user:', choice.outcome);
+        if (choice.outcome === 'accepted') {
+          showToast('Terima kasih telah memasang aplikasi Yomikomi! 🎉');
+          hideAllInstallButtons();
+        }
+      } catch (err) {
+        console.warn('[Yomikomi PWA] Gagal memanggil prompt:', err);
+      }
+      deferredPWAInstallPrompt = null;
+    } else if (isDeviceIOS()) {
+      // iOS Safari guide modal
+      if (iosModal) {
+        iosModal.classList.remove('hidden');
+        initIcons();
+      }
+    } else {
+      // Fallback instruction
+      showToast('Aplikasi siap di-install! Buka menu browser (titik 3 di kanan atas) lalu pilih "Install Aplikasi" atau "Tambahkan ke Layar Utama".');
+    }
+  };
+
+  installBtnNav?.addEventListener('click', handleInstallClick);
+  installBtnDrawer?.addEventListener('click', () => {
+    if (typeof closeMobileDrawer === 'function') {
+      closeMobileDrawer();
+    }
+    handleInstallClick();
+  });
+
+  // 5. iOS Modal listeners
+  btnCloseIosModal?.addEventListener('click', () => {
+    iosModal?.classList.add('hidden');
+  });
+  btnIosUnderstand?.addEventListener('click', () => {
+    iosModal?.classList.add('hidden');
+  });
+  iosModal?.addEventListener('click', (e) => {
+    if (e.target === iosModal) {
+      iosModal.classList.add('hidden');
+    }
+  });
+
+  // 6. Listen to display-mode change (e.g. installed while running)
+  try {
+    const displayModeQuery = window.matchMedia('(display-mode: standalone)');
+    displayModeQuery.addEventListener('change', (e) => {
+      if (e.matches) {
+        hideAllInstallButtons();
+      }
+    });
+  } catch (e) { }
+
+  // 7. App installed confirmation event
+  window.addEventListener('appinstalled', () => {
+    console.log('[Yomikomi PWA] Aplikasi berhasil di-install ke home screen!');
+    showToast('Yomikomi berhasil terpasang di perangkat Anda! 📲');
+    deferredPWAInstallPrompt = null;
+    hideAllInstallButtons();
+  });
+
+  // 8. Offline & Online connectivity banners
+  window.addEventListener('offline', () => {
+    showToast('⚠️ Koneksi terputus. Anda dapat tetap membaca manga dari Offline Library!');
+  });
+  window.addEventListener('online', () => {
+    showToast('✅ Koneksi internet kembali aktif.');
+  });
 }

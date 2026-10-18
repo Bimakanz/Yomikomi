@@ -1,0 +1,33 @@
+{
+  "name": "Yomikomi — Baca Manga & Manhwa",
+  "short_name": "Yomikomi",
+  "description": "Website pembaca manga & manhwa pribadi modern Yomikomi dengan antarmuka elegan, mode Webtoon, dan dukungan offline.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0f0f0f",
+  "theme_color": "#0f0f0f",
+  "orientation": "portrait-primary",
+  "lang": "id",
+  "categories": ["books", "entertainment"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

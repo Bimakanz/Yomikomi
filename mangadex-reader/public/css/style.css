@@ -4131,3 +4131,260 @@ img {
   }
 }
 
+/* ==========================================================================
+   PWA INSTALL UI & OFFLINE STYLES
+   ========================================================================== */
+
+/* Navbar Install Button */
+.btn-install-app {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.9rem;
+  border-radius: var(--radius-full);
+  background: linear-gradient(135deg, rgba(255, 103, 64, 0.18), rgba(255, 69, 0, 0.28));
+  border: 1px solid rgba(255, 103, 64, 0.45);
+  color: #fff;
+  font-size: 0.825rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  box-shadow: 0 2px 10px rgba(255, 103, 64, 0.2);
+  white-space: nowrap;
+}
+
+.btn-install-app:hover {
+  background: linear-gradient(135deg, var(--accent), #ff4500);
+  border-color: transparent;
+  box-shadow: 0 4px 16px var(--accent-glow);
+  transform: translateY(-1px);
+  color: #fff;
+}
+
+.btn-install-app i {
+  width: 16px;
+  height: 16px;
+}
+
+@media (max-width: 768px) {
+  .btn-install-app {
+    display: none !important; /* On mobile, the install button is shown in the mobile drawer */
+  }
+}
+
+/* Drawer Install App Button */
+.drawer-install-wrap {
+  padding: 0.75rem 1.25rem;
+  border-top: 1px solid var(--border-subtle);
+  margin-top: auto;
+}
+
+.drawer-install-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, rgba(255, 103, 64, 0.15), rgba(255, 69, 0, 0.25));
+  border: 1px solid rgba(255, 103, 64, 0.4);
+  color: #fff;
+  cursor: pointer;
+  text-align: left;
+  transition: all var(--transition-fast);
+}
+
+.drawer-install-btn:hover {
+  background: linear-gradient(135deg, rgba(255, 103, 64, 0.25), rgba(255, 69, 0, 0.35));
+  border-color: var(--accent);
+  box-shadow: 0 4px 14px var(--accent-glow);
+}
+
+.drawer-install-btn:active {
+  transform: scale(0.98);
+}
+
+.drawer-install-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.drawer-install-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  box-shadow: 0 2px 8px var(--accent-glow);
+  flex-shrink: 0;
+}
+
+.drawer-install-icon i {
+  width: 18px;
+  height: 18px;
+}
+
+.drawer-install-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.drawer-install-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.25;
+}
+
+.drawer-install-desc {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  line-height: 1.25;
+}
+
+.drawer-install-pill {
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 0.2rem 0.5rem;
+  background: var(--accent);
+  color: #fff;
+  border-radius: var(--radius-full);
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+
+/* iOS PWA Install Modal */
+.ios-install-box {
+  position: relative;
+  width: 90%;
+  max-width: 480px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-lg);
+  padding: 1.75rem;
+  box-shadow: var(--shadow-lg);
+  animation: modalPop 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ios-modal-close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.ios-modal-close:hover {
+  color: #fff;
+  background: var(--bg-card-hover);
+  border-color: var(--accent);
+}
+
+.ios-install-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.ios-install-app-icon {
+  width: 58px;
+  height: 58px;
+  border-radius: 14px;
+  object-fit: cover;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.ios-install-title {
+  font-family: var(--font-heading);
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 0.25rem;
+}
+
+.ios-install-subtitle {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.ios-steps-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin-bottom: 1.5rem;
+}
+
+.ios-step-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  padding: 0.85rem 1rem;
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+}
+
+.ios-step-badge {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 2px 6px var(--accent-glow);
+}
+
+.ios-step-content p {
+  font-size: 0.85rem;
+  color: var(--text-main);
+  line-height: 1.45;
+}
+
+.inline-ios-icon {
+  display: inline-block;
+  vertical-align: middle;
+  width: 17px;
+  height: 17px;
+  color: var(--accent);
+  margin: 0 2px;
+}
+
+.ios-confirm-btn {
+  width: 100%;
+  padding: 0.75rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  border-radius: var(--radius-md);
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.ios-confirm-btn:hover {
+  background: #ff4500;
+  box-shadow: 0 4px 14px var(--accent-glow);
+}
+

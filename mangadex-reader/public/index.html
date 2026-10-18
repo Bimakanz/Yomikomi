@@ -2,9 +2,23 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, viewport-fit=cover">
   <title>Yomikomi — Baca Manga & Manhwa Pribadi</title>
   <meta name="description" content="Website pembaca manga pribadi modern Yomikomi dengan antarmuka elegan, mode Webtoon, dan navigasi cepat.">
+  
+  <!-- PWA & Mobile Web App Meta Tags -->
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0f0f0f">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Yomikomi">
+  <meta name="application-name" content="Yomikomi">
+  
+  <!-- PWA Icons & Apple Touch Icons -->
+  <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
+  <link rel="icon" type="image/png" sizes="64x64" href="/icons/favicon.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   
   <!-- Google Fonts: Inter & Outfit -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -58,6 +72,10 @@
           <i data-lucide="search"></i>
           <span class="search-trigger-text">Cari komik...</span>
           <kbd class="search-kbd">Ctrl K</kbd>
+        </button>
+        <button class="btn-install-app hidden" id="btn-install-app" title="📲 Install Aplikasi Yomikomi" type="button">
+          <i data-lucide="download-cloud"></i>
+          <span class="btn-install-label">Install App</span>
         </button>
         <button class="mobile-search-btn" id="mobile-search-trigger" title="Cari Komik" aria-label="Cari Komik">
           <i data-lucide="search"></i>
@@ -121,10 +139,61 @@
       </button>
     </nav>
 
+    <!-- Drawer Install App Button -->
+    <div class="drawer-install-wrap hidden" id="drawer-install-wrap">
+      <button class="drawer-install-btn" id="drawer-btn-install" type="button">
+        <div class="drawer-install-left">
+          <div class="drawer-install-icon">
+            <i data-lucide="download-cloud"></i>
+          </div>
+          <div class="drawer-install-text">
+            <span class="drawer-install-title">📲 Install Aplikasi</span>
+            <span class="drawer-install-desc">Pasang di Layar HP / Laptop (Offline Siap)</span>
+          </div>
+        </div>
+        <span class="drawer-install-pill">GRATIS</span>
+      </button>
+    </div>
+
     <div class="drawer-footer">
       <p class="drawer-footer-tip">Geser ke kanan untuk menutup menu ➡️</p>
     </div>
   </aside>
+
+  <!-- iOS PWA Install Instruction Modal (For iPhone / iPad Safari) -->
+  <div class="modal-overlay hidden" id="ios-install-modal">
+    <div class="ios-install-box">
+      <button class="ios-modal-close" id="btn-close-ios-modal" aria-label="Tutup"><i data-lucide="x"></i></button>
+      <div class="ios-install-header">
+        <img src="/icons/icon-192.png" alt="Yomikomi App" class="ios-install-app-icon">
+        <div class="ios-install-header-text">
+          <h3 class="ios-install-title">Install Yomikomi di iPhone / iPad</h3>
+          <p class="ios-install-subtitle">Aplikasi Web Mandiri • Hemat Kuota & Siap Offline</p>
+        </div>
+      </div>
+      <div class="ios-steps-container">
+        <div class="ios-step-card">
+          <div class="ios-step-badge">1</div>
+          <div class="ios-step-content">
+            <p>Ketuk tombol <strong>Share / Bagikan</strong> (<i data-lucide="share" class="inline-ios-icon"></i>) pada bilah bawah browser Safari Anda.</p>
+          </div>
+        </div>
+        <div class="ios-step-card">
+          <div class="ios-step-badge">2</div>
+          <div class="ios-step-content">
+            <p>Gulir menu dan pilih opsi <strong>"Add to Home Screen"</strong> / <strong>"Tambahkan ke Layar Utama"</strong> (<i data-lucide="plus-square" class="inline-ios-icon"></i>).</p>
+          </div>
+        </div>
+        <div class="ios-step-card">
+          <div class="ios-step-badge">3</div>
+          <div class="ios-step-content">
+            <p>Ketuk tombol <strong>Add / Tambah</strong> di pojok kanan atas. Ikon Yomikomi langsung siap diakses dari Home Screen Anda!</p>
+          </div>
+        </div>
+      </div>
+      <button class="btn-primary btn-block ios-confirm-btn" id="btn-ios-understand">Saya Mengerti</button>
+    </div>
+  </div>
 
   <!-- Quick Search Modal (Ctrl + K) -->
   <div class="modal-overlay hidden" id="search-modal">

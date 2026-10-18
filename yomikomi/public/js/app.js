@@ -814,7 +814,11 @@ function renderMangaDetailHero(manga) {
       <div class="detail-actions">
         <button class="btn-primary" id="btn-read-first-chapter">
           <i data-lucide="play"></i>
-          <span>Mulai Baca (Chapter 1)</span>
+          <span>${(() => {
+            const hList = getStoredList(STORAGE_KEY_HISTORY);
+            const last = hList.find(item => item.mangaId === manga.id);
+            return last ? `Lanjut Baca (${last.chapterNum})` : 'Mulai Baca (Chapter 1)';
+          })()}</span>
         </button>
         <button class="btn-secondary ${isMangaBookmarked(manga.id) ? 'bookmarked active' : ''}" id="btn-bookmark-manga">
           <i data-lucide="${isMangaBookmarked(manga.id) ? 'bookmark-check' : 'bookmark'}"></i>
@@ -840,6 +844,12 @@ function renderMangaDetailHero(manga) {
   });
 
   document.getElementById('btn-read-first-chapter')?.addEventListener('click', () => {
+    const hList = getStoredList(STORAGE_KEY_HISTORY);
+    const last = hList.find(item => item.mangaId === manga.id);
+    if (last && last.chapterId && window.resumeReadingChapter) {
+      window.resumeReadingChapter(manga.id, last.chapterId, last.chapterNum);
+      return;
+    }
     if (state.currentChapters.length > 0) {
       // Pick the first chapter
       openReader(state.currentChapters[0].id, 0);
@@ -3393,6 +3403,125 @@ function renderBookmarksList() {
   initIcons();
 }
 
+/**
+ * Directly resumes reading at the last read chapter (online or offline),
+ * bypassing having to manually pick chapters again.
+ */
+async function resumeReadingChapter(mangaId, chapterId, chapterNum) {
+  showToast(`Melanjutkan ${chapterNum || 'chapter'}...`);
+
+  // 1. Check if chapter is saved offline in IndexedDB
+  if (window.OfflineManager) {
+    try {
+      const isDown = await OfflineManager.isChapterDownloaded(chapterId);
+      if (isDown) {
+        const offM = await OfflineManager.db.manga.get(mangaId);
+        if (offM) {
+          state.currentManga = {
+            id: offM.id,
+            title: offM.title,
+            coverUrl: offM.coverUrl || '',
+            coverBlob: offM.coverBlob || null,
+            attributes: {
+              title: { en: offM.title },
+              description: { id: offM.synopsis || '' },
+              coverUrl: offM.coverUrl || ''
+            }
+          };
+        }
+        const offlineChs = await OfflineManager.db.chapters.where('mangaId').equals(mangaId).toArray();
+        if (offlineChs && offlineChs.length > 0) {
+          const sorted = offlineChs.sort((a, b) => parseFloat(a.chapterNumber || '0') - parseFloat(b.chapterNumber || '0'));
+          state.allMangaDexChapters = [];
+          state.currentSource = offM?.source || 'mangadex';
+          const targetIndex = sorted.findIndex(c => c.id === chapterId);
+          const resolvedIndex = targetIndex !== -1 ? targetIndex : 0;
+          const targetCh = sorted[resolvedIndex];
+
+          if (state.currentSource === 'english') {
+            state.isExternal = true;
+            const allExternal = sorted.map(c => ({
+              url: c.id,
+              title: c.title,
+              num: parseFloat(c.chapterNumber || '1')
+            }));
+            state.englishChapters = allExternal;
+            openEnglishReader(targetCh.id, targetCh.title, allExternal, resolvedIndex);
+          } else if (state.currentSource === 'bacakomik') {
+            state.isExternal = true;
+            const allExternal = sorted.map(c => ({
+              url: c.id,
+              title: c.title,
+              num: parseFloat(c.chapterNumber || '1')
+            }));
+            state.externalChapters = allExternal;
+            openExternalReader(targetCh.id, targetCh.title, allExternal, resolvedIndex);
+          } else {
+            state.isExternal = false;
+            state.currentChapters = sorted.map(c => ({
+              id: c.id,
+              mangaId: mangaId,
+              attributes: {
+                chapter: c.chapterNumber,
+                title: c.title
+              }
+            }));
+            state.allMangaDexChapters = state.currentChapters;
+            openReader(targetCh.id, resolvedIndex);
+          }
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn('Offline check failed in resumeReadingChapter:', e);
+    }
+  }
+
+  // 2. MangaDex Online Chapter
+  if (mangaId && !mangaId.startsWith('http') && mangaId.length > 20) {
+    if (!state.currentManga || state.currentManga.id !== mangaId) {
+      try {
+        const res = await fetch(`/api/manga/${mangaId}`);
+        if (res.ok) {
+          const data = await res.json();
+          state.currentManga = data.data;
+        }
+      } catch (e) {}
+    }
+
+    if (!state.currentChapters || state.currentChapters.length === 0 || state.currentChapters[0]?.mangaId !== mangaId) {
+      try {
+        const chRes = await fetch(`/api/manga/${mangaId}/chapters`);
+        if (chRes.ok) {
+          const chData = await chRes.json();
+          state.allMangaDexChapters = chData.data || [];
+          state.currentChapters = filterChaptersByLang(state.allMangaDexChapters, state.currentLang);
+        }
+      } catch (e) {}
+    }
+
+    const idx = state.currentChapters.findIndex(c => c.id === chapterId);
+    openReader(chapterId, idx !== -1 ? idx : 0);
+    return;
+  }
+
+  // 3. Mirror Online Chapter
+  if (chapterId && chapterId.startsWith('http')) {
+    if (mangaId.includes('english') || chapterId.includes('asuracomic') || chapterId.includes('flamecomic')) {
+      state.currentSource = 'english';
+      openEnglishReader(chapterId, chapterNum || 'Chapter', state.englishChapters || [{ url: chapterId, title: chapterNum || 'Chapter' }], 0);
+    } else {
+      state.currentSource = 'bacakomik';
+      openExternalReader(chapterId, chapterNum || 'Chapter', state.externalChapters || [{ url: chapterId, title: chapterNum || 'Chapter' }], 0);
+    }
+    return;
+  }
+
+  // Fallback to detail
+  openMangaDetail(mangaId);
+}
+window.resumeReadingChapter = resumeReadingChapter;
+
 async function renderHistoryList() {
   const history = getStoredList(STORAGE_KEY_HISTORY);
   const grid = document.getElementById('history-grid');
@@ -3483,6 +3612,7 @@ async function renderHistoryList() {
 
     const isPlaceholder = !coverSrc || coverSrc.includes('No+Cover');
     const safeTitle = (item.title || '').replace(/'/g, "\\'");
+    const safeChNum = (item.chapterNum || '').replace(/'/g, "\\'");
 
     const card = document.createElement('div');
     card.className = 'history-card';
@@ -3492,13 +3622,15 @@ async function renderHistoryList() {
            alt="${item.title}" 
            data-manga-id="${item.mangaId || ''}"
            data-manga-title="${item.title || ''}"
+           style="cursor: pointer;"
+           onclick="openMangaDetail('${item.mangaId}')"
            onerror="resolveMissingHistoryCover(this, '${safeTitle}', '${item.mangaId || ''}')">
-      <div class="history-info">
+      <div class="history-info" style="cursor: pointer;" onclick="openMangaDetail('${item.mangaId}')">
         <h4 class="history-title">${item.title}</h4>
         <div class="history-chapter">Terakhir dibaca: <strong>${item.chapterNum}</strong></div>
         <div class="history-date">Dibaca pada ${dateStr}</div>
       </div>
-      <button class="btn-primary" onclick="openMangaDetail('${item.mangaId}')">
+      <button class="btn-primary" onclick="resumeReadingChapter('${item.mangaId}', '${item.chapterId}', '${safeChNum}')">
         <i data-lucide="play"></i>
         <span>Lanjut Baca</span>
       </button>
@@ -3998,7 +4130,7 @@ async function renderOfflineLibraryView() {
         </div>
         <div class="offline-card-actions">
           <button class="btn-read-offline" data-manga-id="${m.id}" data-source="${m.source || 'mangadex'}">
-            <i data-lucide="book-open"></i> Baca Offline
+            <i data-lucide="play"></i> Lanjut Baca
           </button>
           <button class="btn-delete-download" title="Hapus seluruh data offline manga ini" data-del-id="${m.id}">
             <i data-lucide="trash-2"></i>
@@ -4007,15 +4139,35 @@ async function renderOfflineLibraryView() {
       </div>
     `;
 
-    // Click Baca Offline: directly launches reader with downloaded chapters
+    // Click Lanjut Baca: directly launches reader at the last read chapter (or first downloaded)
     card.querySelector('.btn-read-offline')?.addEventListener('click', async () => {
       const chs = await OfflineManager.db.chapters.where('mangaId').equals(m.id).toArray();
       if (chs.length > 0) {
         const sortedChs = chs.sort((a, b) => parseFloat(a.chapterNumber || '0') - parseFloat(b.chapterNumber || '0'));
-        const firstCh = sortedChs[0];
+        
+        // Find last read chapter from shared reading history
+        const historyList = getStoredList(STORAGE_KEY_HISTORY);
+        const lastRead = historyList.find(h => h.mangaId === m.id);
+
+        let targetCh = null;
+        if (lastRead) {
+          targetCh = sortedChs.find(c => c.id === lastRead.chapterId);
+          if (!targetCh && lastRead.chapterNum) {
+            const cleanNum = lastRead.chapterNum.replace(/[^\d.]/g, '');
+            if (cleanNum) {
+              targetCh = sortedChs.find(c => String(c.chapterNumber) === cleanNum);
+            }
+          }
+        }
+        if (!targetCh) {
+          targetCh = sortedChs[0];
+        }
+
+        const targetIndex = sortedChs.findIndex(c => c.id === targetCh.id);
+        const resolvedIndex = targetIndex !== -1 ? targetIndex : 0;
 
         // Check if pages are corrupted from previous old download
-        const validPages = await OfflineManager.getOfflinePages(firstCh.id);
+        const validPages = await OfflineManager.getOfflinePages(targetCh.id);
         if (!validPages || validPages.length === 0) {
           showToast('Unduhan chapter ini dari sesi sebelum perbaikan. Membuka detail komik untuk mengunduh ulang...');
           openMangaDetail(m.id);
@@ -4046,7 +4198,7 @@ async function renderOfflineLibraryView() {
             num: parseFloat(c.chapterNumber || '1')
           }));
           state.englishChapters = allExternal;
-          openEnglishReader(firstCh.id, firstCh.title, allExternal, 0);
+          openEnglishReader(targetCh.id, targetCh.title, allExternal, resolvedIndex);
         } else if (m.source === 'bacakomik') {
           state.isExternal = true;
           const allExternal = sortedChs.map(c => ({
@@ -4055,7 +4207,7 @@ async function renderOfflineLibraryView() {
             num: parseFloat(c.chapterNumber || '1')
           }));
           state.externalChapters = allExternal;
-          openExternalReader(firstCh.id, firstCh.title, allExternal, 0);
+          openExternalReader(targetCh.id, targetCh.title, allExternal, resolvedIndex);
         } else {
           state.isExternal = false;
           state.currentChapters = sortedChs.map(c => ({
@@ -4067,7 +4219,7 @@ async function renderOfflineLibraryView() {
             }
           }));
           state.allMangaDexChapters = state.currentChapters;
-          openReader(firstCh.id, 0);
+          openReader(targetCh.id, resolvedIndex);
         }
       } else {
         openMangaDetail(m.id);

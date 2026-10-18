@@ -3061,23 +3061,8 @@ img {
   cursor: pointer;
 }
 
-/* Badge Offline Active in Reader */
+/* Badge Offline Active in Reader (Hidden per user request) */
 .badge-offline-mode {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.25rem 0.7rem;
-  background: rgba(16, 185, 129, 0.2);
-  border: 1px solid #10b981;
-  border-radius: var(--radius-full);
-  color: #10b981;
-  font-weight: 700;
-  font-size: 0.78rem;
-  letter-spacing: 0.02em;
-  animation: fadeIn 300ms ease;
-}
-
-.badge-offline-mode.hidden {
   display: none !important;
 }
 

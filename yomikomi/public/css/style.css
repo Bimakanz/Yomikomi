@@ -1691,7 +1691,7 @@ img {
   cursor: pointer;
 }
 
-/* Long Strip Mode (Webtoon) */
+/* Long Strip Mode (Webtoon Continuous Stream) */
 .reader-viewport.long-strip-mode {
   gap: 0;
   justify-content: flex-start;
@@ -1701,22 +1701,27 @@ img {
   position: relative;
   max-width: 850px;
   width: 100%;
-  min-height: 480px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  background: #0d0e12;
-  overflow: hidden;
+  display: block;
+  margin: 0 auto;
+  padding: 0;
+  background: transparent;
+  min-height: 0;
+  height: auto;
+  overflow: visible; /* CRITICAL: Never clip protruding speech bubbles or continuous webtoon seams */
   -webkit-tap-highlight-color: transparent !important;
   -webkit-touch-callout: none !important;
   -webkit-user-select: none !important;
   user-select: none !important;
 }
 
-@media (max-width: 600px) {
-  .reader-page-wrapper {
-    min-height: 380px;
-  }
+/* While loading skeleton, keep a placeholder min-height */
+.reader-page-wrapper:not(.page-loaded) {
+  min-height: 380px;
+}
+
+.reader-page-wrapper.page-loaded {
+  min-height: 0;
+  height: auto;
 }
 
 /* Page Skeleton Loader */
@@ -1785,7 +1790,11 @@ img {
   display: block;
   opacity: 0;
   transition: opacity 280ms ease-in-out;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.8);
+  box-shadow: none; /* Seamless image connection without overlapping shadow lines */
+  border: none;
+  margin: 0;
+  padding: 0;
+  vertical-align: bottom; /* Removes sub-pixel gap between adjacent strips */
   position: relative;
   z-index: 1;
   -webkit-tap-highlight-color: transparent !important;

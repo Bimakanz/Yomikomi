@@ -1897,6 +1897,7 @@ async function renderChaptersList(chapters) {
 window.handlePageImageLoad = function (imgEl) {
   const wrapper = imgEl.closest('.reader-page-wrapper');
   if (wrapper) {
+    wrapper.classList.add('page-loaded');
     const skeleton = wrapper.querySelector('.page-skeleton-loader');
     if (skeleton) {
       skeleton.classList.add('fade-out');

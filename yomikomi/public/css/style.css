@@ -1867,6 +1867,8 @@ img {
   width: 100%;
   position: relative;
   overflow: hidden;
+  -webkit-tap-highlight-color: transparent !important;
+  user-select: none !important;
 }
 
 .single-page-img {
@@ -1875,7 +1877,8 @@ img {
   object-fit: contain;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.9);
   transition: opacity 150ms ease;
-  user-select: none;
+  user-select: none !important;
+  -webkit-tap-highlight-color: transparent !important;
 }
 
 /* Single Mode: Auto-Cut Panel Slice Window for Long Strips */
@@ -1991,9 +1994,12 @@ img {
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 50%;
+  width: 38%;
   cursor: pointer;
   z-index: 10;
+  -webkit-tap-highlight-color: transparent !important;
+  outline: none !important;
+  user-select: none !important;
 }
 
 .nav-click-zone.left {

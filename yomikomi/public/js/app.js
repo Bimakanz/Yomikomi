@@ -16,7 +16,8 @@ const state = {
   currentLang: 'all', // 'all', 'id', 'en'
   currentReadingLang: 'id', // Active reader language ('id' or 'en')
   currentSort: 'asc',
-  readerMode: 'long-strip', // 'long-strip', 'single', 'double'
+  readerModePreference: localStorage.getItem('yomikomi_reader_mode_pref') || 'auto', // 'auto', 'long-strip', 'single', 'double'
+  readerMode: 'long-strip', // active effective mode ('long-strip', 'single', 'double')
   readerQuality: 'dataSaver', // 'dataSaver' or 'pages' (original)
   currentPageIndex: 0,
   currentSingleSlice: 0,
@@ -2050,6 +2051,58 @@ async function openReader(chapterId, chapterIndex) {
   }
 }
 
+/**
+ * Smart Auto-Detect Reader Mode:
+ * Detects whether a title is a continuous Webtoon (Manhwa/Manhua/Web Comic)
+ * or a traditional discrete Manga (Single Page per screen).
+ */
+function detectOptimalReaderMode(manga, pages) {
+  // Layer 1: MangaDex Metadata Inspection
+  if (manga && manga.attributes) {
+    const attrs = manga.attributes;
+    const lang = (attrs.originalLanguage || '').toLowerCase();
+
+    // Korean (Manhwa) and Chinese (Manhua) are universally long-strip webtoons
+    if (lang === 'ko' || lang === 'zh' || lang === 'zh-hk' || lang === 'zh-ro') {
+      return 'long-strip';
+    }
+
+    // Check tags: 'Long Strip' or 'Web Comic'
+    if (Array.isArray(attrs.tags)) {
+      const hasLongStripTag = attrs.tags.some(t => {
+        const name = (t.attributes?.name?.en || '').toLowerCase();
+        return name.includes('long strip') || name.includes('web comic');
+      });
+      if (hasLongStripTag) return 'long-strip';
+    }
+
+    // Japanese manga without long-strip tag is traditional single-page format
+    if (lang === 'ja') {
+      return 'single';
+    }
+  }
+
+  // Layer 2: External mirrors (Komikindo, Bacakomik, etc.) - check title / type keywords
+  const titleString = [
+    manga?.title,
+    manga?.type,
+    manga?.attributes?.title?.en,
+    manga?.attributes?.title?.ja,
+    manga?.attributes?.title?.['ja-ro'],
+    document.getElementById('reader-manga-title')?.textContent
+  ].filter(Boolean).join(' ').toLowerCase();
+
+  if (titleString.includes('manhwa') || titleString.includes('manhua') || titleString.includes('webtoon')) {
+    return 'long-strip';
+  }
+  if (titleString.includes('manga')) {
+    return 'single';
+  }
+
+  // Default fallback
+  return 'long-strip';
+}
+
 function renderReaderPages(data) {
   const viewport = document.getElementById('reader-viewport');
   viewport.innerHTML = '';
@@ -2065,6 +2118,44 @@ function renderReaderPages(data) {
 
   const pages = state.readerQuality === 'dataSaver' ? (data.dataSaverPages || data.pages) : data.pages;
   const total = pages.length;
+
+  // Smart Auto-Detect Reader Mode (Webtoon for long continuous strips, Single for Manga)
+  if (state.readerModePreference === 'auto') {
+    state.readerMode = detectOptimalReaderMode(state.currentManga, pages);
+
+    // Update Auto status indicator in menu
+    const autoStatusEl = document.getElementById('mode-auto-status');
+    if (autoStatusEl) {
+      autoStatusEl.textContent = state.readerMode === 'long-strip' 
+        ? 'Auto: Webtoon (Aktif)' 
+        : 'Auto: Single (Aktif)';
+    }
+
+    // Layer 3: Physical Image Aspect Ratio Probe on first page to guarantee 100% precision
+    if (pages.length > 0) {
+      const probeImg = new Image();
+      probeImg.src = pages[0];
+      const verifyRatio = () => {
+        if (probeImg.naturalWidth > 0 && probeImg.naturalHeight > 0) {
+          const ratio = probeImg.naturalHeight / probeImg.naturalWidth;
+          // Standard manga tankobon page is <= 1.6x height/width. Webtoon continuous strip is > 1.65x
+          const probedMode = ratio > 1.65 ? 'long-strip' : 'single';
+          if (state.readerModePreference === 'auto' && probedMode !== state.readerMode) {
+            state.readerMode = probedMode;
+            renderReaderPages(data);
+          }
+        }
+      };
+      if (probeImg.complete && probeImg.naturalWidth > 0) {
+        const ratio = probeImg.naturalHeight / probeImg.naturalWidth;
+        state.readerMode = ratio > 1.65 ? 'long-strip' : 'single';
+      } else {
+        probeImg.onload = verifyRatio;
+      }
+    }
+  } else {
+    state.readerMode = state.readerModePreference;
+  }
 
   document.getElementById('page-counter-text').textContent = `1 / ${total}`;
 
@@ -2240,11 +2331,26 @@ function renderSinglePage(pages, index, sliceIndex = 0) {
 
   const currentUrl = pages[state.currentPageIndex];
 
+  // Preload neighboring next page for instant page-flipping
+  if (state.currentPageIndex < total - 1) {
+    const preloadImg = new Image();
+    preloadImg.src = pages[state.currentPageIndex + 1];
+  }
+
   // Inspect image dimensions to check if it's a tall strip (webtoon)
   const testImg = new Image();
   testImg.src = currentUrl;
 
   const renderContent = () => {
+    // If in Auto mode and first image is a long strip, dynamically switch to webtoon mode
+    if (state.readerModePreference === 'auto' && testImg.naturalWidth > 0 && (testImg.naturalHeight / testImg.naturalWidth) > 1.65) {
+      state.readerMode = 'long-strip';
+      if (state.currentChapterData) {
+        renderReaderPages(state.currentChapterData);
+        return;
+      }
+    }
+
     const isLongStrip = testImg.naturalWidth > 0 && (testImg.naturalHeight / testImg.naturalWidth) > 1.6;
 
     if (isLongStrip) {
@@ -2305,8 +2411,20 @@ function renderSinglePage(pages, index, sliceIndex = 0) {
 
       viewport.innerHTML = `
         <div class="single-page-container">
+          <div class="page-skeleton-loader" id="single-page-skeleton" style="${testImg.complete ? 'display: none;' : ''}">
+            <div class="page-skeleton-shimmer"></div>
+            <div class="page-skeleton-label">
+              <div class="spinner-small"></div>
+              <span>Memuat Hal. ${state.currentPageIndex + 1}...</span>
+            </div>
+          </div>
           <div class="nav-click-zone left" title="Halaman Sebelumnya (↑ / W)"></div>
-          <img src="${currentUrl}" class="single-page-img" alt="Halaman ${state.currentPageIndex + 1}">
+          <img 
+            src="${currentUrl}" 
+            class="single-page-img" 
+            alt="Halaman ${state.currentPageIndex + 1}"
+            onload="const sk = document.getElementById('single-page-skeleton'); if (sk) sk.style.display = 'none';"
+          >
           <div class="nav-click-zone right" title="Halaman Selanjutnya (↓ / S / Spasi)"></div>
         </div>
       `;
@@ -2342,8 +2460,20 @@ function renderSinglePage(pages, index, sliceIndex = 0) {
     testImg.onerror = renderContent;
     viewport.innerHTML = `
       <div class="single-page-container">
+        <div class="page-skeleton-loader" id="single-page-skeleton">
+          <div class="page-skeleton-shimmer"></div>
+          <div class="page-skeleton-label">
+            <div class="spinner-small"></div>
+            <span>Memuat Hal. ${state.currentPageIndex + 1}...</span>
+          </div>
+        </div>
         <div class="nav-click-zone left"></div>
-        <img src="${currentUrl}" class="single-page-img" alt="Halaman ${state.currentPageIndex + 1}">
+        <img 
+          src="${currentUrl}" 
+          class="single-page-img" 
+          alt="Halaman ${state.currentPageIndex + 1}"
+          onload="const sk = document.getElementById('single-page-skeleton'); if (sk) sk.style.display = 'none';"
+        >
         <div class="nav-click-zone right"></div>
       </div>
     `;
@@ -2694,7 +2824,7 @@ function updateReaderNavButtons() {
       prevBtn.disabled = isAtStart && !hasPrevChapter;
       prevBtn.style.opacity = (isAtStart && !hasPrevChapter) ? '0.35' : '1';
       if (prevText) {
-        prevText.textContent = isAtStart ? 'Chapter Sblm' : 'Hal Sblm';
+        prevText.textContent = isAtStart ? 'Chapter Sblm' : 'Prev';
       }
     }
 
@@ -2703,7 +2833,7 @@ function updateReaderNavButtons() {
       nextBtn.disabled = isAtEnd && !hasNextChapter;
       nextBtn.style.opacity = (isAtEnd && !hasNextChapter) ? '0.35' : '1';
       if (nextText) {
-        nextText.textContent = isAtEnd ? 'Chapter Lanjut' : 'Hal Lanjut';
+        nextText.textContent = isAtEnd ? 'Chapter Lanjut' : 'Next';
       }
     }
 
@@ -2772,6 +2902,16 @@ function initReaderControls() {
 
   moreBtn?.addEventListener('click', (e) => {
     e.stopPropagation();
+    // Sync active selection in mode menu
+    document.querySelectorAll('.reader-mode-opt').forEach(b => {
+      b.classList.toggle('active', b.dataset.mode === state.readerModePreference);
+    });
+    const autoStatusEl = document.getElementById('mode-auto-status');
+    if (autoStatusEl && state.readerModePreference === 'auto') {
+      autoStatusEl.textContent = state.readerMode === 'long-strip' 
+        ? 'Auto: Webtoon (Aktif)' 
+        : 'Auto: Single (Aktif)';
+    }
     moreMenu?.classList.toggle('hidden');
   });
 
@@ -2785,10 +2925,26 @@ function initReaderControls() {
   document.querySelectorAll('.reader-mode-opt').forEach(btn => {
     btn.addEventListener('click', () => {
       const mode = btn.dataset.mode;
-      document.querySelectorAll('.reader-mode-opt').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      state.readerMode = mode;
+      state.readerModePreference = mode;
+      localStorage.setItem('yomikomi_reader_mode_pref', mode);
+
+      document.querySelectorAll('.reader-mode-opt').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+
       moreMenu?.classList.add('hidden');
+
+      if (mode === 'auto') {
+        showToast('⚡ Mode Pintar (Auto): Otomatis Webtoon / Single');
+      } else if (mode === 'long-strip') {
+        state.readerMode = 'long-strip';
+        showToast('Mode Webtoon diaktifkan');
+      } else if (mode === 'single') {
+        state.readerMode = 'single';
+        showToast('Mode Single Page diaktifkan');
+      } else if (mode === 'double') {
+        state.readerMode = 'double';
+        showToast('Mode Double Page diaktifkan');
+      }
+
       if (state.currentChapterData) {
         renderReaderPages(state.currentChapterData);
       }
@@ -2930,6 +3086,38 @@ function initReaderControls() {
     toolbar?.classList.toggle('hidden-bar', !isBarsVisible);
     footer?.classList.toggle('hidden-bar', !isBarsVisible);
   });
+
+  // Touch Swipe for Single / Double Mode in Reader (Mobile Friendly)
+  let rTouchStartX = 0;
+  let rTouchStartY = 0;
+
+  document.getElementById('view-reader')?.addEventListener('touchstart', (e) => {
+    if (state.currentView !== 'reader') return;
+    if (state.readerMode !== 'single' && state.readerMode !== 'double') return;
+    if (!e.touches || e.touches.length !== 1) return;
+    rTouchStartX = e.touches[0].clientX;
+    rTouchStartY = e.touches[0].clientY;
+  }, { passive: true });
+
+  document.getElementById('view-reader')?.addEventListener('touchend', (e) => {
+    if (state.currentView !== 'reader') return;
+    if (state.readerMode !== 'single' && state.readerMode !== 'double') return;
+    if (!e.changedTouches || e.changedTouches.length === 0) return;
+
+    const diffX = e.changedTouches[0].clientX - rTouchStartX;
+    const diffY = e.changedTouches[0].clientY - rTouchStartY;
+
+    // Horizontal swipe threshold: > 45px and predominantly horizontal
+    if (Math.abs(diffX) > 45 && Math.abs(diffX) > Math.abs(diffY) * 1.4) {
+      if (diffX < 0) {
+        // Swipe left -> Next Page / Chapter
+        handleReaderNext();
+      } else {
+        // Swipe right -> Previous Page / Chapter
+        handleReaderPrev();
+      }
+    }
+  }, { passive: true });
 }
 
 // ==========================================

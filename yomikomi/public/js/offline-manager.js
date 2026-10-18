@@ -371,10 +371,13 @@
           const data = await res.json();
           pageUrls = data.pages?.map(p => p.imageUrl || p) || [];
         } else {
-          // MangaDex Official
+          // MangaDex Official (prioritize data-saver for stability, speed, and 70% storage savings)
           const res = await fetch(`/api/chapter/${chapterId}`);
           const data = await res.json();
-          pageUrls = data.pages || [];
+          const isHighPage = (data.totalPages > 30) || (data.pages && data.pages.length > 30);
+          pageUrls = (isHighPage && data.dataSaverPages && data.dataSaverPages.length > 0)
+            ? data.dataSaverPages
+            : (data.dataSaverPages || data.pages || []);
         }
 
         if (!pageUrls || pageUrls.length === 0) {

@@ -1719,9 +1719,9 @@ img {
   user-select: none !important;
 }
 
-/* While loading skeleton, keep a placeholder min-height */
+/* While loading skeleton or queued for windowed loading, keep 600px placeholder to prevent scrollbar jumping */
 .reader-page-wrapper:not(.page-loaded) {
-  min-height: 380px;
+  min-height: 600px;
 }
 
 .reader-page-wrapper.page-loaded {

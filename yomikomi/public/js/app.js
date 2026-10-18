@@ -1893,7 +1893,91 @@ async function renderChaptersList(chapters) {
 // VIEW 3: THE MANGA READER ENGINE
 // ==========================================
 
-// Global Image Load & Error Handlers for Smooth Skeleton Transitions
+// ==========================================
+// READER IMAGE ENGINE: 3-STAGE AUTO-FALLBACK & WINDOWED CONCURRENCY
+// ==========================================
+
+/**
+ * Stage 0: Internal hardened proxy (/api/proxy/image)
+ * Stage 1: Direct URL with no-referrer & crossOrigin="anonymous"
+ * Stage 2: Alternative proxy (wsrv.nl with &we=1&n=-1) + cache-bust ?t=...
+ */
+window.getReaderStageUrl = function (rawUrl, stage = 0, retryTimestamp = null) {
+  if (!rawUrl) return '';
+  // Local offline blob or base64 data URLs: always load directly
+  if (rawUrl.startsWith('blob:') || rawUrl.startsWith('data:')) {
+    return rawUrl;
+  }
+
+  // Ensure rawUrl is clean and not already multiply wrapped
+  let cleanUrl = rawUrl;
+  while (typeof cleanUrl === 'string' && (cleanUrl.startsWith('/api/proxy-image?url=') || cleanUrl.startsWith('/api/proxy/image?url='))) {
+    cleanUrl = decodeURIComponent(cleanUrl.replace(/^\/api\/proxy[-/]image\?url=/, ''));
+  }
+
+  // If rawUrl is MangaDex volunteer node that was cached earlier, optimize to uploads.mangadex.org
+  if (cleanUrl.includes('mangadex.network/data-saver/')) {
+    cleanUrl = cleanUrl.replace(/https?:\/\/[^\/]+\/data-saver\//, 'https://uploads.mangadex.org/data-saver/');
+  } else if (cleanUrl.includes('mangadex.network/data/')) {
+    cleanUrl = cleanUrl.replace(/https?:\/\/[^\/]+\/data\//, 'https://uploads.mangadex.org/data/');
+  }
+
+  if (stage === 0) {
+    // Stage 0 (Jalur Utama - Cepat): Muat melalui proxy internal /api/proxy/image
+    const qs = retryTimestamp ? `&retry=${retryTimestamp}` : '';
+    return `/api/proxy/image?url=${encodeURIComponent(cleanUrl)}${qs}`;
+  } else if (stage === 1) {
+    // Stage 1 (Auto-Fallback 1 - Ganti Proxy / Direct No-Referer): Direct URL
+    const sep = cleanUrl.includes('?') ? '&' : '?';
+    const qs = retryTimestamp ? `${sep}retry=${retryTimestamp}` : '';
+    return cleanUrl + qs;
+  } else if (stage === 2) {
+    // Stage 2 (Auto-Fallback 2 - Jalur Alternatif + Cache Bust): wsrv.nl proxy
+    const cacheBust = retryTimestamp || Date.now();
+    return `https://wsrv.nl/?url=${encodeURIComponent(cleanUrl)}&we=1&n=-1&t=${cacheBust}`;
+  }
+  return cleanUrl;
+};
+
+/**
+ * Progressive loading activator for a single page image
+ */
+window.loadReaderPageImage = function (imgEl) {
+  if (!imgEl) return;
+  if (imgEl.dataset.startedLoading === 'true') return;
+  imgEl.dataset.startedLoading = 'true';
+
+  const rawUrl = imgEl.dataset.rawUrl;
+  if (!rawUrl) return;
+
+  imgEl.dataset.retryStage = '0';
+  imgEl.removeAttribute('referrerpolicy');
+  imgEl.crossOrigin = 'anonymous';
+  imgEl.src = window.getReaderStageUrl(rawUrl, 0);
+};
+
+/**
+ * Trigger subsequent page loads sequentially when a page finishes loading
+ */
+window.triggerNextPageLoad = function (imgEl) {
+  const pageNum = parseInt(imgEl.dataset.page || '0', 10);
+  if (!pageNum) return;
+
+  // Preload next 2 pages in sequence for silky smooth progressive scrolling
+  for (let offset = 1; offset <= 2; offset++) {
+    const nextWrap = document.querySelector(`.reader-page-wrapper[data-page="${pageNum + offset}"]`);
+    if (nextWrap) {
+      const nextImg = nextWrap.querySelector('.reader-page-img');
+      if (nextImg && nextImg.dataset.startedLoading !== 'true') {
+        window.loadReaderPageImage(nextImg);
+      }
+    }
+  }
+};
+
+/**
+ * Handle successful page image load
+ */
 window.handlePageImageLoad = function (imgEl) {
   const wrapper = imgEl.closest('.reader-page-wrapper');
   if (wrapper) {
@@ -1909,11 +1993,44 @@ window.handlePageImageLoad = function (imgEl) {
     if (err) err.remove();
   }
   imgEl.classList.add('visible');
+
+  // Trigger progressive next-page pipeline
+  window.triggerNextPageLoad(imgEl);
 };
 
-window.handlePageImageError = function (imgEl, originalUrl, pageNum) {
-  const wrapper = imgEl.closest('.reader-page-wrapper');
+/**
+ * Multi-Stage Auto-Fallback Error Handler
+ */
+window.handlePageImageError = function (imgEl) {
+  const wrapper = imgEl.closest('.reader-page-wrapper') || imgEl.parentElement;
   if (!wrapper) return;
+
+  const rawUrl = imgEl.dataset.rawUrl;
+  const pageNum = parseInt(imgEl.dataset.page || '1', 10);
+  let stage = parseInt(imgEl.dataset.retryStage || '0', 10);
+
+  // If stage 0 or 1 failed, automatically advance to next stage without showing error UI
+  if (stage < 2) {
+    const nextStage = stage + 1;
+    imgEl.dataset.retryStage = String(nextStage);
+
+    if (nextStage === 1) {
+      // Stage 1: Direct No-Referer
+      imgEl.referrerPolicy = 'no-referrer';
+      imgEl.crossOrigin = 'anonymous';
+      imgEl.src = window.getReaderStageUrl(rawUrl, 1);
+      return;
+    } else if (nextStage === 2) {
+      // Stage 2: wsrv.nl proxy + cache-bust
+      imgEl.removeAttribute('crossorigin');
+      imgEl.removeAttribute('referrerpolicy');
+      imgEl.src = window.getReaderStageUrl(rawUrl, 2, Date.now());
+      return;
+    }
+  }
+
+  // Stage 3: All 3 automated fallback routes failed! Display the error card with "Muat Ulang"
+  imgEl.dataset.retryStage = '3';
 
   const skeleton = wrapper.querySelector('.page-skeleton-loader');
   if (skeleton) skeleton.classList.add('fade-out');
@@ -1933,8 +2050,13 @@ window.handlePageImageError = function (imgEl, originalUrl, pageNum) {
     retryCard.remove();
     if (skeleton) skeleton.classList.remove('fade-out');
     imgEl.classList.remove('visible');
-    const separator = originalUrl.includes('?') ? '&' : '?';
-    imgEl.src = originalUrl + separator + 't=' + Date.now();
+
+    // Reset retryStage to 0 and add ?retry=${Date.now()}
+    imgEl.dataset.retryStage = '0';
+    imgEl.removeAttribute('referrerpolicy');
+    imgEl.crossOrigin = 'anonymous';
+    const retryTimestamp = Date.now();
+    imgEl.src = window.getReaderStageUrl(rawUrl, 0, retryTimestamp);
   });
 
   wrapper.appendChild(retryCard);
@@ -2127,7 +2249,12 @@ function renderReaderPages(data) {
     if (readerContainer) readerContainer.scrollTop = 0;
   });
 
-  const pages = state.readerQuality === 'dataSaver' ? (data.dataSaverPages || data.pages) : data.pages;
+  // Quality selection: prioritize data-saver for manhwa > 30 pages and by default (unless user explicitly selected 'original')
+  const isHighPageChapter = (data.totalPages > 30) || (data.pages && data.pages.length > 30);
+  const useDataSaver = state.readerQuality === 'dataSaver' || (state.readerQuality !== 'original') || isHighPageChapter;
+  const pages = (useDataSaver && data.dataSaverPages && data.dataSaverPages.length > 0)
+    ? data.dataSaverPages
+    : (data.pages || data.dataSaverPages || []);
   const total = pages.length;
 
   // Smart Auto-Detect Reader Mode (Webtoon for long continuous strips, Single for Manga)
@@ -2145,7 +2272,7 @@ function renderReaderPages(data) {
     // Layer 3: Physical Image Aspect Ratio Probe on first page to guarantee 100% precision
     if (pages.length > 0) {
       const probeImg = new Image();
-      probeImg.src = pages[0];
+      probeImg.src = window.getReaderStageUrl(pages[0], 0);
       const verifyRatio = () => {
         if (probeImg.naturalWidth > 0 && probeImg.naturalHeight > 0) {
           const ratio = probeImg.naturalHeight / probeImg.naturalWidth;
@@ -2173,35 +2300,64 @@ function renderReaderPages(data) {
   if (state.readerMode === 'long-strip') {
     viewport.className = 'reader-viewport long-strip-mode';
 
+    // Disconnect old observer if active
+    if (window.readerPageObserver) {
+      window.readerPageObserver.disconnect();
+      window.readerPageObserver = null;
+    }
+
+    // Setup windowed progressive IntersectionObserver with rootMargin: 1500px 0px
+    window.readerPageObserver = new IntersectionObserver((entries, observer) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          const wrap = entry.target;
+          const img = wrap.querySelector('.reader-page-img');
+          if (img && img.dataset.startedLoading !== 'true') {
+            window.loadReaderPageImage(img);
+          }
+          observer.unobserve(wrap);
+        }
+      });
+    }, {
+      rootMargin: '1500px 0px 1500px 0px'
+    });
+
     pages.forEach((pageUrl, idx) => {
+      const pageNum = idx + 1;
       const pageWrap = document.createElement('div');
       pageWrap.className = 'reader-page-wrapper';
-      pageWrap.dataset.page = idx + 1;
+      pageWrap.dataset.page = pageNum;
       pageWrap.innerHTML = `
-        <div class="page-skeleton-loader" id="skeleton-page-${idx + 1}">
+        <div class="page-skeleton-loader" id="skeleton-page-${pageNum}">
           <div class="page-skeleton-shimmer"></div>
           <div class="page-skeleton-label">
             <div class="spinner-small"></div>
-            <span>Memuat Hal. ${idx + 1}...</span>
+            <span>Memuat Hal. ${pageNum}...</span>
           </div>
         </div>
         <img 
-          src="${pageUrl}" 
           class="reader-page-img" 
-          alt="Halaman ${idx + 1}" 
-          loading="${idx < 5 ? 'eager' : 'lazy'}"
+          alt="Halaman ${pageNum}" 
+          data-page="${pageNum}"
+          data-raw-url="${pageUrl}"
+          data-retry-stage="0"
           decoding="async"
           onload="handlePageImageLoad(this)"
-          onerror="handlePageImageError(this, '${pageUrl}', ${idx + 1})"
+          onerror="handlePageImageError(this)"
         >
-        <span class="reader-page-number">${idx + 1} / ${total}</span>
+        <span class="reader-page-number">${pageNum} / ${total}</span>
       `;
       viewport.appendChild(pageWrap);
 
-      // Check if image loaded from browser cache synchronously
       const img = pageWrap.querySelector('img');
-      if (img && img.complete && img.naturalWidth > 0) {
-        window.handlePageImageLoad(img);
+
+      // Windowed Concurrency Limit:
+      // Initial batch: Only load Pages 1 to 4 immediately
+      if (idx < 4) {
+        window.loadReaderPageImage(img);
+      } else {
+        // Pages 5+ are queued and activated via IntersectionObserver OR prior image onLoad
+        window.readerPageObserver.observe(pageWrap);
       }
     });
 
@@ -2345,12 +2501,12 @@ function renderSinglePage(pages, index, sliceIndex = 0) {
   // Preload neighboring next page for instant page-flipping
   if (state.currentPageIndex < total - 1) {
     const preloadImg = new Image();
-    preloadImg.src = pages[state.currentPageIndex + 1];
+    preloadImg.src = window.getReaderStageUrl(pages[state.currentPageIndex + 1], 0);
   }
 
   // Inspect image dimensions to check if it's a tall strip (webtoon)
   const testImg = new Image();
-  testImg.src = currentUrl;
+  testImg.src = window.getReaderStageUrl(currentUrl, 0);
 
   const renderContent = () => {
     // If in Auto mode and first image is a long strip, dynamically switch to webtoon mode
@@ -2384,7 +2540,16 @@ function renderSinglePage(pages, index, sliceIndex = 0) {
           <div class="nav-click-zone left" title="Panel Sebelumnya (↑ / W)"></div>
           <div class="slice-indicator-badge">Panel ${currSlice + 1} / ${totalSlices}</div>
           <div class="single-page-slice-window">
-            <img src="${currentUrl}" class="single-page-slice-img" style="transform: translateY(-${offsetPercent}%);" alt="Halaman ${state.currentPageIndex + 1} Panel ${currSlice + 1}">
+            <img 
+              src="${window.getReaderStageUrl(currentUrl, 0)}" 
+              class="single-page-slice-img" 
+              style="transform: translateY(-${offsetPercent}%);" 
+              alt="Halaman ${state.currentPageIndex + 1} Panel ${currSlice + 1}"
+              data-page="${state.currentPageIndex + 1}"
+              data-raw-url="${currentUrl}"
+              data-retry-stage="0"
+              onerror="handlePageImageError(this)"
+            >
           </div>
           <div class="nav-click-zone right" title="Panel Selanjutnya (↓ / S / Spasi)"></div>
         </div>
@@ -2431,10 +2596,14 @@ function renderSinglePage(pages, index, sliceIndex = 0) {
           </div>
           <div class="nav-click-zone left" title="Halaman Sebelumnya (↑ / W)"></div>
           <img 
-            src="${currentUrl}" 
+            src="${window.getReaderStageUrl(currentUrl, 0)}" 
             class="single-page-img" 
             alt="Halaman ${state.currentPageIndex + 1}"
-            onload="const sk = document.getElementById('single-page-skeleton'); if (sk) sk.style.display = 'none';"
+            data-page="${state.currentPageIndex + 1}"
+            data-raw-url="${currentUrl}"
+            data-retry-stage="0"
+            onload="const sk = document.getElementById('single-page-skeleton'); if (sk) sk.style.display = 'none'; this.classList.add('visible');"
+            onerror="handlePageImageError(this)"
           >
           <div class="nav-click-zone right" title="Halaman Selanjutnya (↓ / S / Spasi)"></div>
         </div>
@@ -2480,10 +2649,14 @@ function renderSinglePage(pages, index, sliceIndex = 0) {
         </div>
         <div class="nav-click-zone left"></div>
         <img 
-          src="${currentUrl}" 
+          src="${window.getReaderStageUrl(currentUrl, 0)}" 
           class="single-page-img" 
           alt="Halaman ${state.currentPageIndex + 1}"
-          onload="const sk = document.getElementById('single-page-skeleton'); if (sk) sk.style.display = 'none';"
+          data-page="${state.currentPageIndex + 1}"
+          data-raw-url="${currentUrl}"
+          data-retry-stage="0"
+          onload="const sk = document.getElementById('single-page-skeleton'); if (sk) sk.style.display = 'none'; this.classList.add('visible');"
+          onerror="handlePageImageError(this)"
         >
         <div class="nav-click-zone right"></div>
       </div>
@@ -2513,12 +2686,28 @@ function renderDoublePage(pages, index) {
       <div class="nav-click-zone left" title="2 Halaman Sebelumnya"></div>
       <div class="double-pages-wrap">
         <div class="double-page-item left">
-          <img src="${page1Url}" class="double-page-img" alt="Halaman ${page1Index + 1}">
+          <img 
+            src="${window.getReaderStageUrl(page1Url, 0)}" 
+            class="double-page-img" 
+            alt="Halaman ${page1Index + 1}"
+            data-page="${page1Index + 1}"
+            data-raw-url="${page1Url}"
+            data-retry-stage="0"
+            onerror="handlePageImageError(this)"
+          >
           <span class="double-page-tag">${page1Index + 1}</span>
         </div>
         ${page2Url ? `
           <div class="double-page-item right">
-            <img src="${page2Url}" class="double-page-img" alt="Halaman ${page2Index + 1}">
+            <img 
+              src="${window.getReaderStageUrl(page2Url, 0)}" 
+              class="double-page-img" 
+              alt="Halaman ${page2Index + 1}"
+              data-page="${page2Index + 1}"
+              data-raw-url="${page2Url}"
+              data-retry-stage="0"
+              onerror="handlePageImageError(this)"
+            >
             <span class="double-page-tag">${page2Index + 1}</span>
           </div>
         ` : ''}

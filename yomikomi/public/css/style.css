@@ -58,12 +58,14 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  -webkit-tap-highlight-color: transparent !important;
 }
 
 html {
   font-size: 16px;
   scroll-behavior: smooth;
   color-scheme: dark;
+  -webkit-tap-highlight-color: transparent !important;
 }
 
 body {
@@ -76,11 +78,13 @@ body {
   flex-direction: column;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent !important;
 }
 
 a {
   color: inherit;
   text-decoration: none;
+  -webkit-tap-highlight-color: transparent !important;
 }
 
 button {
@@ -90,12 +94,18 @@ button {
   font-family: inherit;
   color: inherit;
   transition: all var(--transition-fast);
+  -webkit-tap-highlight-color: transparent !important;
 }
 
 img {
   max-width: 100%;
   height: auto;
   display: block;
+  -webkit-tap-highlight-color: transparent !important;
+  -webkit-touch-callout: none !important;
+  -webkit-user-select: none !important;
+  user-select: none !important;
+  outline: none !important;
 }
 
 .hidden {
@@ -1691,27 +1701,155 @@ img {
   position: relative;
   max-width: 850px;
   width: 100%;
+  min-height: 480px;
   display: flex;
   justify-content: center;
+  align-items: center;
+  background: #0d0e12;
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent !important;
+  -webkit-touch-callout: none !important;
+  -webkit-user-select: none !important;
+  user-select: none !important;
+}
+
+@media (max-width: 600px) {
+  .reader-page-wrapper {
+    min-height: 380px;
+  }
+}
+
+/* Page Skeleton Loader */
+.page-skeleton-loader {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, #101218 0%, #171922 50%, #101218 100%);
+  z-index: 2;
+  transition: opacity 300ms ease;
+  pointer-events: none;
+}
+
+.page-skeleton-loader.fade-out {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.page-skeleton-shimmer {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 103, 64, 0.06) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  animation: skeletonShimmer 1.8s infinite linear;
+  pointer-events: none;
+}
+
+@keyframes skeletonShimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.page-skeleton-label {
+  position: relative;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.5rem 1rem;
+  background: rgba(20, 22, 28, 0.88);
+  border: 1px solid rgba(255, 103, 64, 0.25);
+  border-radius: var(--radius-full);
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 500;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+}
+
+.page-skeleton-label .spinner-small {
+  width: 14px;
+  height: 14px;
+  border-width: 2px;
 }
 
 .reader-page-img {
   width: 100%;
   height: auto;
   display: block;
+  opacity: 0;
+  transition: opacity 280ms ease-in-out;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.8);
+  position: relative;
+  z-index: 1;
+  -webkit-tap-highlight-color: transparent !important;
+  -webkit-touch-callout: none !important;
+  -webkit-user-select: none !important;
+  user-select: none !important;
+  outline: none !important;
+}
+
+.reader-page-img.visible {
+  opacity: 1;
+}
+
+/* Page Error / Retry Card */
+.page-error-retry {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.85rem;
+  background: rgba(18, 20, 26, 0.95);
+  z-index: 4;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.page-error-retry i {
+  color: var(--accent);
+  width: 28px;
+  height: 28px;
+}
+
+.btn-retry-page {
+  padding: 0.45rem 1.1rem;
+  background: var(--accent);
+  color: #fff;
+  border-radius: var(--radius-full);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  border: none;
+}
+
+.btn-retry-page:hover {
+  background: #ff4500;
+  box-shadow: 0 2px 10px var(--accent-glow);
 }
 
 .reader-page-number {
   position: absolute;
   bottom: 0.5rem;
   right: 0.5rem;
-  background: rgba(0, 0, 0, 0.7);
-  padding: 0.15rem 0.5rem;
+  background: rgba(0, 0, 0, 0.75);
+  padding: 0.15rem 0.55rem;
   border-radius: 4px;
   font-size: 0.7rem;
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(255, 255, 255, 0.7);
   pointer-events: none;
+  z-index: 5;
 }
 
 /* Single Page Mode */
@@ -1894,17 +2032,122 @@ img {
   background: var(--gradient-primary);
 }
 
-.end-card-icon {
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  background: rgba(255, 103, 64, 0.12);
+/* Compact Chapter Selector in End Card */
+.end-card-chapter-selector-wrap {
+  margin-bottom: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  position: relative;
+  z-index: 25;
+}
+
+.end-card-select-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.end-card-dropdown {
+  position: relative;
+}
+
+.end-card-dropdown-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 1rem;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: #fff;
+  background: var(--bg-card);
   border: 1px solid rgba(255, 103, 64, 0.35);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+  max-width: 260px;
+}
+
+.end-card-dropdown-trigger:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--accent);
+  box-shadow: 0 4px 18px var(--accent-glow);
+  transform: translateY(-1px);
+}
+
+.end-card-trigger-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+
+.end-card-dropdown-panel {
+  position: absolute;
+  bottom: calc(100% + 0.65rem);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 280px;
+  max-height: 280px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 100;
+  animation: panelSlideUp 180ms ease-out;
+}
+
+.end-card-search-wrap {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 0.5rem;
+  background: var(--bg-card);
+}
+
+.end-card-search-wrap input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-size: 0.8rem;
+  outline: none;
+}
+
+.end-card-dropdown-list {
+  overflow-y: auto;
+  max-height: 220px;
+  padding: 0.25rem 0;
+}
+
+.end-card-dropdown-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.55rem 0.85rem;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.end-card-dropdown-item:hover,
+.end-card-dropdown-item.active {
+  background: var(--bg-elevated);
+  color: #fff;
+}
+
+.end-card-dropdown-item.active {
   color: var(--accent);
-  margin-bottom: 1rem;
+  font-weight: 700;
 }
 
 .end-card-badge {
@@ -1961,6 +2204,53 @@ img {
   font-size: 0.95rem;
 }
 
+/* Chapter Transition View (Instant Feedback, Zero Lag) */
+.chapter-transition-loader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 850px;
+  margin: 0 auto;
+  animation: fadeIn 150ms ease-out;
+}
+
+.transition-spinner-box {
+  padding: 3rem 1.5rem 2rem 1.5rem;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.transition-title {
+  font-family: var(--font-heading);
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.transition-sub {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.reader-skeleton-stream {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.page-skeleton-loader.preview-stream {
+  position: relative;
+  height: 480px;
+  width: 100%;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
 /* Floating Reader Footer */
 .reader-footer {
   position: fixed;
@@ -1973,11 +2263,11 @@ img {
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-full);
-  padding: 0.45rem 0.75rem;
+  padding: 0.45rem 0.85rem;
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 0.85rem;
+  justify-content: space-between;
+  gap: 1.25rem;
   box-shadow: 0 10px 35px rgba(0, 0, 0, 0.75), 0 0 16px rgba(255, 103, 64, 0.18);
   transition: transform 320ms cubic-bezier(0.16, 1, 0.3, 1), opacity 250ms ease;
   opacity: 1;
@@ -1989,15 +2279,9 @@ img {
   pointer-events: none;
 }
 
+/* Hide middle footer info as requested - moved to end card */
 .reader-footer-info {
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--text-main);
-  padding: 0.3rem 0.85rem;
-  background: var(--bg-card);
-  border-radius: var(--radius-full);
-  border: 1px solid var(--border-subtle);
-  white-space: nowrap;
+  display: none !important;
 }
 
 .reader-nav-btn {
@@ -3977,16 +4261,16 @@ img {
   .reader-footer {
     position: fixed;
     bottom: 0.85rem;
-    left: 0.75rem;
-    right: 0.75rem;
+    left: 1rem;
+    right: 1rem;
     width: auto;
-    max-width: 420px;
+    max-width: 360px;
     margin: 0 auto;
     transform: none;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.75rem;
     padding: 0.45rem 0.65rem;
     z-index: 100;
   }
@@ -3999,26 +4283,15 @@ img {
 
   .reader-nav-btn {
     flex: 1;
-    max-width: 135px;
-    padding: 0.5rem 0.75rem;
-    font-size: 0.82rem;
+    max-width: none;
+    padding: 0.55rem 0.85rem;
+    font-size: 0.85rem;
     justify-content: center;
-    gap: 0.35rem;
+    gap: 0.4rem;
   }
 
   .reader-footer-info {
-    flex: 1;
-    text-align: center;
-    font-size: 0.8rem;
-    font-weight: 600;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    padding: 0 0.3rem;
-  }
-
-  #footer-chapter-pill {
-    font-size: 0.78rem;
+    display: none !important;
   }
 
   /* History & Bookmarks */

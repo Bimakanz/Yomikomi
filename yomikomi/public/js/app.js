@@ -1289,11 +1289,23 @@ async function openExternalReader(chapterUrl, chapterTitle, allChapters, chapter
   state.allMangaDexChapters = []; // Prevent cross-manga navigation leak
   switchView('reader');
 
+  window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  const readerContainer = document.getElementById('view-reader');
+  if (readerContainer) readerContainer.scrollTop = 0;
+
   const viewport = document.getElementById('reader-viewport');
+  viewport.className = 'reader-viewport long-strip-mode';
   viewport.innerHTML = `
-    <div class="reader-loading" id="reader-loading">
-      <div class="spinner"></div>
-      <p>Mengambil halaman chapter dari mirror Bacakomik...</p>
+    <div class="chapter-transition-loader">
+      <div class="transition-spinner-box">
+        <div class="spinner"></div>
+        <p class="transition-title">Memuat ${chapterTitle}...</p>
+        <span class="transition-sub">Menyiapkan halaman komik Indo Mirror</span>
+      </div>
+      <div class="reader-skeleton-stream">
+        <div class="page-skeleton-loader preview-stream"><div class="page-skeleton-shimmer"></div></div>
+        <div class="page-skeleton-loader preview-stream"><div class="page-skeleton-shimmer"></div></div>
+      </div>
     </div>
   `;
 
@@ -1642,11 +1654,23 @@ async function openEnglishReader(chapterUrl, chapterTitle, allChapters, chapterI
   state.allMangaDexChapters = []; // Prevent cross-manga navigation leak
   switchView('reader');
 
+  window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  const readerContainer = document.getElementById('view-reader');
+  if (readerContainer) readerContainer.scrollTop = 0;
+
   const viewport = document.getElementById('reader-viewport');
+  viewport.className = 'reader-viewport long-strip-mode';
   viewport.innerHTML = `
-    <div class="reader-loading" id="reader-loading">
-      <div class="spinner"></div>
-      <p>Mengambil halaman chapter dari English mirror...</p>
+    <div class="chapter-transition-loader">
+      <div class="transition-spinner-box">
+        <div class="spinner"></div>
+        <p class="transition-title">Memuat ${chapterTitle}...</p>
+        <span class="transition-sub">Menyiapkan halaman komik English Mirror</span>
+      </div>
+      <div class="reader-skeleton-stream">
+        <div class="page-skeleton-loader preview-stream"><div class="page-skeleton-shimmer"></div></div>
+        <div class="page-skeleton-loader preview-stream"><div class="page-skeleton-shimmer"></div></div>
+      </div>
     </div>
   `;
 
@@ -1858,6 +1882,53 @@ async function renderChaptersList(chapters) {
 // VIEW 3: THE MANGA READER ENGINE
 // ==========================================
 
+// Global Image Load & Error Handlers for Smooth Skeleton Transitions
+window.handlePageImageLoad = function (imgEl) {
+  const wrapper = imgEl.closest('.reader-page-wrapper');
+  if (wrapper) {
+    const skeleton = wrapper.querySelector('.page-skeleton-loader');
+    if (skeleton) {
+      skeleton.classList.add('fade-out');
+      setTimeout(() => {
+        try { skeleton.remove(); } catch (e) { }
+      }, 350);
+    }
+    const err = wrapper.querySelector('.page-error-retry');
+    if (err) err.remove();
+  }
+  imgEl.classList.add('visible');
+};
+
+window.handlePageImageError = function (imgEl, originalUrl, pageNum) {
+  const wrapper = imgEl.closest('.reader-page-wrapper');
+  if (!wrapper) return;
+
+  const skeleton = wrapper.querySelector('.page-skeleton-loader');
+  if (skeleton) skeleton.classList.add('fade-out');
+
+  if (wrapper.querySelector('.page-error-retry')) return;
+
+  const retryCard = document.createElement('div');
+  retryCard.className = 'page-error-retry';
+  retryCard.innerHTML = `
+    <i data-lucide="refresh-cw"></i>
+    <span>Gagal memuat Halaman ${pageNum}</span>
+    <button class="btn-retry-page" type="button">Muat Ulang</button>
+  `;
+
+  retryCard.querySelector('.btn-retry-page').addEventListener('click', (e) => {
+    e.stopPropagation();
+    retryCard.remove();
+    if (skeleton) skeleton.classList.remove('fade-out');
+    imgEl.classList.remove('visible');
+    const separator = originalUrl.includes('?') ? '&' : '?';
+    imgEl.src = originalUrl + separator + 't=' + Date.now();
+  });
+
+  wrapper.appendChild(retryCard);
+  if (window.lucide) window.lucide.createIcons({ root: retryCard });
+};
+
 async function openReader(chapterId, chapterIndex) {
   state.isExternal = false;
   state.currentChapterId = chapterId;
@@ -1868,25 +1939,35 @@ async function openReader(chapterId, chapterIndex) {
 
   switchView('reader');
 
+  // Instant scroll to top (No smooth scroll stutter)
+  window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
   const readerContainer = document.getElementById('view-reader');
   if (readerContainer) readerContainer.scrollTop = 0;
-  window.scrollTo(0, 0);
 
-  const viewport = document.getElementById('reader-viewport');
-  viewport.innerHTML = `
-    <div class="reader-loading" id="reader-loading">
-      <div class="spinner"></div>
-      <p>Mengambil halaman chapter...</p>
-    </div>
-  `;
-
-  // Update Toolbar & Floating Footer titles
+  // Title and Chapter numbers
   const mangaTitle = getMangaTitle(state.currentManga?.attributes);
   const chObj = state.currentChapters[chapterIndex] || state.allMangaDexChapters.find(c => c.id === chapterId);
   const chNum = chObj?.attributes?.chapter ? `Chapter ${chObj.attributes.chapter}` : 'Special Chapter';
   if (chObj?.attributes?.translatedLanguage) {
     state.currentReadingLang = chObj.attributes.translatedLanguage;
   }
+
+  // Instant Chapter Transition Skeleton Stream (Never stuck on finished card)
+  const viewport = document.getElementById('reader-viewport');
+  viewport.className = 'reader-viewport long-strip-mode';
+  viewport.innerHTML = `
+    <div class="chapter-transition-loader">
+      <div class="transition-spinner-box">
+        <div class="spinner"></div>
+        <p class="transition-title">Memuat ${chNum}...</p>
+        <span class="transition-sub">Menyiapkan halaman komik</span>
+      </div>
+      <div class="reader-skeleton-stream">
+        <div class="page-skeleton-loader preview-stream"><div class="page-skeleton-shimmer"></div></div>
+        <div class="page-skeleton-loader preview-stream"><div class="page-skeleton-shimmer"></div></div>
+      </div>
+    </div>
+  `;
 
   document.getElementById('reader-manga-title').textContent = mangaTitle;
   document.getElementById('reader-chapter-title').textContent = chNum;
@@ -1897,7 +1978,7 @@ async function openReader(chapterId, chapterIndex) {
   document.getElementById('reader-toolbar')?.classList.remove('hidden-bar');
   document.getElementById('reader-footer')?.classList.remove('hidden-bar');
 
-  // Populate Custom Chapter Dropdown in reader
+  // Populate Custom Chapter Dropdown in toolbar
   const dropItems = state.currentChapters.map((ch, idx) => {
     const lFlag = ch.attributes?.translatedLanguage === 'id' ? 'id' : 'en';
     const lText = ch.attributes?.translatedLanguage === 'id' ? '[ID]' : '[EN]';
@@ -1977,12 +2058,12 @@ function renderReaderPages(data) {
   if (readerContainer) {
     readerContainer.scrollTop = 0;
   }
-  window.scrollTo(0, 0);
+  window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
   requestAnimationFrame(() => {
     if (readerContainer) readerContainer.scrollTop = 0;
   });
 
-  const pages = state.readerQuality === 'dataSaver' ? data.dataSaverPages : data.pages;
+  const pages = state.readerQuality === 'dataSaver' ? (data.dataSaverPages || data.pages) : data.pages;
   const total = pages.length;
 
   document.getElementById('page-counter-text').textContent = `1 / ${total}`;
@@ -1995,32 +2076,139 @@ function renderReaderPages(data) {
       pageWrap.className = 'reader-page-wrapper';
       pageWrap.dataset.page = idx + 1;
       pageWrap.innerHTML = `
-        <img src="${pageUrl}" class="reader-page-img" alt="Halaman ${idx + 1}" loading="${idx < 3 ? 'eager' : 'lazy'}">
+        <div class="page-skeleton-loader" id="skeleton-page-${idx + 1}">
+          <div class="page-skeleton-shimmer"></div>
+          <div class="page-skeleton-label">
+            <div class="spinner-small"></div>
+            <span>Memuat Hal. ${idx + 1}...</span>
+          </div>
+        </div>
+        <img 
+          src="${pageUrl}" 
+          class="reader-page-img" 
+          alt="Halaman ${idx + 1}" 
+          loading="${idx < 5 ? 'eager' : 'lazy'}"
+          decoding="async"
+          onload="handlePageImageLoad(this)"
+          onerror="handlePageImageError(this, '${pageUrl}', ${idx + 1})"
+        >
         <span class="reader-page-number">${idx + 1} / ${total}</span>
       `;
       viewport.appendChild(pageWrap);
+
+      // Check if image loaded from browser cache synchronously
+      const img = pageWrap.querySelector('img');
+      if (img && img.complete && img.naturalWidth > 0) {
+        window.handlePageImageLoad(img);
+      }
     });
 
-    // Append Webtoon Chapter End Card with Auto-Next trigger
+    // Append Webtoon Chapter End Card (No checkmark icon, compact chapter switcher)
     const endCard = document.createElement('div');
     endCard.className = 'webtoon-chapter-end-card';
     endCard.id = 'webtoon-end-card';
     const chTitleText = document.getElementById('reader-chapter-title')?.textContent || 'Chapter ini';
     const nextCandidate = findSmartNextChapter();
 
+    // Prepare chapters for end-card selector
+    let currentChapterList = [];
+    if (state.isExternal && state.externalChapters.length > 0) {
+      currentChapterList = state.externalChapters.map((ch, i) => ({
+        id: ch.url,
+        title: ch.title.replace(/\s+/g, ' ').trim(),
+        index: i
+      }));
+    } else if (state.currentSource === 'english' && state.englishChapters.length > 0) {
+      currentChapterList = state.englishChapters.map((ch, i) => ({
+        id: ch.url,
+        title: ch.title.replace(/\s+/g, ' ').trim(),
+        index: i
+      }));
+    } else {
+      currentChapterList = state.currentChapters.map((ch, i) => ({
+        id: ch.id,
+        title: `Chapter ${ch.attributes?.chapter || i + 1}${ch.attributes?.title ? ' - ' + ch.attributes.title : ''}`,
+        index: i
+      }));
+    }
+
+    const currentChNumText = document.getElementById('reader-chapter-title')?.textContent || 'Pilih Chapter';
+
     endCard.innerHTML = `
-      <div class="end-card-icon"><i data-lucide="check-circle-2"></i></div>
+      <!-- Compact Chapter Selector (Replaces checkmark) -->
+      <div class="end-card-chapter-selector-wrap">
+        <span class="end-card-select-label">Pindah Chapter</span>
+        <div class="end-card-dropdown" id="end-card-chapter-dropdown">
+          <button class="end-card-dropdown-trigger" id="end-card-chapter-trigger" type="button" title="Pilih Chapter Cepat">
+            <i data-lucide="book-open"></i>
+            <span class="end-card-trigger-label" id="end-card-chapter-label">${currentChNumText}</span>
+            <i data-lucide="chevron-down" class="end-card-arrow"></i>
+          </button>
+          <div class="end-card-dropdown-panel hidden" id="end-card-chapter-panel">
+            <div class="end-card-search-wrap">
+              <i data-lucide="search"></i>
+              <input type="text" id="end-card-chapter-search" placeholder="Cari chapter..." autocomplete="off">
+            </div>
+            <div class="end-card-dropdown-list" id="end-card-chapter-list"></div>
+          </div>
+        </div>
+      </div>
+
       <span class="end-card-badge">Akhir Chapter</span>
       <h4 class="end-card-title">${chTitleText} Telah Selesai</h4>
-      <p class="end-card-sub" id="end-card-sub-text">${nextCandidate ? 'Scroll ke ujung bawah untuk lanjut otomatis ke chapter berikutnya...' : 'Ini adalah chapter terakhir yang tersedia saat ini.'}</p>
+      <p class="end-card-sub" id="end-card-sub-text">${nextCandidate ? 'Scroll ke bawah atau klik tombol di bawah untuk melanjutkan.' : 'Ini adalah chapter terakhir yang tersedia saat ini.'}</p>
       ${nextCandidate ? `
-        <div class="end-card-progress"><div class="end-card-progress-bar" id="end-card-progress-bar"></div></div>
         <button class="btn-primary btn-auto-next" id="btn-end-card-next">
           <span>Buka Chapter Berikutnya</span>
           <i data-lucide="arrow-right"></i>
         </button>
       ` : ''}
     `;
+
+    // Dropdown interaction in End Card
+    const endTrigger = endCard.querySelector('#end-card-chapter-trigger');
+    const endPanel = endCard.querySelector('#end-card-chapter-panel');
+    const endList = endCard.querySelector('#end-card-chapter-list');
+    const endSearch = endCard.querySelector('#end-card-chapter-search');
+
+    endTrigger?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      endPanel?.classList.toggle('hidden');
+    });
+
+    const renderEndList = (q = '') => {
+      if (!endList) return;
+      endList.innerHTML = '';
+      const filtered = currentChapterList.filter(c => c.title.toLowerCase().includes(q.toLowerCase()));
+      if (filtered.length === 0) {
+        endList.innerHTML = `<div style="padding:0.75rem;font-size:0.75rem;color:var(--text-muted);text-align:center;">Tidak ada chapter</div>`;
+        return;
+      }
+      filtered.forEach(item => {
+        const div = document.createElement('div');
+        const isAct = (item.id === state.currentChapterId);
+        div.className = `end-card-dropdown-item ${isAct ? 'active' : ''}`;
+        div.textContent = item.title;
+        div.addEventListener('click', (e) => {
+          e.stopPropagation();
+          endPanel?.classList.add('hidden');
+          if (state.isExternal) {
+            openExternalReader(item.id, item.title, state.externalChapters, item.index);
+          } else if (state.currentSource === 'english') {
+            openEnglishReader(item.id, item.title, state.englishChapters, item.index);
+          } else {
+            openReader(item.id, item.index);
+          }
+        });
+        endList.appendChild(div);
+      });
+    };
+
+    renderEndList();
+
+    endSearch?.addEventListener('input', (e) => {
+      renderEndList(e.target.value);
+    });
 
     endCard.querySelector('#btn-end-card-next')?.addEventListener('click', () => {
       document.getElementById('btn-next-chapter')?.click();
@@ -2722,26 +2910,14 @@ function initReaderControls() {
 
     lastScrollTop = currentScrollTop;
 
-    // Auto-navigate to next chapter at bottom in Webtoon mode (silent, no annoying toast)
+    // Auto-navigate to next chapter at bottom in Webtoon mode (instant, no stutter)
     if (state.readerMode === 'long-strip' && !state.isAutoNavigatingNext) {
       const scrollBottom = readerContainer.scrollHeight - (currentScrollTop + readerContainer.clientHeight);
-      if (scrollBottom <= 80 && diff >= 0) {
+      if (scrollBottom <= 40 && diff >= 0) {
         const nextCh = findSmartNextChapter();
         if (nextCh) {
           state.isAutoNavigatingNext = true;
-          const progressBar = document.getElementById('end-card-progress-bar');
-          if (progressBar) progressBar.style.width = '100%';
-          const subText = document.getElementById('end-card-sub-text');
-          if (subText) subText.innerHTML = `Melompat ke chapter berikutnya...`;
-
-          setTimeout(() => {
-            if (state.currentView === 'reader') {
-              const nextBtn = document.getElementById('btn-next-chapter');
-              if (nextBtn && !nextBtn.disabled) {
-                nextBtn.click();
-              }
-            }
-          }, 600);
+          advanceToNextChapter();
         }
       }
     }

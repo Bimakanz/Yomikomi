@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CV ATS Generator</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  /* ===== Kertas A4 akurat dari analisa PDF =====
+     Page: 596x842pt = 210.3 x 297.0mm (A4)
+     Margin: kiri 72pt/25.4mm, kanan 66.6pt/23.5mm, atas 72.5pt/25.6mm, bawah ~74.7pt/26.3mm
+     Font: ArialMT/Arial-BoldMT/Arial-ItalicMT, Body 11pt/1.15 (=12.65pt), Nama 15pt, Heading 13pt
+  */
+  .cv-paper {
+    width: 210mm;
+    height: 297mm;
+    min-height: 297mm;
+    max-height: 297mm;
+    overflow: hidden;
+    flex-shrink: 0;
+    background: #fff;
+    color: #000;
+    font-family: Arial, Helvetica, sans-serif;
+    padding: 25.6mm 23.5mm 26.3mm 25.4mm;
+    box-shadow: 0 0 12px rgba(0,0,0,.18);
+    margin: 0;
+  }
+  #preview {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    align-items: center;
+    background: transparent;
+  }
+  .cv-name { font-size: 15pt; font-weight: 700; text-align: center; line-height: 1.15; margin:0; }
+  .cv-role { font-size: 13pt; font-weight: 700; text-align: center; line-height: 1.15; margin:0; }
+  .cv-contact { font-size: 11pt; line-height: 1.15; text-align: center; margin: 2pt 0 0 0; }
+  .cv-contact a { color: #1155CC; text-decoration: underline; }
+  .cv-section-title {
+    font-size: 13pt; font-weight: 700; text-transform: uppercase;
+    line-height: 1.15; margin: 14pt 0 4pt 0;
+    border-bottom: 1px solid #000; padding-bottom: 1px;
+  }
+  .cv-body { font-size: 11pt; line-height: 1.15; text-align: justify; margin:0; }
+  .cv-sub-bold { font-size: 11pt; font-weight: 700; line-height: 1.15; margin:0; }
+  .cv-row { display:flex; justify-content: space-between; gap:12px; font-size:11pt; line-height:1.15; }
+  /* PERBAIKAN BULLET: list nyata, bukan karakter ● + ZWSP */
+  .cv-bullets { list-style-type: disc; margin: 2pt 0 0 0; padding-left: 14.2pt; }
+  .cv-bullets li { font-size: 11pt; line-height: 1.15; text-align: justify; margin-bottom: 1pt; padding-left: 2pt; }
+  .cv-bullets li::marker { font-size: 11pt; }
+  /* PERBAIKAN SPACER: spacing nyata via margin, bukan baris kosong 10pt */
+  .cv-block { margin-bottom: 8pt; }
+  .cv-item { margin-bottom: 8pt; }
+  .cv-item:last-child { margin-bottom: 0; }
+  .cv-skill-grid { display:grid; grid-template-columns: 135pt 1fr; column-gap:6pt; font-size:11pt; line-height:1.15; }
+  @media (max-width: 1100px){ .cv-paper{ transform-origin: top center; } }
+</style>
+</head>
+<body class="bg-gray-100 text-gray-900">
+<div class="flex flex-col lg:flex-row min-h-screen">
+
+  <!-- ================= KIRI: FORM ================= -->
+  <div class="w-full lg:w-[480px] shrink-0 bg-white border-r p-5 space-y-6 overflow-y-auto" style="max-height:100vh">
+    <div>
+      <h1 class="text-xl font-bold">CV ATS Generator</h1>
+      <p class="text-sm text-gray-600">Kiri form · kanan live preview. Ukuran A4, font Arial 11/13/15pt, line-height 1.15. Bullet & spasi sudah diperbaiki (list nyata + margin).</p>
+      <div class="flex gap-2 mt-3">
+        <button onclick="clearAll()" class="text-sm bg-white border border-gray-300 px-3 py-1 rounded hover:bg-gray-100">Clear</button>
+        <button onclick="resetDummy()" class="text-sm bg-black text-white px-3 py-1 rounded hover:bg-gray-800">Reset dummy</button>
+      </div>
+    </div>
+
+    <!-- Header -->
+    <section class="space-y-2">
+      <h2 class="font-bold bg-gray-100 px-2 py-1">Header</h2>
+      <label class="block text-sm">Nama<input id="f_nama" class="mt-1 w-full border rounded px-2 py-1" value="AHMAD SATTAR FATHULLOH"></label>
+      <label class="block text-sm">Jabatan<input id="f_jabatan" class="mt-1 w-full border rounded px-2 py-1" value="Software Developer"></label>
+      <label class="block text-sm">Alamat<input id="f_alamat" class="mt-1 w-full border rounded px-2 py-1" value="Bogor, Jawa Barat"></label>
+      <label class="block text-sm">Telepon<input id="f_telp" class="mt-1 w-full border rounded px-2 py-1" value="082322991181"></label>
+      <label class="block text-sm">Email<input id="f_email" class="mt-1 w-full border rounded px-2 py-1" value="hello@sattr.me"></label>
+      <label class="block text-sm">Portfolio<input id="f_porto" class="mt-1 w-full border rounded px-2 py-1" value="https://sattr.me"></label>
+    </section>
+
+    <!-- Deskripsi -->
+    <section class="space-y-2">
+      <h2 class="font-bold bg-gray-100 px-2 py-1">Deskripsi Diri</h2>
+      <textarea id="f_deskripsi" rows="7" class="w-full border rounded px-2 py-1 text-sm">Seorang pelajar Rekayasa Perangkat Lunak di SMK Informatika Pesat dengan pengalaman langsung dalam pengembangan web full-stack, aplikasi desktop dan mobile. Menguasai .NET Windows Forms Application, Laravel, dan Expo, dengan kemampuan manajemen database mencakup MySQL, SQLite, MSSQL, dan PostgreSQL, serta familiar dengan Git, VSCode, dan Visual Studio. Mampu bekerja mandiri maupun dalam tim dengan komunikasi yang baik dalam Bahasa Indonesia dan Inggris, serta bersemangat untuk terus berkembang melalui tantangan nyata di dunia industri.</textarea>
+    </section>
+
+    <!-- Pengalaman -->
+    <section class="space-y-2">
+      <div class="flex justify-between items-center bg-gray-100 px-2 py-1"><h2 class="font-bold">Pengalaman</h2><button onclick="addExp()" class="text-sm bg-black text-white px-2 py-0.5 rounded">+ Tambah</button></div>
+      <div id="exp_list" class="space-y-3"></div>
+    </section>
+
+    <!-- Pendidikan -->
+    <section class="space-y-2">
+      <div class="flex justify-between items-center bg-gray-100 px-2 py-1"><h2 class="font-bold">Pendidikan</h2><button onclick="addEdu()" class="text-sm bg-black text-white px-2 py-0.5 rounded">+ Tambah</button></div>
+      <div id="edu_list" class="space-y-3"></div>
+    </section>
+
+    <!-- Keahlian -->
+    <section class="space-y-2">
+      <div class="flex justify-between items-center bg-gray-100 px-2 py-1"><h2 class="font-bold">Keahlian</h2><button onclick="addSkill()" class="text-sm bg-black text-white px-2 py-0.5 rounded">+ Tambah</button></div>
+      <p class="text-xs text-gray-500">Format: Label : Nilai. Contoh: Frontend : HTML, CSS, JS</p>
+      <div id="skill_list" class="space-y-2"></div>
+    </section>
+
+    <!-- Sertifikasi -->
+    <section class="space-y-2">
+      <div class="flex justify-between items-center bg-gray-100 px-2 py-1"><h2 class="font-bold">Sertifikasi</h2><button onclick="addCert()" class="text-sm bg-black text-white px-2 py-0.5 rounded">+ Tambah</button></div>
+      <div id="cert_list" class="space-y-3"></div>
+    </section>
+
+    <!-- Penghargaan -->
+    <section class="space-y-2">
+      <div class="flex justify-between items-center bg-gray-100 px-2 py-1"><h2 class="font-bold">Penghargaan</h2><button onclick="addAward()" class="text-sm bg-black text-white px-2 py-0.5 rounded">+ Tambah</button></div>
+      <div id="award_list" class="space-y-3"></div>
+    </section>
+
+    <!-- Organisasi -->
+    <section class="space-y-2">
+      <div class="flex justify-between items-center bg-gray-100 px-2 py-1"><h2 class="font-bold">Organisasi</h2><button onclick="addOrg()" class="text-sm bg-black text-white px-2 py-0.5 rounded">+ Tambah</button></div>
+      <div id="org_list" class="space-y-3"></div>
+    </section>
+  </div>
+
+  <!-- ================= KANAN: PREVIEW ================= -->
+  <div class="flex-1 bg-gray-200 p-6 overflow-y-auto" style="max-height:100vh">
+    <p class="text-sm text-gray-600 mb-3 text-center">Live preview — A4 (210 × 297mm), margin 25.4 / 23.5 / 25.6 / 26.3mm, gap antar halaman 24px</p>
+    <div id="preview"></div>
+  </div>
+</div>
+
+<script>
+// ---------- Data awal (sudah dikoreksi: bidang, control, en-dash –) ----------
+let exps = [
+  {perusahaan:"PT Nittoh Presisi Indonesia – Bogor, Indonesia", peran:"Freelance Software Developer", tanggal:"Mei 2025 – Juni 2025", bullets:"Mengembangkan dua aplikasi desktop, CanteenGo (manajemen kantin) dan Absence (pencatatan kehadiran), menggunakan VB.NET dengan integrasi WebView2 untuk tampilan frontend modern dalam lingkungan teknologi lama.\nMengelola pengembangan full-stack secara mandiri, mencakup tampilan frontend modern, logika backend, dan operasi database menggunakan MSSQL 2000, MySQL, dan SQLite, serta sistem sinkronisasi peer-to-peer dan mode database fleksibel pada Absence untuk konsistensi multi-perangkat.\nMembangun kedua aplikasi dari tahap pengembangan hingga rilis dengan dokumentasi yang lengkap dan komprehensif."},
+  {perusahaan:"Proyek Pilketos", peran:"Full-Stack Developer", tanggal:"Agustus 2025 – September 2025", bullets:"Mengembangkan Pilketos, platform pemilihan ketua OSIS berbasis web secara full-stack dan mandiri, mencakup frontend TailwindCSS, backend PHP, dan database PostgreSQL untuk menyimpan data kandidat, pemilih, dan rekapitulasi suara secara real-time.\nMerancang sistem pemilihan yang transparan dan terorganisir untuk mendukung proses pemilihan yang dapat diandalkan di lingkungan sekolah.\nBerhasil men-deploy dan mengoperasikan platform pada proses pemilihan ketua OSIS yang digunakan oleh sekolah, disertai pemeliharaan berkelanjutan pasca-peluncuran."}
+];
+let edus = [
+  {sekolah:"SMKS INFORMATIKA PESAT", jurusan:"Rekayasa Perangkat Lunak", tanggal:"2024 – Sekarang", bullets:"Mempelajari prinsip-prinsip dasar rekayasa perangkat lunak dan webdev, termasuk logika MVC, manajemen database, dan pengembangan full-stack menggunakan Laravel, Expo, dan React Native.\nMemperoleh pengalaman langsung dalam membangun aplikasi melalui proyek sertifikasi kompetensi.\nMengembangkan keterampilan praktis dalam version control menggunakan Git dan Github, desain UI/UX, dan dokumentasi perangkat lunak sebagai bagian dari pembelajaran proyek."}
+];
+let skills = [
+  {label:"Frontend", value:"HTML, CSS, JavaScript, TailwindCSS, React Native, Axios"},
+  {label:"Backend", value:"PHP, Laravel, Node.js, Express.js, Python, FastAPI"},
+  {label:"Mobile Development", value:"Expo Framework, Axios, React Native"},
+  {label:"Desktop Development", value:".NET Windows Forms Application, Visual Basic, C#"},
+  {label:"Data Management", value:"MySQL, PostgreSQL, SQLite, MSSQL, Dapper"}
+];
+let certs = [
+  {judul:"Sertifikat Pembuatan Sistem Digital Manajemen Siswa", tanggal:"Desember 2025", deskripsi:"Sistem manajemen siswa berbasis web dengan Laravel dan MySQL dengan predikat “Kompeten” yang disertifikasi oleh PT Qelopak Teknologi Nusantara."},
+  {judul:"Sertifikat Pembangunan Sistem Digital Pemilihan Ketua OSIS", tanggal:"Juni 2025", deskripsi:"Sistem digital pemilihan ketua OSIS berbasis web dengan PHP dan MySQL dengan predikat “Kompeten” yang disertifikasi oleh PT Ginvo Indonesia Group."},
+  {judul:"Sertifikat Membuat Travel Landing Page", tanggal:"Desember 2024", deskripsi:"Landing page platform Travel dengan HTML, CSS, dan JavaScript dengan predikat “Kompeten” yang disertifikasi oleh PT Fakta Kreasi Studio."}
+];
+let awards = [
+  {judul:"Juara 1, LKS bidang IT Software Solution For Business", tanggal:"Mei 2026", deskripsi:"Membangun aplikasi desktop dengan menggunakan C# .NET untuk manajemen Inventori dan kasir sebuah toko retail, lengkap dengan fitur RBAC, CRUD pada setiap master data dengan MSSQL sebagai database, manajemen transaksi yang komprehensif serta dokumentasi berupa System Requirements Specification (SRS), Use Case, Activity Diagram, ERD dan Wireframe. diselenggarakan oleh Kemendikbud Kota Bogor"},
+  {judul:"Juara 2, LKS bidang IT Software Solution For Business", tanggal:"Mei 2025", deskripsi:"Membangun aplikasi mobile berbasis Android menggunakan Java untuk manajemen karyawan, lengkap dengan fitur CRUD pada setiap master data dengan SQLite sebagai database. diselenggarakan oleh Kemendikbud Kota Bogor"}
+];
+let orgs = [
+  {nama:"Rajawali Jurnalistik", peran:"Ketua Ekskul", tanggal:"Agustus 2025 – Sekarang", bullets:"Memimpin dan mengelola organisasi ekstrakurikuler jurnalistik sekolah dengan 25 anggota aktif, mengawasi seluruh kegiatan, penjadwalan rutin, dan arah program sepanjang tahun ajaran\nMengawasi liputan dan dokumentasi di banyak acara sekolah melalui fotografi, videografi, dan penulisan berita, serta mengelola konten media sosial secara konsisten untuk mempertahankan dan meningkatkan kehadiran digital organisasi\nMenyampaikan sesi pembelajaran mengenai dasar-dasar jurnalistik dan teknik liputan lapangan, serta memimpin minimal 3 sesi praktik langsung di destinasi wisata sekitar Bogor, membimbing dan mengevaluasi seluruh anggota dalam simulasi peliputan dunia nyata"}
+];
+
+const $ = id => document.getElementById(id);
+function esc(s){ return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+function bulletsHtml(t){ return (t||"").split("\n").map(x=>x.trim()).filter(Boolean).map(x=>`<li>${esc(x)}</li>`).join(""); }
+
+// Snapshot dummy awal untuk tombol Reset
+const DUMMY = {
+  header: {nama:"AHMAD SATTAR FATHULLOH", jabatan:"Software Developer", alamat:"Bogor, Jawa Barat", telp:"082322991181", email:"hello@sattr.me", porto:"https://sattr.me", deskripsi:"Seorang pelajar Rekayasa Perangkat Lunak di SMK Informatika Pesat dengan pengalaman langsung dalam pengembangan web full-stack, aplikasi desktop dan mobile. Menguasai .NET Windows Forms Application, Laravel, dan Expo, dengan kemampuan manajemen database mencakup MySQL, SQLite, MSSQL, dan PostgreSQL, serta familiar dengan Git, VSCode, dan Visual Studio. Mampu bekerja mandiri maupun dalam tim dengan komunikasi yang baik dalam Bahasa Indonesia dan Inggris, serta bersemangat untuk terus berkembang melalui tantangan nyata di dunia industri."},
+  exps: JSON.parse(JSON.stringify(exps)),
+  edus: JSON.parse(JSON.stringify(edus)),
+  skills: JSON.parse(JSON.stringify(skills)),
+  certs: JSON.parse(JSON.stringify(certs)),
+  awards: JSON.parse(JSON.stringify(awards)),
+  orgs: JSON.parse(JSON.stringify(orgs))
+};
+
+function refreshAllForms(){ renderExpForms(); renderEduForms(); renderSkillForms(); renderCertForms(); renderAwardForms(); renderOrgForms(); render(); }
+
+function clearAll(){
+  $("f_nama").value = ""; $("f_jabatan").value = ""; $("f_alamat").value = "";
+  $("f_telp").value = ""; $("f_email").value = ""; $("f_porto").value = "";
+  $("f_deskripsi").value = "";
+  exps = []; edus = []; skills = []; certs = []; awards = []; orgs = [];
+  refreshAllForms();
+}
+
+function resetDummy(){
+  $("f_nama").value = DUMMY.header.nama; $("f_jabatan").value = DUMMY.header.jabatan;
+  $("f_alamat").value = DUMMY.header.alamat; $("f_telp").value = DUMMY.header.telp;
+  $("f_email").value = DUMMY.header.email; $("f_porto").value = DUMMY.header.porto;
+  $("f_deskripsi").value = DUMMY.header.deskripsi;
+  exps = JSON.parse(JSON.stringify(DUMMY.exps));
+  edus = JSON.parse(JSON.stringify(DUMMY.edus));
+  skills = JSON.parse(JSON.stringify(DUMMY.skills));
+  certs = JSON.parse(JSON.stringify(DUMMY.certs));
+  awards = JSON.parse(JSON.stringify(DUMMY.awards));
+  orgs = JSON.parse(JSON.stringify(DUMMY.orgs));
+  refreshAllForms();
+}
+
+// ---------- Form builders ----------
+function addExp(d={perusahaan:"",peran:"",tanggal:"",bullets:""}){ exps.push(d); renderExpForms(); }
+function addEdu(d={sekolah:"",jurusan:"",tanggal:"",bullets:""}){ edus.push(d); renderEduForms(); }
+function addSkill(d={label:"",value:""}){ skills.push(d); renderSkillForms(); }
+function addCert(d={judul:"",tanggal:"",deskripsi:""}){ certs.push(d); renderCertForms(); }
+function addAward(d={judul:"",tanggal:"",deskripsi:""}){ awards.push(d); renderAwardForms(); }
+function addOrg(d={nama:"",peran:"",tanggal:"",bullets:""}){ orgs.push(d); renderOrgForms(); }
+
+function renderExpForms(){
+  $("exp_list").innerHTML = exps.map((e,i)=>`<div class="border rounded p-2 space-y-1">
+    <input data-exp="${i}" data-k="perusahaan" class="w-full border rounded px-2 py-1 text-sm font-bold" value="${esc(e.perusahaan)}" placeholder="Perusahaan – Lokasi">
+    <div class="flex gap-2"><input data-exp="${i}" data-k="peran" class="flex-1 border rounded px-2 py-1 text-sm" value="${esc(e.peran)}" placeholder="Peran"><input data-exp="${i}" data-k="tanggal" class="w-44 border rounded px-2 py-1 text-sm" value="${esc(e.tanggal)}" placeholder="Mei 2025 – Juni 2025"></div>
+    <textarea data-exp="${i}" data-k="bullets" rows="4" class="w-full border rounded px-2 py-1 text-sm" placeholder="Satu bullet per baris">${esc(e.bullets)}</textarea>
+    <button onclick="exps.splice(${i},1);renderExpForms();render()" class="text-xs text-red-600">Hapus</button></div>`).join("");
+}
+function renderEduForms(){
+  $("edu_list").innerHTML = edus.map((e,i)=>`<div class="border rounded p-2 space-y-1">
+    <input data-edu="${i}" data-k="sekolah" class="w-full border rounded px-2 py-1 text-sm font-bold" value="${esc(e.sekolah)}">
+    <div class="flex gap-2"><input data-edu="${i}" data-k="jurusan" class="flex-1 border rounded px-2 py-1 text-sm" value="${esc(e.jurusan)}"><input data-edu="${i}" data-k="tanggal" class="w-44 border rounded px-2 py-1 text-sm" value="${esc(e.tanggal)}"></div>
+    <textarea data-edu="${i}" data-k="bullets" rows="3" class="w-full border rounded px-2 py-1 text-sm">${esc(e.bullets)}</textarea>
+    <button onclick="edus.splice(${i},1);renderEduForms();render()" class="text-xs text-red-600">Hapus</button></div>`).join("");
+}
+function renderSkillForms(){
+  $("skill_list").innerHTML = skills.map((s,i)=>`<div class="flex gap-2">
+    <input data-skill="${i}" data-k="label" class="w-40 border rounded px-2 py-1 text-sm" value="${esc(s.label)}" placeholder="Label">
+    <input data-skill="${i}" data-k="value" class="flex-1 border rounded px-2 py-1 text-sm" value="${esc(s.value)}" placeholder="Nilai">
+    <button onclick="skills.splice(${i},1);renderSkillForms();render()" class="text-xs text-red-600">x</button></div>`).join("");
+}
+function renderCertForms(){
+  $("cert_list").innerHTML = certs.map((c,i)=>`<div class="border rounded p-2 space-y-1">
+    <div class="flex gap-2"><input data-cert="${i}" data-k="judul" class="flex-1 border rounded px-2 py-1 text-sm font-bold" value="${esc(c.judul)}"><input data-cert="${i}" data-k="tanggal" class="w-36 border rounded px-2 py-1 text-sm" value="${esc(c.tanggal)}"></div>
+    <textarea data-cert="${i}" data-k="deskripsi" rows="2" class="w-full border rounded px-2 py-1 text-sm">${esc(c.deskripsi)}</textarea>
+    <button onclick="certs.splice(${i},1);renderCertForms();render()" class="text-xs text-red-600">Hapus</button></div>`).join("");
+}
+function renderAwardForms(){
+  $("award_list").innerHTML = awards.map((a,i)=>`<div class="border rounded p-2 space-y-1">
+    <div class="flex gap-2"><input data-award="${i}" data-k="judul" class="flex-1 border rounded px-2 py-1 text-sm font-bold" value="${esc(a.judul)}"><input data-award="${i}" data-k="tanggal" class="w-36 border rounded px-2 py-1 text-sm" value="${esc(a.tanggal)}"></div>
+    <textarea data-award="${i}" data-k="deskripsi" rows="3" class="w-full border rounded px-2 py-1 text-sm">${esc(a.deskripsi)}</textarea>
+    <button onclick="awards.splice(${i},1);renderAwardForms();render()" class="text-xs text-red-600">Hapus</button></div>`).join("");
+}
+function renderOrgForms(){
+  $("org_list").innerHTML = orgs.map((o,i)=>`<div class="border rounded p-2 space-y-1">
+    <input data-org="${i}" data-k="nama" class="w-full border rounded px-2 py-1 text-sm font-bold" value="${esc(o.nama)}">
+    <div class="flex gap-2"><input data-org="${i}" data-k="peran" class="flex-1 border rounded px-2 py-1 text-sm" value="${esc(o.peran)}"><input data-org="${i}" data-k="tanggal" class="w-44 border rounded px-2 py-1 text-sm" value="${esc(o.tanggal)}"></div>
+    <textarea data-org="${i}" data-k="bullets" rows="3" class="w-full border rounded px-2 py-1 text-sm">${esc(o.bullets)}</textarea>
+    <button onclick="orgs.splice(${i},1);renderOrgForms();render()" class="text-xs text-red-600">Hapus</button></div>`).join("");
+}
+
+// ---------- Preview + pagination antar halaman ----------
+function makePage(){
+  const d = document.createElement("div");
+  d.className = "cv-paper";
+  return d;
+}
+function render(){
+  const nama=$("f_nama").value, jab=$("f_jabatan").value, al=$("f_alamat").value,
+        tel=$("f_telp").value, em=$("f_email").value, po=$("f_porto").value,
+        desk=$("f_deskripsi").value;
+
+  // Bangun blok-blok logis agar pagination tidak memotong tengah item
+  const blocks = [];
+  blocks.push(`<p class="cv-name">${esc(nama)}</p>
+  <p class="cv-role">${esc(jab)}</p>
+  <p class="cv-contact">${esc(al)} | ${esc(tel)} | <a href="mailto:${esc(em)}">${esc(em)}</a> | Portfolio : <a href="${esc(po)}">${esc(po)}</a></p>`);
+  blocks.push(`<h3 class="cv-section-title">Deskripsi Diri</h3><p class="cv-body">${esc(desk)}</p>`);
+  blocks.push(`<h3 class="cv-section-title">Pengalaman</h3>`);
+  exps.forEach(e=>{ blocks.push(`<div class="cv-item"><p class="cv-sub-bold">${esc(e.perusahaan)}</p>
+    <div class="cv-row"><span>${esc(e.peran)}</span><span>${esc(e.tanggal)}</span></div>
+    <ul class="cv-bullets">${bulletsHtml(e.bullets)}</ul></div>`); });
+  blocks.push(`<h3 class="cv-section-title">Pendidikan</h3>`);
+  edus.forEach(e=>{ blocks.push(`<div class="cv-item"><p class="cv-sub-bold">${esc(e.sekolah)}</p>
+    <div class="cv-row"><span>${esc(e.jurusan)}</span><span>${esc(e.tanggal)}</span></div>
+    <ul class="cv-bullets">${bulletsHtml(e.bullets)}</ul></div>`); });
+  blocks.push(`<h3 class="cv-section-title">Keahlian</h3><ul class="cv-bullets">` +
+    skills.map(s=>`<li><span style="display:inline-block;min-width:135pt">${esc(s.label)}</span>: ${esc(s.value)}</li>`).join("") + `</ul>`);
+  certs.forEach((c,i)=>{ blocks.push(`${i===0?`<h3 class="cv-section-title">Sertifikasi</h3>`:""}<div class="cv-item"><div class="cv-row"><span class="cv-sub-bold">${esc(c.judul)}</span><span>${esc(c.tanggal)}</span></div><p class="cv-body">${esc(c.deskripsi)}</p></div>`); });
+  if(certs.length===0) blocks.push(`<h3 class="cv-section-title">Sertifikasi</h3>`);
+  awards.forEach((a,i)=>{ blocks.push(`${i===0?`<h3 class="cv-section-title">Penghargaan</h3>`:""}<div class="cv-item"><div class="cv-row"><span class="cv-sub-bold">${esc(a.judul)}</span><span>${esc(a.tanggal)}</span></div><p class="cv-body">${esc(a.deskripsi)}</p></div>`); });
+  if(awards.length===0) blocks.push(`<h3 class="cv-section-title">Penghargaan</h3>`);
+  orgs.forEach((o,i)=>{ blocks.push(`${i===0?`<h3 class="cv-section-title">Organisasi</h3>`:""}<div class="cv-item"><p class="cv-sub-bold">${esc(o.nama)}</p>
+    <div class="cv-row"><span>${esc(o.peran)}</span><span>${esc(o.tanggal)}</span></div>
+    <ul class="cv-bullets">${bulletsHtml(o.bullets)}</ul></div>`); });
+  if(orgs.length===0) blocks.push(`<h3 class="cv-section-title">Organisasi</h3>`);
+
+  // Pagination: pindahkan blok ke halaman baru jika overflow (gap 24px berasal dari #preview)
+  const preview = $("preview");
+  preview.innerHTML = "";
+  let page = makePage();
+  preview.appendChild(page);
+  blocks.forEach(html=>{
+    if(!html.trim()) return;
+    const block = document.createElement("div");
+    block.innerHTML = html;
+    page.appendChild(block);
+    if(page.scrollHeight > page.clientHeight + 1){
+      page.removeChild(block);
+      // hindari judul section yatim di akhir halaman
+      const last = page.lastElementChild;
+      const lastIsHeader = last && last.querySelector(":scope > .cv-section-title") && last.textContent.trim().length < 40;
+      let next = makePage();
+      preview.appendChild(next);
+      if(lastIsHeader && page.childElementCount > 1){
+        page.removeChild(last);
+        next.appendChild(last);
+      }
+      next.appendChild(block);
+      // blok tunggal lebih tinggi dari 1 halaman: biarkan tumbuh agar tidak terpotong
+      if(block.offsetHeight > next.clientHeight){
+        next.style.height = "auto";
+        next.style.maxHeight = "none";
+      }
+      page = next;
+    }
+  });
+  // buang halaman kosong di akhir (kecuali halaman pertama)
+  const pages = [...preview.children];
+  if(pages.length > 1 && !pages[pages.length-1].textContent.trim()){
+    preview.removeChild(pages[pages.length-1]);
+  }
+}
+
+document.addEventListener("input", e=>{
+  const t=e.target;
+  if(t.dataset.exp!==undefined) exps[+t.dataset.exp][t.dataset.k]=t.value;
+  if(t.dataset.edu!==undefined) edus[+t.dataset.edu][t.dataset.k]=t.value;
+  if(t.dataset.skill!==undefined) skills[+t.dataset.skill][t.dataset.k]=t.value;
+  if(t.dataset.cert!==undefined) certs[+t.dataset.cert][t.dataset.k]=t.value;
+  if(t.dataset.award!==undefined) awards[+t.dataset.award][t.dataset.k]=t.value;
+  if(t.dataset.org!==undefined) orgs[+t.dataset.org][t.dataset.k]=t.value;
+  render();
+});
+
+renderExpForms(); renderEduForms(); renderSkillForms(); renderCertForms(); renderAwardForms(); renderOrgForms(); render();
+</script>
+</body>
+</html>

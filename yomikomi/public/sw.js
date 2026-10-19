@@ -3,7 +3,7 @@
  * Provides instantaneous offline loading and smooth App Shell fallback
  */
 
-const CACHE_NAME = 'yomikomi-app-shell-v13';
+const CACHE_NAME = 'yomikomi-app-shell-v14';
 
 // Static App Shell assets required to render the application offline
 const PRECACHE_ASSETS = [

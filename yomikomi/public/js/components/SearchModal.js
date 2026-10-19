@@ -4,7 +4,7 @@
  */
 
 import { searchManga } from '../services/mangadex.js';
-import { getMangaTitle, getCoverUrl, initIcons } from '../state.js';
+import { getMangaTitle, getCoverUrl, getLanguageFlag, initIcons } from '../state.js';
 
 let searchDebounceTimeout = null;
 
@@ -15,18 +15,18 @@ export function renderSearchModalMarkup() {
         <div class="search-input-wrapper">
           <i data-lucide="search" class="search-icon"></i>
           <input type="text" id="modal-search-input" placeholder="Ketik judul manga, manhwa, manhua..." autocomplete="off">
-          <button class="search-clear-btn hidden" id="modal-search-clear">
+          <button class="search-clear-btn hidden" id="modal-search-clear" type="button" aria-label="Hapus kata kunci">
             <i data-lucide="x"></i>
           </button>
-          <kbd class="search-esc-kbd" id="modal-close-esc">ESC</kbd>
+          <kbd class="search-esc-kbd" id="modal-close-esc" title="Tutup pencarian (Esc)">ESC</kbd>
         </div>
         <div class="search-quick-tags" id="search-quick-tags">
           <span class="quick-tag-label">Genre Cepat:</span>
-          <button class="quick-tag-chip" data-tag="Action">Action</button>
-          <button class="quick-tag-chip" data-tag="Fantasy">Fantasy</button>
-          <button class="quick-tag-chip" data-tag="Romance">Romance</button>
-          <button class="quick-tag-chip" data-tag="Isekai">Isekai</button>
-          <button class="quick-tag-chip" data-tag="Comedy">Comedy</button>
+          <button class="quick-tag-chip" type="button" data-tag="Action">Action</button>
+          <button class="quick-tag-chip" type="button" data-tag="Fantasy">Fantasy</button>
+          <button class="quick-tag-chip" type="button" data-tag="Romance">Romance</button>
+          <button class="quick-tag-chip" type="button" data-tag="Isekai">Isekai</button>
+          <button class="quick-tag-chip" type="button" data-tag="Comedy">Comedy</button>
         </div>
         <div class="search-results-container" id="search-results">
           <div class="search-placeholder-state">
@@ -119,9 +119,11 @@ export function initSearchModalEvents({ onSelectManga } = {}) {
   window.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
       e.preventDefault();
-      openSearchModal();
+      const isHidden = modal?.classList.contains('hidden');
+      if (isHidden) openSearchModal();
+      else closeSearchModal();
     }
-    if (e.key === 'Escape') {
+    if (e.key === 'Escape' && !modal?.classList.contains('hidden')) {
       closeSearchModal();
     }
   });
@@ -170,27 +172,49 @@ async function performSearch(query, onSelectManga) {
     results.forEach(manga => {
       const title = getMangaTitle(manga.attributes);
       const coverUrl = getCoverUrl(manga);
-      const year = manga.attributes.year || '';
-      const status = manga.attributes.status ? manga.attributes.status.toUpperCase() : 'ONGOING';
+      const year = manga.attributes?.year || '';
+      const status = manga.attributes?.status ? manga.attributes.status.toUpperCase() : 'ONGOING';
+      const statusClass = 'status-' + status.toLowerCase();
+      const origLang = manga.attributes?.originalLanguage || 'ja';
+      const flag = getLanguageFlag(origLang);
+      const typeLabel = origLang === 'ko' ? 'Manhwa' : (origLang === 'zh' || origLang === 'zh-hk' ? 'Manhua' : 'Manga');
 
       const item = document.createElement('div');
       item.className = 'search-result-item';
+      item.tabIndex = 0;
+      item.setAttribute('role', 'button');
+      item.setAttribute('aria-label', title);
       item.innerHTML = `
-        <img class="search-result-thumb" src="${coverUrl}" alt="${title}" loading="lazy" onerror="this.src='https://placehold.co/300x420/1e2025/ffffff?text=Cover';">
+        <div class="search-result-thumb-wrap">
+          <img class="search-result-thumb" src="${coverUrl}" alt="${title}" loading="lazy" onerror="this.src='https://placehold.co/100x140/1e2025/ffffff?text=Cover';">
+        </div>
         <div class="search-result-info">
           <div class="search-result-title" title="${title}">${title}</div>
           <div class="search-result-meta">
-            <span class="search-badge">${status}</span>
-            ${year ? `<span class="search-badge">${year}</span>` : ''}
+            <span class="search-badge ${statusClass}">${status}</span>
+            <span class="search-badge search-badge-type">${flag} ${typeLabel}</span>
+            ${year ? `<span class="search-badge search-badge-year">${year}</span>` : ''}
           </div>
         </div>
-        <i data-lucide="chevron-right" class="search-result-arrow"></i>
+        <div class="search-result-action">
+          <i data-lucide="chevron-right" class="search-result-arrow"></i>
+        </div>
       `;
 
-      item.addEventListener('click', () => {
+      const handleSelect = () => {
         closeSearchModal();
         if (typeof onSelectManga === 'function') {
           onSelectManga(manga.id);
+        } else if (typeof window.openMangaDetail === 'function') {
+          window.openMangaDetail(manga.id);
+        }
+      };
+
+      item.addEventListener('click', handleSelect);
+      item.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          handleSelect();
         }
       });
 

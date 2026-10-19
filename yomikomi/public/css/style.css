@@ -2531,13 +2531,27 @@ img {
   background: linear-gradient(180deg, #101218 0%, #171922 50%, #101218 100%);
   z-index: 2;
   transition: opacity 300ms ease;
-  pointer-events: none;
+  pointer-events: auto;
+  cursor: pointer;
 }
 
 .page-skeleton-loader.fade-out {
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
+}
+
+.page-skeleton-label.clickable-spinner {
+  cursor: pointer;
+  pointer-events: auto;
+  transition: transform var(--transition-fast), background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.page-skeleton-label.clickable-spinner:hover,
+.page-skeleton-label.clickable-spinner:active {
+  transform: scale(1.15);
+  background: rgba(255, 103, 64, 0.2);
+  border-color: var(--accent);
 }
 
 .page-skeleton-shimmer {

@@ -7,7 +7,7 @@
 
 import { state, initIcons, showToast, getMangaTitle, revokeActiveObjectUrls } from '../state.js';
 import { saveReadingHistory } from '../services/storage.js';
-import { updateCustomChapterDropdown } from './ChapterList.js';
+import { updateCustomChapterDropdown, ensureUnifiedChapterList, openUnifiedChapter } from './ChapterList.js';
 
 export function getReaderStageUrl(rawUrl, stage = 0, retryTimestamp = null) {
   if (!rawUrl) return '';
@@ -23,39 +23,124 @@ export function getReaderStageUrl(rawUrl, stage = 0, retryTimestamp = null) {
   const ts = retryTimestamp || Date.now();
   const isMangaDex = cleanUrl.includes('mangadex.org') || cleanUrl.includes('mangadex.network');
 
-  if (isMangaDex) {
-    if (stage === 0) {
-      const qs = retryTimestamp ? `&retry=${retryTimestamp}` : '';
-      return `/api/proxy/image?url=${encodeURIComponent(cleanUrl)}${qs}`;
-    } else if (stage === 1) {
-      // Stage 1: Try alternate format (swap data-saver <-> data)
-      let altUrl = cleanUrl;
-      if (altUrl.includes('/data-saver/')) {
-        altUrl = altUrl.replace('/data-saver/', '/data/');
-      } else if (altUrl.includes('/data/')) {
-        altUrl = altUrl.replace('/data/', '/data-saver/');
-      }
-      return `/api/proxy/image?url=${encodeURIComponent(altUrl)}&t=${ts}&stage=1`;
-    } else {
-      // Stage 2: Public edge CDN proxy with WebP converter
-      return `https://wsrv.nl/?url=${encodeURIComponent(cleanUrl)}&we=1&n=-1&t=${ts}`;
-    }
-  }
-
-  // Non-MangaDex mirrors (Komiku, Komikindo, Mangapill)
   if (stage === 0) {
-    const qs = retryTimestamp ? `&retry=${retryTimestamp}` : '';
-    return `/api/proxy/image?url=${encodeURIComponent(cleanUrl)}${qs}`;
+    // Stage 0: Edge CDN proxy (wsrv.nl) with WebP output & quality 80
+    return `https://wsrv.nl/?url=${encodeURIComponent(cleanUrl)}&output=webp&q=80&we&n=-1`;
   } else if (stage === 1) {
-    // Stage 1: Retry through proxy with alt flag (NEVER direct unproxied third-party URL!)
+    // Stage 1: Direct URL with no-referrer
+    if (isMangaDex) {
+      return cleanUrl;
+    }
+    // For non-MangaDex mirrors that block direct hotlinking, fallback to proxy alt
     return `/api/proxy/image?url=${encodeURIComponent(cleanUrl)}&alt=1&t=${ts}`;
+  } else if (stage === 2) {
+    // Stage 2: Internal Proxy
+    return `/api/proxy/image?url=${encodeURIComponent(cleanUrl)}&t=${ts}`;
   } else {
-    // Stage 2: Edge CDN fallback (wsrv.nl)
-    return `https://wsrv.nl/?url=${encodeURIComponent(cleanUrl)}&we=1&n=-1&t=${ts}`;
+    // Stage 3: Direct original URL + cache buster
+    const sep = cleanUrl.includes('?') ? '&' : '?';
+    return `${cleanUrl}${sep}retry=${ts}`;
   }
 }
 
 window.getReaderStageUrl = getReaderStageUrl;
+
+export function applyImageStage(imgEl, rawUrl, stage = 0) {
+  if (!imgEl || !rawUrl) return;
+
+  // Clear previous watchdog timer
+  if (imgEl._watchdogTimer) {
+    clearTimeout(imgEl._watchdogTimer);
+    imgEl._watchdogTimer = null;
+  }
+
+  // Blob or Data URLs (e.g. offline downloaded chapters) load immediately
+  if (rawUrl.startsWith('blob:') || rawUrl.startsWith('data:')) {
+    imgEl.dataset.retryStage = '0';
+    imgEl.removeAttribute('referrerpolicy');
+    imgEl.removeAttribute('crossorigin');
+    imgEl.src = rawUrl;
+    return;
+  }
+
+  const ts = Date.now();
+  imgEl.dataset.retryStage = String(stage);
+
+  if (stage === 0) {
+    imgEl.removeAttribute('referrerpolicy');
+    imgEl.removeAttribute('crossorigin');
+    imgEl.src = getReaderStageUrl(rawUrl, 0, ts);
+  } else if (stage === 1) {
+    imgEl.referrerPolicy = 'no-referrer';
+    imgEl.removeAttribute('crossorigin');
+    imgEl.src = getReaderStageUrl(rawUrl, 1, ts);
+  } else if (stage === 2) {
+    imgEl.removeAttribute('referrerpolicy');
+    imgEl.removeAttribute('crossorigin');
+    imgEl.src = getReaderStageUrl(rawUrl, 2, ts);
+  } else if (stage === 3) {
+    imgEl.referrerPolicy = 'no-referrer';
+    imgEl.removeAttribute('crossorigin');
+    imgEl.src = getReaderStageUrl(rawUrl, 3, ts);
+  }
+
+  // 6000ms Watchdog Timeout
+  imgEl._watchdogTimer = setTimeout(() => {
+    if (!imgEl.isConnected) return;
+    if (imgEl.classList.contains('visible') || (imgEl.naturalWidth > 0 && imgEl.naturalHeight > 0)) return;
+    console.warn(`[ReaderWatchdog] Image page ${imgEl.dataset.page} stalled at stage ${stage} (>6s). Advancing...`);
+    advanceImageRetryStage(imgEl, false);
+  }, 6000);
+}
+
+window.applyImageStage = applyImageStage;
+
+export function advanceImageRetryStage(imgEl, isUserTap = false) {
+  if (!imgEl) return;
+  if (imgEl._watchdogTimer) {
+    clearTimeout(imgEl._watchdogTimer);
+    imgEl._watchdogTimer = null;
+  }
+
+  const wrapper = imgEl.closest('.reader-page-wrapper') || imgEl.parentElement;
+  const rawUrl = imgEl.dataset.rawUrl;
+  let stage = parseInt(imgEl.dataset.retryStage || '0', 10);
+  const nextStage = stage + 1;
+
+  if (nextStage <= 3) {
+    applyImageStage(imgEl, rawUrl, nextStage);
+    return;
+  }
+
+  // All 4 stages failed/timed out, show retry button
+  imgEl.dataset.retryStage = '4';
+  if (!wrapper) return;
+  const skeleton = wrapper.querySelector('.page-skeleton-loader');
+  if (skeleton) skeleton.classList.add('fade-out');
+
+  if (wrapper.querySelector('.page-error-retry')) return;
+
+  const retryCard = document.createElement('div');
+  retryCard.className = 'page-error-retry';
+  retryCard.innerHTML = `
+    <button class="btn-retry-page" type="button" title="Coba lagi" aria-label="Coba lagi">
+      <i data-lucide="rotate-cw"></i>
+    </button>
+  `;
+
+  retryCard.querySelector('.btn-retry-page')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    retryCard.remove();
+    if (skeleton) skeleton.classList.remove('fade-out');
+    imgEl.classList.remove('visible');
+    applyImageStage(imgEl, rawUrl, 0);
+  });
+
+  wrapper.appendChild(retryCard);
+  initIcons();
+}
+
+window.advanceImageRetryStage = advanceImageRetryStage;
 
 export function loadReaderPageImage(imgEl) {
   if (!imgEl) return;
@@ -65,10 +150,7 @@ export function loadReaderPageImage(imgEl) {
   const rawUrl = imgEl.dataset.rawUrl;
   if (!rawUrl) return;
 
-  imgEl.dataset.retryStage = '0';
-  imgEl.removeAttribute('referrerpolicy');
-  imgEl.removeAttribute('crossorigin');
-  imgEl.src = getReaderStageUrl(rawUrl, 0);
+  applyImageStage(imgEl, rawUrl, 0);
 }
 
 window.loadReaderPageImage = loadReaderPageImage;
@@ -82,6 +164,7 @@ export function triggerNextPageLoad(imgEl) {
     if (nextWrap) {
       const nextImg = nextWrap.querySelector('.reader-page-img');
       if (nextImg && nextImg.dataset.startedLoading !== 'true') {
+        nextImg.setAttribute('fetchpriority', 'high');
         loadReaderPageImage(nextImg);
       }
     }
@@ -91,6 +174,11 @@ export function triggerNextPageLoad(imgEl) {
 window.triggerNextPageLoad = triggerNextPageLoad;
 
 export function handlePageImageLoad(imgEl) {
+  if (imgEl._watchdogTimer) {
+    clearTimeout(imgEl._watchdogTimer);
+    imgEl._watchdogTimer = null;
+  }
+
   if (imgEl.naturalWidth > 0 && imgEl.naturalHeight > 0) {
     const isMangaDexBanner = (imgEl.naturalWidth === 600 && imgEl.naturalHeight === 642) ||
       (Math.abs(imgEl.naturalWidth - 600) <= 20 && Math.abs(imgEl.naturalHeight - 642) <= 20) ||
@@ -138,59 +226,14 @@ export function handlePageImageLoad(imgEl) {
 window.handlePageImageLoad = handlePageImageLoad;
 
 export function handlePageImageError(imgEl) {
-  const wrapper = imgEl.closest('.reader-page-wrapper') || imgEl.parentElement;
-  if (!wrapper) return;
-
-  const rawUrl = imgEl.dataset.rawUrl;
-  const pageNum = parseInt(imgEl.dataset.page || '1', 10);
-  let stage = parseInt(imgEl.dataset.retryStage || '0', 10);
-
-  if (stage < 2) {
-    const nextStage = stage + 1;
-    imgEl.dataset.retryStage = String(nextStage);
-
-    // Exponential backoff between retries to allow failovers to settle
-    const backoffMs = nextStage === 1 ? 500 : 1200;
-    setTimeout(() => {
-      if (!imgEl.isConnected) return;
-      imgEl.removeAttribute('crossorigin');
-      imgEl.removeAttribute('referrerpolicy');
-      imgEl.src = getReaderStageUrl(rawUrl, nextStage, Date.now());
-    }, backoffMs);
-    return;
+  if (imgEl._watchdogTimer) {
+    clearTimeout(imgEl._watchdogTimer);
+    imgEl._watchdogTimer = null;
   }
-
-  imgEl.dataset.retryStage = '3';
-
-  const skeleton = wrapper.querySelector('.page-skeleton-loader');
-  if (skeleton) skeleton.classList.add('fade-out');
-
-  if (wrapper.querySelector('.page-error-retry')) return;
-
-  const retryCard = document.createElement('div');
-  retryCard.className = 'page-error-retry';
-  retryCard.innerHTML = `
-    <button class="btn-retry-page" type="button" title="Coba lagi" aria-label="Coba lagi">
-      <i data-lucide="rotate-cw"></i>
-    </button>
-  `;
-
-  retryCard.querySelector('.btn-retry-page')?.addEventListener('click', (e) => {
-    e.stopPropagation();
-    retryCard.remove();
-    if (skeleton) skeleton.classList.remove('fade-out');
-    imgEl.classList.remove('visible');
-
-    imgEl.dataset.retryStage = '0';
-    imgEl.removeAttribute('referrerpolicy');
-    imgEl.removeAttribute('crossorigin');
-    const retryTimestamp = Date.now();
-    imgEl.src = getReaderStageUrl(rawUrl, 0, retryTimestamp);
-  });
-
-  wrapper.appendChild(retryCard);
-  initIcons();
+  advanceImageRetryStage(imgEl, false);
 }
+
+window.handlePageImageError = handlePageImageError;
 
 // Global In-Memory Chapter Pages Cache for 0ms Instant Loading (Like Native MangaDex)
 window.prefetchedChaptersCache = window.prefetchedChaptersCache || new Map();
@@ -271,6 +314,7 @@ export async function openReader(chapterId, chapterIndex) {
   const chNum = chObj?.title || (chObj?.attributes?.chapter ? `Chapter ${chObj.attributes.chapter}` : 'Special Chapter');
   if (chObj?.language || chObj?.attributes?.translatedLanguage) {
     state.currentReadingLang = chObj.language || chObj.attributes.translatedLanguage;
+    state.activeDetailLang = state.currentReadingLang;
   }
 
   const rMangaTitle = document.getElementById('reader-manga-title');
@@ -283,15 +327,19 @@ export async function openReader(chapterId, chapterIndex) {
   document.getElementById('reader-toolbar')?.classList.remove('hidden-bar');
   document.getElementById('reader-footer')?.classList.remove('hidden-bar');
 
-  const activeChapterPool = (state.activeChapters && state.activeChapters.length > 0)
-    ? state.activeChapters
-    : state.currentChapters;
+  const curLang = state.activeDetailLang || state.currentReadingLang || 'id';
+  let activeChapterPool = state.unifiedChapters?.[curLang];
+  if (!activeChapterPool || activeChapterPool.length === 0) {
+    activeChapterPool = (state.activeChapters && state.activeChapters.length > 0)
+      ? state.activeChapters
+      : state.currentChapters;
+  }
 
   const dropItems = activeChapterPool.map((ch, idx) => {
     const val = ch.id || ch.url;
     const lFlag = ch.language || (ch.attributes?.translatedLanguage === 'id' ? 'id' : 'en');
     const lText = lFlag === 'id' ? '[ID]' : '[EN]';
-    const numText = ch.chapterNumStr || ch.attributes?.chapter || idx + 1;
+    const numText = ch.chapterNumStr || ch.attributes?.chapter || ch.number || idx + 1;
     const titleText = ch.subTitle || (ch.attributes?.title ? `- ${ch.attributes.title}` : '');
     const srcText = ch.scanlationGroup ? `[${ch.scanlationGroup}]` : '';
     return {
@@ -301,18 +349,21 @@ export async function openReader(chapterId, chapterIndex) {
     };
   });
   updateCustomChapterDropdown(dropItems, chapterId, (val) => {
-    if (state.activeChapters && state.activeChapters.length > 0) {
-      const newIdx = state.activeChapters.findIndex(c => (c.id === val || c.url === val));
-      if (newIdx !== -1 && window.openUnifiedChapter) {
-        window.openUnifiedChapter(state.activeChapters[newIdx], newIdx);
-        return;
-      }
+    const targetPool = state.unifiedChapters?.[curLang] || activeChapterPool;
+    const targetIdx = targetPool.findIndex(c => (c.id === val || c.url === val));
+    if (targetIdx !== -1 && window.openUnifiedChapter) {
+      window.openUnifiedChapter(targetPool[targetIdx], targetIdx);
+      return;
     }
     const newIdx = state.currentChapters.findIndex(c => c.id === val);
     if (newIdx !== -1) {
       openReader(val, newIdx);
     }
   });
+
+  if (state.currentManga?.id) {
+    ensureUnifiedChapterList(state.currentManga.id, chapterId, state.currentManga);
+  }
 
   // 100% Instant 0ms Load: Check if already pre-cached in memory!
   const cachedData = window.prefetchedChaptersCache?.get(chapterId);
@@ -407,6 +458,10 @@ export async function openExternalReader(chapterUrl, chapterTitle, allChapters, 
   state.currentPageIndex = 0;
   state.isExternal = true;
   state.currentSource = 'bacakomik';
+  state.currentChapterId = chapterUrl;
+  state.isAutoNavigatingNext = false;
+  state.activeDetailLang = 'id';
+  state.currentReadingLang = 'id';
   state.externalChapters = allChapters;
   state.currentChapterIndex = chapterIndex;
   state.allMangaDexChapters = [];
@@ -431,18 +486,33 @@ export async function openExternalReader(chapterUrl, chapterTitle, allChapters, 
   document.getElementById('reader-toolbar')?.classList.remove('hidden-bar');
   document.getElementById('reader-footer')?.classList.remove('hidden-bar');
 
-  const dropItems = allChapters.map(ch => ({
-    value: ch.url,
-    label: ch.title.replace(/\s+/g, ' ').trim(),
-    lang: 'id'
-  }));
+  const pool = (state.unifiedChapters?.id && state.unifiedChapters.id.length > 0) ? state.unifiedChapters.id : allChapters;
+  const dropItems = pool.map((ch, idx) => {
+    const val = ch.id || ch.url;
+    const numText = ch.chapterNumStr || ch.attributes?.chapter || ch.number || ch.title?.replace(/\s+/g, ' ').trim() || idx + 1;
+    const titleText = ch.subTitle || (ch.attributes?.title ? `- ${ch.attributes.title}` : '');
+    return {
+      value: val,
+      label: `Chapter ${numText} [ID] ${titleText}`.trim(),
+      lang: 'id'
+    };
+  });
   updateCustomChapterDropdown(dropItems, chapterUrl, (val) => {
-    const newIdx = allChapters.findIndex(c => c.url === val);
+    const targetPool = state.unifiedChapters?.id || allChapters;
+    const newIdx = targetPool.findIndex(c => (c.url === val || c.id === val));
     if (newIdx !== -1) {
-      const targetCh = allChapters[newIdx];
-      openExternalReader(targetCh.url, targetCh.title, allChapters, newIdx);
+      const targetCh = targetPool[newIdx];
+      if (window.openUnifiedChapter) {
+        window.openUnifiedChapter(targetCh, newIdx);
+      } else {
+        openExternalReader(targetCh.url || targetCh.id, targetCh.title, targetPool, newIdx);
+      }
     }
   });
+
+  if (state.currentManga?.id) {
+    ensureUnifiedChapterList(state.currentManga.id, chapterUrl, state.currentManga);
+  }
 
   // 100% Instant 0ms Load: Check if already pre-cached in memory!
   const cachedData = window.prefetchedChaptersCache?.get(chapterUrl);
@@ -551,6 +621,10 @@ export async function openEnglishReader(chapterUrl, chapterTitle, allChapters, c
   state.currentPageIndex = 0;
   state.isExternal = true;
   state.currentSource = 'english';
+  state.currentChapterId = chapterUrl;
+  state.isAutoNavigatingNext = false;
+  state.activeDetailLang = 'en';
+  state.currentReadingLang = 'en';
   state.englishChapters = allChapters;
   state.currentChapterIndex = chapterIndex;
   state.allMangaDexChapters = [];
@@ -575,18 +649,33 @@ export async function openEnglishReader(chapterUrl, chapterTitle, allChapters, c
   document.getElementById('reader-toolbar')?.classList.remove('hidden-bar');
   document.getElementById('reader-footer')?.classList.remove('hidden-bar');
 
-  const dropItems = allChapters.map(ch => ({
-    value: ch.url,
-    label: ch.title.replace(/\s+/g, ' ').trim(),
-    lang: 'en'
-  }));
+  const pool = (state.unifiedChapters?.en && state.unifiedChapters.en.length > 0) ? state.unifiedChapters.en : allChapters;
+  const dropItems = pool.map((ch, idx) => {
+    const val = ch.id || ch.url;
+    const numText = ch.chapterNumStr || ch.attributes?.chapter || ch.number || ch.title?.replace(/\s+/g, ' ').trim() || idx + 1;
+    const titleText = ch.subTitle || (ch.attributes?.title ? `- ${ch.attributes.title}` : '');
+    return {
+      value: val,
+      label: `Chapter ${numText} [EN] ${titleText}`.trim(),
+      lang: 'en'
+    };
+  });
   updateCustomChapterDropdown(dropItems, chapterUrl, (val) => {
-    const newIdx = allChapters.findIndex(c => c.url === val);
+    const targetPool = state.unifiedChapters?.en || allChapters;
+    const newIdx = targetPool.findIndex(c => (c.url === val || c.id === val));
     if (newIdx !== -1) {
-      const targetCh = allChapters[newIdx];
-      openEnglishReader(targetCh.url, targetCh.title, allChapters, newIdx);
+      const targetCh = targetPool[newIdx];
+      if (window.openUnifiedChapter) {
+        window.openUnifiedChapter(targetCh, newIdx);
+      } else {
+        openEnglishReader(targetCh.url || targetCh.id, targetCh.title, targetPool, newIdx);
+      }
     }
   });
+
+  if (state.currentManga?.id) {
+    ensureUnifiedChapterList(state.currentManga.id, chapterUrl, state.currentManga);
+  }
 
   // 100% Instant 0ms Load: Check if already pre-cached in memory!
   const cachedData = window.prefetchedChaptersCache?.get(chapterUrl);
@@ -827,8 +916,11 @@ export function renderReaderPages(data) {
           const pageNum = parseInt(wrap.dataset.page || '0', 10);
           const img = wrap.querySelector('.reader-page-img');
           if (img && img.dataset.startedLoading !== 'true') {
+            img.setAttribute('fetchpriority', 'high');
             loadReaderPageImage(img);
           }
+          // Prioritize loading next 2 pages immediately below visible page
+          triggerNextPageLoad(img);
           observer.unobserve(wrap);
 
           // Predictive Next Chapter Pre-fetch (Zero delay when advancing!)
@@ -842,7 +934,7 @@ export function renderReaderPages(data) {
         }
       });
     }, {
-      rootMargin: '2000px 0px 2000px 0px'
+      rootMargin: '400px 0px 800px 0px'
     });
 
     pages.forEach((pageUrl, idx) => {
@@ -851,9 +943,9 @@ export function renderReaderPages(data) {
       pageWrap.className = 'reader-page-wrapper';
       pageWrap.dataset.page = pageNum;
       pageWrap.innerHTML = `
-        <div class="page-skeleton-loader" id="skeleton-page-${pageNum}">
+        <div class="page-skeleton-loader" id="skeleton-page-${pageNum}" title="Klik untuk ganti jalur gambar">
           <div class="page-skeleton-shimmer"></div>
-          <div class="page-skeleton-label">
+          <div class="page-skeleton-label clickable-spinner">
             <div class="spinner-small"></div>
           </div>
         </div>
@@ -871,7 +963,16 @@ export function renderReaderPages(data) {
       viewport.appendChild(pageWrap);
 
       const img = pageWrap.querySelector('img');
-      if (idx < 6) {
+      const skeleton = pageWrap.querySelector('.page-skeleton-loader');
+      if (skeleton) {
+        skeleton.addEventListener('click', (e) => {
+          e.stopPropagation();
+          advanceImageRetryStage(img, true);
+        });
+      }
+
+      if (idx < 3) {
+        img.setAttribute('fetchpriority', 'high');
         loadReaderPageImage(img);
       } else {
         window.readerPageObserver.observe(pageWrap);
@@ -885,26 +986,22 @@ export function renderReaderPages(data) {
     const chTitleText = document.getElementById('reader-chapter-title')?.textContent || 'Chapter ini';
     const nextCandidate = findSmartNextChapter();
 
-    let currentChapterList = [];
-    if (state.isExternal && state.externalChapters.length > 0) {
-      currentChapterList = state.externalChapters.map((ch, i) => ({
-        id: ch.url,
-        title: ch.title.replace(/\s+/g, ' ').trim(),
-        index: i
-      }));
-    } else if (state.currentSource === 'english' && state.englishChapters.length > 0) {
-      currentChapterList = state.englishChapters.map((ch, i) => ({
-        id: ch.url,
-        title: ch.title.replace(/\s+/g, ' ').trim(),
-        index: i
-      }));
-    } else {
-      currentChapterList = state.currentChapters.map((ch, i) => ({
-        id: ch.id,
-        title: `Chapter ${ch.attributes?.chapter || i + 1}${ch.attributes?.title ? ' - ' + ch.attributes.title : ''}`,
-        index: i
-      }));
-    }
+    const curLang = state.activeDetailLang || state.currentReadingLang || 'id';
+    const activePool = state.unifiedChapters?.[curLang] || 
+      (curLang === 'en' ? state.englishChapters : state.externalChapters) || 
+      state.activeChapters || 
+      state.currentChapters || [];
+    let currentChapterList = activePool.map((ch, i) => {
+      const id = ch.id || ch.url;
+      const numText = ch.chapterNumStr || ch.attributes?.chapter || ch.number || i + 1;
+      const titleText = ch.subTitle || (ch.attributes?.title ? ` - ${ch.attributes.title}` : (ch.title ? ` - ${ch.title}` : ''));
+      return {
+        id,
+        title: `Chapter ${numText} ${titleText}`.trim(),
+        index: i,
+        rawCh: ch
+      };
+    });
 
     const currentChNumText = document.getElementById('reader-chapter-title')?.textContent || 'Pilih Chapter';
 
@@ -964,7 +1061,9 @@ export function renderReaderPages(data) {
         div.addEventListener('click', (e) => {
           e.stopPropagation();
           endPanel?.classList.add('hidden');
-          if (state.isExternal) {
+          if (window.openUnifiedChapter && item.rawCh) {
+            window.openUnifiedChapter(item.rawCh, item.index);
+          } else if (state.isExternal) {
             openExternalReader(item.id, item.title, state.externalChapters, item.index);
           } else if (state.currentSource === 'english') {
             openEnglishReader(item.id, item.title, state.englishChapters, item.index);
@@ -987,6 +1086,25 @@ export function renderReaderPages(data) {
     });
 
     viewport.appendChild(endCard);
+
+    if ('IntersectionObserver' in window) {
+      const endCardObserver = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting && !state.isAutoNavigatingNext) {
+            const nextCh = findSmartNextChapter();
+            if (nextCh) {
+              state.isAutoNavigatingNext = true;
+              advanceToNextChapter();
+            }
+          }
+        });
+      }, {
+        root: document.getElementById('view-reader'),
+        threshold: 0.1
+      });
+      endCardObserver.observe(endCard);
+    }
+
     initScrollPageObserver();
 
   } else if (state.readerMode === 'single') {
@@ -1071,25 +1189,16 @@ export function renderSinglePage(pages, index, sliceIndex = 0) {
   if (container && currentImg) {
     currentImg.dataset.page = state.currentPageIndex + 1;
     currentImg.dataset.rawUrl = currentUrl;
-    currentImg.dataset.retryStage = '0';
     currentImg.alt = `Halaman ${state.currentPageIndex + 1}`;
-
-    if (currentImg.src !== targetStageUrl) {
-      currentImg.src = targetStageUrl;
-    }
 
     const sk = document.getElementById('single-page-skeleton');
     if (sk) {
-      if (currentImg.complete && currentImg.naturalWidth > 0) {
-        sk.style.display = 'none';
-        currentImg.classList.add('visible');
-      } else {
-        currentImg.onload = () => {
-          if (sk) sk.style.display = 'none';
-          currentImg.classList.add('visible');
-        };
-      }
+      sk.style.display = 'flex';
+      sk.classList.remove('fade-out');
     }
+    currentImg.classList.remove('visible');
+
+    applyImageStage(currentImg, currentUrl, 0);
 
     updateReaderNavButtons();
     return;
@@ -1099,16 +1208,15 @@ export function renderSinglePage(pages, index, sliceIndex = 0) {
   viewport.className = 'reader-viewport single-mode';
   viewport.innerHTML = `
     <div class="single-page-container">
-      <div class="page-skeleton-loader" id="single-page-skeleton" style="display: none;">
+      <div class="page-skeleton-loader" id="single-page-skeleton" title="Klik untuk ganti jalur gambar">
         <div class="page-skeleton-shimmer"></div>
-        <div class="page-skeleton-label">
+        <div class="page-skeleton-label clickable-spinner">
           <div class="spinner-small"></div>
         </div>
       </div>
       <div class="nav-click-zone left" title="Halaman Sebelumnya (↑ / W / A / ←)"></div>
       <img 
-        src="${targetStageUrl}" 
-        class="single-page-img visible" 
+        class="single-page-img" 
         alt="Halaman ${state.currentPageIndex + 1}"
         data-page="${state.currentPageIndex + 1}"
         data-raw-url="${currentUrl}"
@@ -1119,6 +1227,19 @@ export function renderSinglePage(pages, index, sliceIndex = 0) {
       <div class="nav-click-zone right" title="Halaman Selanjutnya (↓ / S / D / → / Spasi)"></div>
     </div>
   `;
+
+  const singleSk = viewport.querySelector('#single-page-skeleton');
+  const singleImg = viewport.querySelector('.single-page-img');
+  if (singleSk && singleImg) {
+    singleSk.addEventListener('click', (e) => {
+      e.stopPropagation();
+      advanceImageRetryStage(singleImg, true);
+    });
+  }
+
+  if (singleImg) {
+    applyImageStage(singleImg, currentUrl, 0);
+  }
 
   viewport.querySelector('.nav-click-zone.left')?.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -1287,241 +1408,283 @@ export function initScrollPageObserver() {
   }
 }
 
+export function extractChapterNumber(ch) {
+  if (!ch) return NaN;
+  if (typeof ch.number === 'number' && !isNaN(ch.number)) return ch.number;
+  if (typeof ch.num === 'number' && !isNaN(ch.num)) return ch.num;
+  const raw = ch.chapterNumStr || ch.chapterNumber || ch.attributes?.chapter || ch.num || '';
+  const parsed = parseFloat(raw);
+  if (!isNaN(parsed)) return parsed;
+  const str = String(ch.title || ch.attributes?.title || '');
+  const match = str.match(/(?:chapter|ch\.?|bab)\s*([\d.]+)/i);
+  if (match) {
+    const p = parseFloat(match[1]);
+    if (!isNaN(p)) return p;
+  }
+  return NaN;
+}
+
 export function findSmartNextChapter() {
-  if (state.activeChapters && state.activeChapters.length > 0) {
-    if (state.currentChapterIndex < state.activeChapters.length - 1) {
+  const currentLang = state.activeDetailLang || state.currentReadingLang || 'id';
+  const otherLang = currentLang === 'id' ? 'en' : 'id';
+
+  // Get chapter pools for both languages
+  const samePool = (state.unifiedChapters?.[currentLang] || (currentLang === 'en' ? state.englishChapters : state.externalChapters) || state.activeChapters || []).slice();
+  const otherPool = (state.unifiedChapters?.[otherLang] || (otherLang === 'en' ? state.englishChapters : state.externalChapters) || []).slice();
+
+  const sortPoolAsc = (pool) => {
+    return pool.sort((a, b) => {
+      const numA = extractChapterNumber(a);
+      const numB = extractChapterNumber(b);
+      if (isNaN(numA) && isNaN(numB)) return 0;
+      if (isNaN(numA)) return 1;
+      if (isNaN(numB)) return -1;
+      return numA - numB;
+    });
+  };
+
+  sortPoolAsc(samePool);
+  sortPoolAsc(otherPool);
+
+  // Determine current chapter and its numeric value
+  let currentCh = state.currentUnifiedChapter;
+  if (!currentCh) {
+    const curId = state.currentChapterId;
+    currentCh = samePool.find(c => c.id === curId || c.url === curId) ||
+      otherPool.find(c => c.id === curId || c.url === curId) ||
+      state.currentChapters?.[state.currentChapterIndex] ||
+      state.allMangaDexChapters?.find(c => c.id === curId);
+  }
+
+  let currentNum = extractChapterNumber(currentCh);
+  if (isNaN(currentNum)) {
+    const titleEl = document.getElementById('reader-chapter-title');
+    if (titleEl && titleEl.textContent) {
+      const m = titleEl.textContent.match(/(?:chapter|ch\.?|bab)\s*([\d.]+)/i);
+      if (m) currentNum = parseFloat(m[1]);
+    }
+  }
+
+  // 1. Search in same language pool (number > currentNum)
+  if (!isNaN(currentNum)) {
+    const nextCandidates = samePool.filter(c => {
+      const num = extractChapterNumber(c);
+      return !isNaN(num) && num > currentNum;
+    });
+
+    if (nextCandidates.length > 0) {
+      const nextCh = nextCandidates[0];
+      const idx = samePool.indexOf(nextCh);
       return {
         type: 'unified',
-        chapter: state.activeChapters[state.currentChapterIndex + 1],
-        index: state.currentChapterIndex + 1,
-        isFallback: false
-      };
-    }
-    return null;
-  }
-
-  if (state.isExternal) {
-    if (state.currentSource === 'english') {
-      if (state.currentChapterIndex < state.englishChapters.length - 1) {
-        return {
-          type: 'english',
-          chapter: state.englishChapters[state.currentChapterIndex + 1],
-          index: state.currentChapterIndex + 1,
-          isFallback: false
-        };
-      }
-      return null;
-    } else {
-      if (state.currentChapterIndex < state.externalChapters.length - 1) {
-        return {
-          type: 'bacakomik',
-          chapter: state.externalChapters[state.currentChapterIndex + 1],
-          index: state.currentChapterIndex + 1,
-          isFallback: false
-        };
-      }
-      return null;
-    }
-  }
-
-  const currentCh = state.currentChapters[state.currentChapterIndex] || state.allMangaDexChapters.find(c => c.id === state.currentChapterId);
-  if (!currentCh) return null;
-
-  const pool = (state.allMangaDexChapters && state.allMangaDexChapters.length > 0) ? state.allMangaDexChapters : state.currentChapters;
-
-  const currentLang = currentCh.attributes?.translatedLanguage || state.currentReadingLang || 'id';
-  const currentNum = parseFloat(currentCh.attributes?.chapter);
-
-  if (!isNaN(currentNum)) {
-    const sameLangCandidates = pool
-      .filter(c => (c.attributes?.translatedLanguage || 'id') === currentLang && parseFloat(c.attributes?.chapter) > currentNum)
-      .sort((a, b) => parseFloat(a.attributes?.chapter) - parseFloat(b.attributes?.chapter));
-
-    if (sameLangCandidates.length > 0) {
-      const nextCh = sameLangCandidates[0];
-      const nextIdx = state.currentChapters.findIndex(c => c.id === nextCh.id);
-      return {
-        type: 'mangadex',
         chapter: nextCh,
-        index: nextIdx !== -1 ? nextIdx : 0,
+        index: idx !== -1 ? idx : 0,
         isFallback: false,
         lang: currentLang
       };
     }
 
-    if (currentLang === 'id') {
-      const enCandidates = pool
-        .filter(c => (c.attributes?.translatedLanguage || 'en') === 'en' && parseFloat(c.attributes?.chapter) > currentNum)
-        .sort((a, b) => parseFloat(a.attributes?.chapter) - parseFloat(b.attributes?.chapter));
+    // 2. Smart Language Fallback: Search in other language pool (number > currentNum)
+    const fallbackCandidates = otherPool.filter(c => {
+      const num = extractChapterNumber(c);
+      return !isNaN(num) && num > currentNum;
+    });
 
-      if (enCandidates.length > 0) {
-        const nextCh = enCandidates[0];
-        const nextIdx = state.currentChapters.findIndex(c => c.id === nextCh.id);
-        return {
-          type: 'mangadex',
-          chapter: nextCh,
-          index: nextIdx !== -1 ? nextIdx : 0,
-          isFallback: true,
-          fromLang: 'id',
-          toLang: 'en'
-        };
-      }
+    if (fallbackCandidates.length > 0) {
+      const nextCh = fallbackCandidates[0];
+      const idx = otherPool.indexOf(nextCh);
+      return {
+        type: 'unified',
+        chapter: nextCh,
+        index: idx !== -1 ? idx : 0,
+        isFallback: true,
+        fromLang: currentLang,
+        toLang: otherLang,
+        lang: otherLang
+      };
     }
   }
 
-  if (state.currentChapterIndex < state.currentChapters.length - 1) {
-    const nextCh = state.currentChapters[state.currentChapterIndex + 1];
-    return {
-      type: 'mangadex',
-      chapter: nextCh,
-      index: state.currentChapterIndex + 1,
-      isFallback: false
-    };
+  // 3. Fallback: Search by ID or Index if number is NaN or special
+  const curId = state.currentChapterId || currentCh?.id || currentCh?.url;
+  if (curId) {
+    let curIdx = samePool.findIndex(c => c.id === curId || c.url === curId);
+    if (curIdx === -1 && !isNaN(currentNum)) {
+      curIdx = samePool.findIndex(c => extractChapterNumber(c) === currentNum);
+    }
+    if (curIdx !== -1 && curIdx < samePool.length - 1) {
+      const nextCh = samePool[curIdx + 1];
+      return {
+        type: 'unified',
+        chapter: nextCh,
+        index: curIdx + 1,
+        isFallback: false,
+        lang: currentLang
+      };
+    }
   }
 
   return null;
 }
+window.findSmartNextChapter = findSmartNextChapter;
 
 export function findSmartPrevChapter() {
-  if (state.activeChapters && state.activeChapters.length > 0) {
-    if (state.currentChapterIndex > 0) {
+  const currentLang = state.activeDetailLang || state.currentReadingLang || 'id';
+  const otherLang = currentLang === 'id' ? 'en' : 'id';
+
+  const samePool = (state.unifiedChapters?.[currentLang] || (currentLang === 'en' ? state.englishChapters : state.externalChapters) || state.activeChapters || []).slice();
+  const otherPool = (state.unifiedChapters?.[otherLang] || (otherLang === 'en' ? state.englishChapters : state.externalChapters) || []).slice();
+
+  const sortPoolAsc = (pool) => {
+    return pool.sort((a, b) => {
+      const numA = extractChapterNumber(a);
+      const numB = extractChapterNumber(b);
+      if (isNaN(numA) && isNaN(numB)) return 0;
+      if (isNaN(numA)) return 1;
+      if (isNaN(numB)) return -1;
+      return numA - numB;
+    });
+  };
+
+  sortPoolAsc(samePool);
+  sortPoolAsc(otherPool);
+
+  let currentCh = state.currentUnifiedChapter;
+  if (!currentCh) {
+    const curId = state.currentChapterId;
+    currentCh = samePool.find(c => c.id === curId || c.url === curId) ||
+      otherPool.find(c => c.id === curId || c.url === curId) ||
+      state.currentChapters?.[state.currentChapterIndex] ||
+      state.allMangaDexChapters?.find(c => c.id === curId);
+  }
+
+  let currentNum = extractChapterNumber(currentCh);
+  if (isNaN(currentNum)) {
+    const titleEl = document.getElementById('reader-chapter-title');
+    if (titleEl && titleEl.textContent) {
+      const m = titleEl.textContent.match(/(?:chapter|ch\.?|bab)\s*([\d.]+)/i);
+      if (m) currentNum = parseFloat(m[1]);
+    }
+  }
+
+  // 1. Search in same language pool (number < currentNum, take closest = largest < currentNum)
+  if (!isNaN(currentNum)) {
+    const prevCandidates = samePool.filter(c => {
+      const num = extractChapterNumber(c);
+      return !isNaN(num) && num < currentNum;
+    });
+
+    if (prevCandidates.length > 0) {
+      const prevCh = prevCandidates[prevCandidates.length - 1];
+      const idx = samePool.indexOf(prevCh);
       return {
         type: 'unified',
-        chapter: state.activeChapters[state.currentChapterIndex - 1],
-        index: state.currentChapterIndex - 1,
-        isFallback: false
-      };
-    }
-    return null;
-  }
-
-  if (state.isExternal) {
-    if (state.currentSource === 'english') {
-      if (state.currentChapterIndex > 0) {
-        return {
-          type: 'english',
-          chapter: state.englishChapters[state.currentChapterIndex - 1],
-          index: state.currentChapterIndex - 1,
-          isFallback: false
-        };
-      }
-      return null;
-    } else {
-      if (state.currentChapterIndex > 0) {
-        return {
-          type: 'bacakomik',
-          chapter: state.externalChapters[state.currentChapterIndex - 1],
-          index: state.currentChapterIndex - 1,
-          isFallback: false
-        };
-      }
-      return null;
-    }
-  }
-
-  const currentCh = state.currentChapters[state.currentChapterIndex] || state.allMangaDexChapters.find(c => c.id === state.currentChapterId);
-  if (!currentCh) return null;
-
-  const pool = (state.allMangaDexChapters && state.allMangaDexChapters.length > 0) ? state.allMangaDexChapters : state.currentChapters;
-
-  const currentLang = currentCh.attributes?.translatedLanguage || state.currentReadingLang || 'id';
-  const currentNum = parseFloat(currentCh.attributes?.chapter);
-
-  if (!isNaN(currentNum)) {
-    const sameLangCandidates = pool
-      .filter(c => (c.attributes?.translatedLanguage || 'id') === currentLang && parseFloat(c.attributes?.chapter) < currentNum)
-      .sort((a, b) => parseFloat(b.attributes?.chapter) - parseFloat(a.attributes?.chapter));
-
-    if (sameLangCandidates.length > 0) {
-      const prevCh = sameLangCandidates[0];
-      const prevIdx = state.currentChapters.findIndex(c => c.id === prevCh.id);
-      return {
-        type: 'mangadex',
         chapter: prevCh,
-        index: prevIdx !== -1 ? prevIdx : 0,
+        index: idx !== -1 ? idx : 0,
         isFallback: false,
         lang: currentLang
       };
     }
 
-    if (currentLang === 'id') {
-      const enCandidates = pool
-        .filter(c => (c.attributes?.translatedLanguage || 'en') === 'en' && parseFloat(c.attributes?.chapter) < currentNum)
-        .sort((a, b) => parseFloat(b.attributes?.chapter) - parseFloat(a.attributes?.chapter));
+    // 2. Smart Language Fallback: Search in other language pool (number < currentNum)
+    const fallbackCandidates = otherPool.filter(c => {
+      const num = extractChapterNumber(c);
+      return !isNaN(num) && num < currentNum;
+    });
 
-      if (enCandidates.length > 0) {
-        const prevCh = enCandidates[0];
-        const prevIdx = state.currentChapters.findIndex(c => c.id === prevCh.id);
-        return {
-          type: 'mangadex',
-          chapter: prevCh,
-          index: prevIdx !== -1 ? prevIdx : 0,
-          isFallback: true,
-          fromLang: 'id',
-          toLang: 'en'
-        };
-      }
+    if (fallbackCandidates.length > 0) {
+      const prevCh = fallbackCandidates[fallbackCandidates.length - 1];
+      const idx = otherPool.indexOf(prevCh);
+      return {
+        type: 'unified',
+        chapter: prevCh,
+        index: idx !== -1 ? idx : 0,
+        isFallback: true,
+        fromLang: currentLang,
+        toLang: otherLang,
+        lang: otherLang
+      };
     }
   }
 
-  if (state.currentChapterIndex > 0) {
-    const prevCh = state.currentChapters[state.currentChapterIndex - 1];
-    return {
-      type: 'mangadex',
-      chapter: prevCh,
-      index: state.currentChapterIndex - 1,
-      isFallback: false
-    };
+  // 3. Fallback: Search by ID or Index
+  const curId = state.currentChapterId || currentCh?.id || currentCh?.url;
+  if (curId) {
+    let curIdx = samePool.findIndex(c => c.id === curId || c.url === curId);
+    if (curIdx === -1 && !isNaN(currentNum)) {
+      curIdx = samePool.findIndex(c => extractChapterNumber(c) === currentNum);
+    }
+    if (curIdx > 0) {
+      const prevCh = samePool[curIdx - 1];
+      return {
+        type: 'unified',
+        chapter: prevCh,
+        index: curIdx - 1,
+        isFallback: false,
+        lang: currentLang
+      };
+    }
   }
 
   return null;
 }
+window.findSmartPrevChapter = findSmartPrevChapter;
 
 export function advanceToNextChapter() {
   const next = findSmartNextChapter();
-  if (!next) return;
+  if (!next || !next.chapter) return;
 
-  if (next.type === 'unified') {
-    if (window.openUnifiedChapter) {
-      window.openUnifiedChapter(next.chapter, next.index);
+  if (next.lang) {
+    state.activeDetailLang = next.lang;
+    state.currentReadingLang = next.lang;
+    if (state.unifiedChapters && state.unifiedChapters[next.lang]) {
+      state.activeChapters = state.unifiedChapters[next.lang];
+      state.currentChapters = state.activeChapters;
     }
+  }
+
+  if (window.openUnifiedChapter) {
+    window.openUnifiedChapter(next.chapter, next.index);
     return;
   }
 
-  if (next.type === 'english') {
-    openEnglishReader(next.chapter.url, next.chapter.title, state.englishChapters, next.index);
-  } else if (next.type === 'bacakomik') {
-    openExternalReader(next.chapter.url, next.chapter.title, state.externalChapters, next.index);
+  if (next.type === 'english' || next.lang === 'en') {
+    openEnglishReader(next.chapter.url || next.chapter.id, next.chapter.title, state.englishChapters || [next.chapter], next.index);
+  } else if (next.type === 'bacakomik' || next.chapter.source === 'komiku' || next.chapter.source === 'bacakomik') {
+    openExternalReader(next.chapter.url || next.chapter.id, next.chapter.title, state.externalChapters || [next.chapter], next.index);
   } else {
-    if (next.isFallback) {
-      state.currentReadingLang = 'en';
-    }
     openReader(next.chapter.id, next.index);
   }
 }
+window.advanceToNextChapter = advanceToNextChapter;
 
 export function advanceToPrevChapter() {
   const prev = findSmartPrevChapter();
-  if (!prev) return;
+  if (!prev || !prev.chapter) return;
 
-  if (prev.type === 'unified') {
-    if (window.openUnifiedChapter) {
-      window.openUnifiedChapter(prev.chapter, prev.index);
+  if (prev.lang) {
+    state.activeDetailLang = prev.lang;
+    state.currentReadingLang = prev.lang;
+    if (state.unifiedChapters && state.unifiedChapters[prev.lang]) {
+      state.activeChapters = state.unifiedChapters[prev.lang];
+      state.currentChapters = state.activeChapters;
     }
+  }
+
+  if (window.openUnifiedChapter) {
+    window.openUnifiedChapter(prev.chapter, prev.index);
     return;
   }
 
-  if (prev.type === 'english') {
-    openEnglishReader(prev.chapter.url, prev.chapter.title, state.englishChapters, prev.index);
-  } else if (prev.type === 'bacakomik') {
-    openExternalReader(prev.chapter.url, prev.chapter.title, state.externalChapters, prev.index);
+  if (prev.type === 'english' || prev.lang === 'en') {
+    openEnglishReader(prev.chapter.url || prev.chapter.id, prev.chapter.title, state.englishChapters || [prev.chapter], prev.index);
+  } else if (prev.type === 'bacakomik' || prev.chapter.source === 'komiku' || prev.chapter.source === 'bacakomik') {
+    openExternalReader(prev.chapter.url || prev.chapter.id, prev.chapter.title, state.externalChapters || [prev.chapter], prev.index);
   } else {
-    if (prev.isFallback) {
-      state.currentReadingLang = 'en';
-    }
     openReader(prev.chapter.id, prev.index);
   }
 }
+window.advanceToPrevChapter = advanceToPrevChapter;
 
 export function handleReaderNext() {
   if (state.readerMode === 'single' || state.readerMode === 'double') {
@@ -1794,7 +1957,7 @@ export function initReaderControls() {
 
     if (state.readerMode === 'long-strip' && !state.isAutoNavigatingNext) {
       const scrollBottom = readerContainer.scrollHeight - (currentScrollTop + readerContainer.clientHeight);
-      if (scrollBottom <= 40 && diff >= 0) {
+      if (scrollBottom <= 80 && diff >= 0) {
         const nextCh = findSmartNextChapter();
         if (nextCh) {
           state.isAutoNavigatingNext = true;

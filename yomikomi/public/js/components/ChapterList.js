@@ -589,24 +589,179 @@ export async function renderUnifiedChaptersList() {
 }
 
 /**
+ * Hydrate unified chapter list if needed (e.g. entering from Reading History, Bookmark, or Direct Link)
+ */
+export async function ensureUnifiedChapterList(mangaId, currentChapterId = null, mangaData = null) {
+  if (!mangaId) return null;
+
+  // 1. If already in memory for this manga and has chapters
+  if (state.unifiedChapters &&
+      (state.unifiedChapters.id?.length > 0 || state.unifiedChapters.en?.length > 0) &&
+      state.currentManga?.id === mangaId) {
+    syncActiveLanguageAndChapters(currentChapterId);
+    return state.unifiedChapters;
+  }
+
+  // 2. Check instant cache (0ms)
+  const cached = getUnifiedChaptersCached(mangaId);
+  const cachedData = cached ? (cached.data || cached.unifiedChapters) : null;
+  if (cachedData && (cachedData.id?.length > 0 || cachedData.en?.length > 0)) {
+    state.unifiedChapters = cachedData;
+    state.allMangaDexChapters = cached.allMangaDexChapters || [];
+    syncActiveLanguageAndChapters(currentChapterId);
+    return state.unifiedChapters;
+  }
+
+  // 3. Fetch and merge in background
+  try {
+    const currentManga = mangaData || state.currentManga;
+    const merged = await fetchAndMergeUnifiedChapters(mangaId, currentManga);
+    if (merged && merged.unifiedChapters) {
+      state.unifiedChapters = merged.unifiedChapters;
+      state.allMangaDexChapters = merged.allMangaDexChapters || [];
+      syncActiveLanguageAndChapters(currentChapterId);
+      return state.unifiedChapters;
+    }
+  } catch (err) {
+    console.warn('[ensureUnifiedChapterList] Hydration error:', err);
+  }
+  return null;
+}
+window.ensureUnifiedChapterList = ensureUnifiedChapterList;
+
+/**
+ * Synchronize active language state and active chapter pool with active chapter
+ */
+export function syncActiveLanguageAndChapters(currentChapterId = null) {
+  if (!state.unifiedChapters) return;
+
+  let activeLang = state.activeDetailLang || state.currentReadingLang || 'id';
+
+  if (currentChapterId) {
+    const inEn = (state.unifiedChapters.en || []).some(c => c.id === currentChapterId || c.url === currentChapterId);
+    const inId = (state.unifiedChapters.id || []).some(c => c.id === currentChapterId || c.url === currentChapterId);
+    if (inEn && !inId) {
+      activeLang = 'en';
+    } else if (inId && !inEn) {
+      activeLang = 'id';
+    } else if (String(currentChapterId).includes('mangapill') || String(currentChapterId).includes('english') || state.currentSource === 'english') {
+      activeLang = 'en';
+    }
+  }
+
+  state.activeDetailLang = activeLang;
+  state.currentReadingLang = activeLang;
+
+  const chapters = state.unifiedChapters[activeLang] || [];
+  state.activeChapters = chapters;
+  state.currentChapters = chapters;
+  state.externalChapters = chapters.filter(c => c.source === 'komiku' || c.source === 'bacakomik').map(c => c.raw);
+  state.englishChapters = (state.unifiedChapters.en || []).map(c => c.raw || c);
+
+  if (state.currentView === 'reader') {
+    refreshReaderDropdownAndNav();
+  }
+}
+window.syncActiveLanguageAndChapters = syncActiveLanguageAndChapters;
+
+/**
+ * Refresh Reader Dropdown and Next/Prev buttons with active chapter pool
+ */
+export function refreshReaderDropdownAndNav() {
+  const lang = state.activeDetailLang || state.currentReadingLang || 'id';
+  let pool = state.unifiedChapters?.[lang] || [];
+  if (pool.length === 0) {
+    pool = (lang === 'en' ? state.englishChapters : state.externalChapters) || [];
+  }
+  if (pool.length === 0) {
+    pool = state.activeChapters || state.currentChapters || [];
+  }
+
+  const dropItems = pool.map((ch, idx) => {
+    const val = ch.id || ch.url;
+    const lFlag = ch.language || (ch.attributes?.translatedLanguage === 'id' ? 'id' : 'en');
+    const lText = lFlag === 'id' ? '[ID]' : '[EN]';
+    const numText = ch.chapterNumStr || ch.attributes?.chapter || ch.number || idx + 1;
+    const titleText = ch.subTitle || (ch.attributes?.title ? `- ${ch.attributes.title}` : '');
+    const srcText = ch.scanlationGroup ? `[${ch.scanlationGroup}]` : '';
+    return {
+      value: val,
+      label: `Chapter ${numText} ${lText} ${srcText} ${titleText}`.trim(),
+      lang: lFlag
+    };
+  });
+
+  const curId = state.currentChapterId || state.currentUnifiedChapter?.id || state.currentUnifiedChapter?.url;
+  updateCustomChapterDropdown(dropItems, curId, (val) => {
+    const targetIdx = pool.findIndex(c => (c.id === val || c.url === val));
+    if (targetIdx !== -1 && pool[targetIdx]) {
+      openUnifiedChapter(pool[targetIdx], targetIdx);
+    }
+  });
+
+  if (typeof window.updateReaderNavButtons === 'function') {
+    window.updateReaderNavButtons();
+  }
+
+  const endCard = document.getElementById('webtoon-end-card');
+  if (endCard && typeof window.findSmartNextChapter === 'function') {
+    const nextCandidate = window.findSmartNextChapter();
+    const endSubText = endCard.querySelector('#end-card-sub-text');
+    if (endSubText) {
+      endSubText.textContent = nextCandidate ? 'Scroll ke bawah atau klik tombol di bawah untuk melanjutkan.' : 'Ini adalah chapter terakhir yang tersedia saat ini.';
+    }
+    const existingNextBtn = endCard.querySelector('#btn-end-card-next');
+    if (nextCandidate && !existingNextBtn) {
+      const btn = document.createElement('button');
+      btn.className = 'btn-primary btn-auto-next';
+      btn.id = 'btn-end-card-next';
+      btn.innerHTML = `<span>Buka Chapter Berikutnya</span><i data-lucide="arrow-right"></i>`;
+      btn.addEventListener('click', () => {
+        document.getElementById('btn-next-chapter')?.click();
+      });
+      endCard.appendChild(btn);
+      initIcons();
+    }
+  }
+}
+window.refreshReaderDropdownAndNav = refreshReaderDropdownAndNav;
+
+/**
  * Dispatcher to open reader according to chapter source
  */
 export function openUnifiedChapter(ch, index) {
   if (!ch) return;
   state.currentUnifiedChapter = ch;
   state.currentChapterIndex = index;
+  state.currentChapterId = ch.id || ch.url;
+
+  const chLang = ch.language || (ch.attributes?.translatedLanguage === 'id' ? 'id' : 'en');
+  state.activeDetailLang = chLang;
+  state.currentReadingLang = chLang;
+
+  if (state.unifiedChapters && state.unifiedChapters[chLang]) {
+    state.activeChapters = state.unifiedChapters[chLang];
+    state.currentChapters = state.activeChapters;
+    state.externalChapters = state.activeChapters.filter(c => c.source === 'komiku' || c.source === 'bacakomik').map(c => c.raw);
+    state.englishChapters = (state.unifiedChapters.en || []).map(c => c.raw || c);
+  }
+
+  const pool = state.activeChapters || [ch];
+  const resolvedIdx = pool.findIndex(c => (c.id === ch.id || c.url === ch.url || (c.id && c.id === ch.url)));
+  const finalIdx = resolvedIdx !== -1 ? resolvedIdx : index;
+  state.currentChapterIndex = finalIdx;
 
   if (ch.source === 'mangadex') {
     state.isExternal = false;
-    openReader(ch.id, index);
+    openReader(ch.id, finalIdx);
   } else if (ch.source === 'komiku' || ch.source === 'bacakomik') {
     state.isExternal = true;
     state.currentSource = 'komiku';
-    openExternalReader(ch.url || ch.id, ch.title, state.activeChapters || [ch], index);
+    openExternalReader(ch.url || ch.id, ch.title, pool, finalIdx);
   } else {
     state.isExternal = true;
     state.currentSource = 'english';
-    openEnglishReader(ch.url || ch.id, ch.title, state.activeChapters || [ch], index);
+    openEnglishReader(ch.url || ch.id, ch.title, pool, finalIdx);
   }
 }
 window.openUnifiedChapter = openUnifiedChapter;

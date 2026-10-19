@@ -18,6 +18,7 @@ import {
 } from '../state.js';
 import { getBookmarks, updateAllCollectionBadges } from '../services/storage.js';
 import { openReader, openExternalReader, openEnglishReader } from '../components/Reader.js';
+import { ensureUnifiedChapterList, openUnifiedChapter } from '../components/ChapterList.js';
 
 export function renderBookmarkPageMarkup() {
   return `
@@ -256,6 +257,17 @@ export async function resumeReadingChapter(mangaId, chapterId, chapterNum) {
     }
   }
 
+  // Online resume:
+  const isEn = (chapterId && (chapterId.includes('mangapill') || chapterId.includes('asuracomic') || chapterId.includes('flamecomic') || chapterId.includes('/en/'))) ||
+    (chapterNum && /\[en\]/i.test(chapterNum)) ||
+    (mangaId && mangaId.includes('english'));
+
+  const targetLang = isEn ? 'en' : 'id';
+  state.activeDetailLang = targetLang;
+  state.currentReadingLang = targetLang;
+  state.currentChapterId = chapterId;
+
+  // Hydrate manga metadata if needed
   if (mangaId && !mangaId.startsWith('http') && mangaId.length > 20) {
     if (!state.currentManga || state.currentManga.id !== mangaId) {
       try {
@@ -266,33 +278,44 @@ export async function resumeReadingChapter(mangaId, chapterId, chapterNum) {
         }
       } catch (e) {}
     }
+  }
 
-    if (!state.currentChapters || state.currentChapters.length === 0 || state.currentChapters[0]?.mangaId !== mangaId) {
-      try {
-        const chRes = await fetch(`/api/manga/${mangaId}/chapters`);
-        if (chRes.ok) {
-          const chData = await chRes.json();
-          state.allMangaDexChapters = chData.data || [];
-          state.currentChapters = state.allMangaDexChapters;
-        }
-      } catch (e) {}
-    }
+  // Ensure full chapter list is hydrated in background or from cache
+  if (mangaId) {
+    ensureUnifiedChapterList(mangaId, chapterId, state.currentManga);
+  }
 
-    const idx = state.currentChapters.findIndex(c => c.id === chapterId);
-    openReader(chapterId, idx !== -1 ? idx : 0);
+  // If already in memory with chapters, resolve chapter and index!
+  const pool = state.unifiedChapters?.[targetLang];
+  if (pool && pool.length > 0) {
+    const idx = pool.findIndex(c => c.id === chapterId || c.url === chapterId);
+    const resolvedIdx = idx !== -1 ? idx : 0;
+    openUnifiedChapter(pool[resolvedIdx], resolvedIdx);
+    return;
+  }
+
+  // Otherwise launch immediate reader with fallback, and background hydration will update it as soon as loaded
+  if (isEn || (chapterId && chapterId.startsWith('http') && (mangaId.includes('english') || chapterId.includes('mangapill')))) {
+    state.currentSource = 'english';
+    const chapters = state.englishChapters?.length > 0 ? state.englishChapters : [{ url: chapterId, title: chapterNum || 'Chapter' }];
+    const idx = chapters.findIndex(c => c.url === chapterId || c.id === chapterId);
+    openEnglishReader(chapterId, chapterNum || 'Chapter', chapters, idx !== -1 ? idx : 0);
     return;
   }
 
   if (chapterId && chapterId.startsWith('http')) {
-    if (mangaId.includes('english') || chapterId.includes('asuracomic') || chapterId.includes('flamecomic')) {
-      state.currentSource = 'english';
-      openEnglishReader(chapterId, chapterNum || 'Chapter', state.englishChapters || [{ url: chapterId, title: chapterNum || 'Chapter' }], 0);
-    } else {
-      state.currentSource = 'bacakomik';
-      openExternalReader(chapterId, chapterNum || 'Chapter', state.externalChapters || [{ url: chapterId, title: chapterNum || 'Chapter' }], 0);
-    }
+    state.currentSource = 'bacakomik';
+    const chapters = state.externalChapters?.length > 0 ? state.externalChapters : [{ url: chapterId, title: chapterNum || 'Chapter' }];
+    const idx = chapters.findIndex(c => c.url === chapterId || c.id === chapterId);
+    openExternalReader(chapterId, chapterNum || 'Chapter', chapters, idx !== -1 ? idx : 0);
     return;
   }
+
+  // MangaDex chapter ID
+  const mdChapters = state.allMangaDexChapters?.length > 0 ? state.allMangaDexChapters : (state.currentChapters || []);
+  const idx = mdChapters.findIndex(c => c.id === chapterId);
+  openReader(chapterId, idx !== -1 ? idx : 0);
+  return;
 
   if (typeof window.openMangaDetail === 'function') {
     window.openMangaDetail(mangaId);

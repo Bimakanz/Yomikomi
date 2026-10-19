@@ -34,11 +34,16 @@
 
   /**
    * Helper: Validate whether a Blob is a genuine, non-corrupted image
+   * Strictly rejects MangaDex anti-hotlink placeholder banner (59,480 bytes, 600x642)
    */
   function isValidImageBlob(blob) {
     if (!blob || !(blob instanceof Blob)) return false;
     // Real image is at least 60 bytes
     if (blob.size < 60) return false;
+    // Strictly reject MangaDex Anti-Hotlink Placeholder Banner (exact size ~59,480 bytes)
+    if (blob.size >= 59400 && blob.size <= 59600) {
+      return false;
+    }
     const t = (blob.type || '').toLowerCase();
     if (t.includes('text') || t.includes('html') || t.includes('json')) {
       return false;
@@ -68,22 +73,32 @@
         throw new Error('Respon dari server lokal bukan gambar yang valid');
       }
 
-      // 2. Direct fetch for MangaDex @Home nodes (CORS open by default)
-      if (url.includes('mangadex.network') || url.includes('uploads.mangadex.org')) {
-        try {
-          const directRes = await fetch(url, { signal: controller.signal, mode: 'cors' });
-          if (directRes.ok) {
-            const blob = await directRes.blob();
-            if (isValidImageBlob(blob)) return blob;
-          }
-        } catch (e) {
-          // Direct fetch failed (e.g. strict CORS on certain nodes), fallback to proxy below
+      const isMangaDex = url.includes('mangadex.org') || url.includes('mangadex.network');
+
+      // 2. MangaDex: ALWAYS download via internal hardened server proxy!
+      // Direct browser requests are intercepted by MangaDex CDN to return the placeholder banner.
+      if (isMangaDex) {
+        const proxyUrl = `/api/proxy/image?url=${encodeURIComponent(url)}`;
+        const proxyRes = await fetch(proxyUrl, { signal: controller.signal });
+        if (proxyRes.ok) {
+          const blob = await proxyRes.blob();
+          if (isValidImageBlob(blob)) return blob;
         }
+
+        // Retry with cache-bust
+        const retryProxyUrl = `/api/proxy/image?url=${encodeURIComponent(url)}&t=${Date.now()}`;
+        const retryRes = await fetch(retryProxyUrl, { signal: controller.signal });
+        if (retryRes.ok) {
+          const blob = await retryRes.blob();
+          if (isValidImageBlob(blob)) return blob;
+        }
+
+        throw new Error('Gagal mengunduh panel MangaDex dari server proxy');
       }
 
-      // 3. Primary fallback: Local server proxy (/api/proxy-image)
+      // 3. Primary fallback for other mirrors: Local server proxy (/api/proxy/image)
       try {
-        const proxyUrl = `/api/proxy-image?url=${encodeURIComponent(url)}${referer ? '&referer=' + encodeURIComponent(referer) : ''}`;
+        const proxyUrl = `/api/proxy/image?url=${encodeURIComponent(url)}${referer ? '&referer=' + encodeURIComponent(referer) : ''}`;
         const proxyRes = await fetch(proxyUrl, { signal: controller.signal });
         if (proxyRes.ok) {
           const blob = await proxyRes.blob();
@@ -91,8 +106,8 @@
         }
       } catch (e) {}
 
-      // 4. Secondary fallback: wsrv.nl (only for public external URLs, non-localhost, non-mangadex)
-      if (url.startsWith('http') && !url.includes('localhost') && !url.includes('127.0.0.1') && !url.includes('mangadex.network')) {
+      // 4. Secondary fallback: wsrv.nl (only for non-MangaDex external public mirrors)
+      if (url.startsWith('http') && !url.includes('localhost') && !url.includes('127.0.0.1')) {
         try {
           const wsrvUrl = `https://wsrv.nl/?url=${encodeURIComponent(url)}&output=webp&q=85`;
           const wsrvRes = await fetch(wsrvUrl, { signal: controller.signal });
@@ -168,6 +183,25 @@
     },
 
     /**
+     * One-time auto-purge for any corrupt/poisoned placeholder banners in IndexedDB
+     */
+    async purgeCorruptBanners() {
+      try {
+        const corruptPages = await db.pages.filter(p => (p.size >= 59400 && p.size <= 59600) || (p.blob && p.blob.size >= 59400 && p.blob.size <= 59600)).toArray();
+        if (corruptPages.length > 0) {
+          console.warn(`[OfflineManager] Detected ${corruptPages.length} corrupted MangaDex banner pages in IndexedDB. Auto-purging...`);
+          const corruptChapterIds = [...new Set(corruptPages.map(p => p.chapterId))];
+          for (const chId of corruptChapterIds) {
+            await this.deleteChapter(chId, true);
+          }
+          console.log('[OfflineManager] Corrupted chapters successfully purged.');
+        }
+      } catch (e) {
+        console.warn('[OfflineManager] Error while checking corrupt banners:', e);
+      }
+    },
+
+    /**
      * Check if a chapter is downloaded and verify page blob integrity
      */
     async isChapterDownloaded(chapterId) {
@@ -175,12 +209,17 @@
       const record = await db.chapters.get(chapterId);
       if (!record || !record.isDownloaded) return false;
 
-      // Integrity validation: make sure stored pages are real image blobs
-      const firstPage = await db.pages.where('chapterId').equals(chapterId).first();
-      if (!firstPage || !firstPage.blob || !isValidImageBlob(firstPage.blob)) {
-        // Corrupted records from previous error, clean up so user can re-download cleanly
-        await db.pages.where('chapterId').equals(chapterId).delete();
+      // Integrity validation: make sure stored pages are real image blobs and NOT MangaDex banners
+      const pages = await db.pages.where('chapterId').equals(chapterId).toArray();
+      if (!pages || pages.length === 0) {
         await db.chapters.delete(chapterId);
+        return false;
+      }
+
+      const hasCorrupt = pages.some(p => !p.blob || !isValidImageBlob(p.blob) || (p.size >= 59400 && p.size <= 59600) || (p.blob.size >= 59400 && p.blob.size <= 59600));
+      if (hasCorrupt) {
+        console.warn(`[OfflineManager] Chapter ${chapterId} has corrupted/banner pages. Auto-purging...`);
+        await this.deleteChapter(chapterId, true);
         return false;
       }
       return true;
@@ -206,9 +245,10 @@
      */
     async getOfflinePages(chapterId) {
       const pages = await db.pages.where('chapterId').equals(chapterId).sortBy('pageNumber');
-      const valid = pages.filter(p => isValidImageBlob(p.blob));
-      if (valid.length === 0 && pages.length > 0) {
-        await this.deleteChapter(chapterId);
+      const valid = pages.filter(p => isValidImageBlob(p.blob) && !(p.size >= 59400 && p.size <= 59600) && !(p.blob && p.blob.size >= 59400 && p.blob.size <= 59600));
+      if (valid.length < pages.length) {
+        console.warn(`[OfflineManager] Found corrupt banner pages in getOfflinePages for ${chapterId}. Purging chapter...`);
+        await this.deleteChapter(chapterId, true);
         return [];
       }
       return valid;
@@ -447,10 +487,10 @@
     /**
      * Delete downloaded chapter from IndexedDB
      */
-    async deleteChapter(chapterId) {
+    async deleteChapter(chapterId, silent = false) {
       await db.pages.where('chapterId').equals(chapterId).delete();
       await db.chapters.delete(chapterId);
-      if (window.showToast) window.showToast('Chapter offline berhasil dihapus.');
+      if (!silent && window.showToast) window.showToast('Chapter offline berhasil dihapus.');
       this.notifySubscribers();
     },
 
@@ -550,5 +590,12 @@
   };
 
   window.OfflineManager = OfflineManager;
+
+  // Run auto-purge on startup to evict any corrupt/placeholder banner blobs from IndexedDB
+  try {
+    OfflineManager.purgeCorruptBanners();
+  } catch (e) {
+    console.warn('[OfflineManager] Startup banner check error:', e);
+  }
 
 })(window);

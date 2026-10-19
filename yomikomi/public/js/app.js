@@ -1995,17 +1995,35 @@ window.triggerNextPageLoad = function (imgEl) {
  */
 window.handlePageImageLoad = function (imgEl) {
   // Client-side guard against MangaDex Anti-Hotlink Placeholder Banner:
-  // The placeholder is an exact 700x700 square image (aspect ratio 1.0, w === h) with cat icons.
-  // Real manga & webtoon panels are tall vertical strips (aspect ratio > 1.25 or < 0.85).
+  // MangaDex banner is exactly 600x642 (or ~59,480 bytes) with cat mascot icons
+  // Real manga panels are either tall webtoon vertical strips or standard tankobon pages
   if (imgEl.naturalWidth > 0 && imgEl.naturalHeight > 0) {
-    const isSquareBanner = Math.abs(imgEl.naturalWidth - imgEl.naturalHeight) <= 5 && imgEl.naturalWidth >= 400 && imgEl.naturalWidth <= 900;
-    const raw = imgEl.dataset.rawUrl || '';
-    if (isSquareBanner && (raw.includes('mangadex') || (imgEl.src && imgEl.src.includes('mangadex')))) {
-      console.warn(`[ReaderImage] Intercepted MangaDex placeholder banner (${imgEl.naturalWidth}x${imgEl.naturalHeight}). Discarding and retrying...`);
+    const isMangaDexBanner = (imgEl.naturalWidth === 600 && imgEl.naturalHeight === 642) ||
+      (Math.abs(imgEl.naturalWidth - 600) <= 20 && Math.abs(imgEl.naturalHeight - 642) <= 20) ||
+      (Math.abs(imgEl.naturalWidth - imgEl.naturalHeight) <= 60 && imgEl.naturalWidth >= 550 && imgEl.naturalWidth <= 650);
+
+    if (isMangaDexBanner) {
+      console.warn(`[ReaderImage] Intercepted MangaDex placeholder banner (${imgEl.naturalWidth}x${imgEl.naturalHeight}). Discarding and recovering...`);
       imgEl.classList.remove('visible');
+
+      // If loaded from corrupt offline Dexie storage, auto-purge the corrupt chapter and reload fresh online
+      if (imgEl.src && imgEl.src.startsWith('blob:') && state.currentChapterId && window.OfflineManager) {
+        window.OfflineManager.deleteChapter(state.currentChapterId, true).then(() => {
+          console.log('[ReaderImage] Purged corrupt offline chapter. Reloading fresh online...');
+          openReader(state.currentChapterId, state.currentChapterIndex);
+        });
+        return;
+      }
+
       window.handlePageImageError(imgEl);
       return;
     }
+  }
+
+  // Hide skeleton in single mode if present
+  const singleSkeleton = document.getElementById('single-page-skeleton');
+  if (singleSkeleton) {
+    singleSkeleton.style.display = 'none';
   }
 
   const wrapper = imgEl.closest('.reader-page-wrapper');
@@ -2164,27 +2182,34 @@ async function openReader(chapterId, chapterIndex) {
     const offlineBadge = document.getElementById('reader-offline-badge');
 
     if (isDown) {
-      if (offlineBadge) offlineBadge.classList.remove('hidden');
       const offlinePages = await OfflineManager.getOfflinePages(chapterId);
+      const hasCorrupt = !offlinePages || offlinePages.length === 0 || offlinePages.some(p => !p.blob || (p.blob.size >= 59400 && p.blob.size <= 59600));
 
-      revokeActiveObjectUrls();
+      if (hasCorrupt) {
+        console.warn(`[Reader] Chapter ${chapterId} has corrupted/banner pages in IndexedDB. Purging and loading fresh from server...`);
+        await OfflineManager.deleteChapter(chapterId, true);
+        if (offlineBadge) offlineBadge.classList.add('hidden');
+      } else {
+        if (offlineBadge) offlineBadge.classList.remove('hidden');
+        revokeActiveObjectUrls();
 
-      const blobUrls = offlinePages.map(p => {
-        const url = URL.createObjectURL(p.blob);
-        state.activeObjectUrls.push(url);
-        return url;
-      });
+        const blobUrls = offlinePages.map(p => {
+          const url = URL.createObjectURL(p.blob);
+          state.activeObjectUrls.push(url);
+          return url;
+        });
 
-      state.currentChapterData = {
-        pages: blobUrls,
-        dataSaverPages: blobUrls,
-        totalPages: blobUrls.length,
-        isOffline: true
-      };
+        state.currentChapterData = {
+          pages: blobUrls,
+          dataSaverPages: blobUrls,
+          totalPages: blobUrls.length,
+          isOffline: true
+        };
 
-      renderReaderPages(state.currentChapterData);
-      saveReadingHistory(state.currentManga, chObj);
-      return;
+        renderReaderPages(state.currentChapterData);
+        saveReadingHistory(state.currentManga, chObj);
+        return;
+      }
     } else {
       if (offlineBadge) offlineBadge.classList.add('hidden');
     }
@@ -2577,6 +2602,7 @@ function renderSinglePage(pages, index, sliceIndex = 0) {
               data-page="${state.currentPageIndex + 1}"
               data-raw-url="${currentUrl}"
               data-retry-stage="0"
+              onload="window.handlePageImageLoad(this)"
               onerror="handlePageImageError(this)"
             >
           </div>
@@ -2631,7 +2657,7 @@ function renderSinglePage(pages, index, sliceIndex = 0) {
             data-page="${state.currentPageIndex + 1}"
             data-raw-url="${currentUrl}"
             data-retry-stage="0"
-            onload="const sk = document.getElementById('single-page-skeleton'); if (sk) sk.style.display = 'none'; this.classList.add('visible');"
+            onload="window.handlePageImageLoad(this)"
             onerror="handlePageImageError(this)"
           >
           <div class="nav-click-zone right" title="Halaman Selanjutnya (↓ / S / Spasi)"></div>
@@ -2722,6 +2748,7 @@ function renderDoublePage(pages, index) {
             data-page="${page1Index + 1}"
             data-raw-url="${page1Url}"
             data-retry-stage="0"
+            onload="window.handlePageImageLoad(this)"
             onerror="handlePageImageError(this)"
           >
           <span class="double-page-tag">${page1Index + 1}</span>
@@ -2735,6 +2762,7 @@ function renderDoublePage(pages, index) {
               data-page="${page2Index + 1}"
               data-raw-url="${page2Url}"
               data-retry-stage="0"
+              onload="window.handlePageImageLoad(this)"
               onerror="handlePageImageError(this)"
             >
             <span class="double-page-tag">${page2Index + 1}</span>

@@ -3,7 +3,7 @@
  * Provides instantaneous offline loading and smooth App Shell fallback
  */
 
-const CACHE_NAME = 'yomikomi-app-shell-v2';
+const CACHE_NAME = 'yomikomi-app-shell-v5';
 
 // Static App Shell assets required to render the application offline
 const PRECACHE_ASSETS = [
@@ -67,7 +67,9 @@ self.addEventListener('fetch', (event) => {
   // These are client-side managed in IndexedDB via Dexie to avoid duplicating storage
   if (
     url.pathname.startsWith('/api/proxy/image') ||
+    url.pathname.startsWith('/api/proxy-image') ||
     url.hostname.includes('mangadex.org') ||
+    url.hostname.includes('mangadex.network') ||
     url.hostname.includes('bacakomik') ||
     url.pathname.includes('/proxy/')
   ) {

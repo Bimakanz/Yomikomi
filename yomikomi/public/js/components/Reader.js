@@ -415,12 +415,16 @@ export async function openExternalReader(chapterUrl, chapterTitle, allChapters, 
   }
 
   try {
-    const res = await fetch(`/api/external/chapter-pages?url=${encodeURIComponent(chapterUrl)}`);
+    const isKomiku = chapterUrl.includes('komiku.org') || chapterUrl.includes('komiku.to') || state.currentSource === 'komiku';
+    const pagesEndpoint = isKomiku
+      ? `/api/komiku/chapter-pages?url=${encodeURIComponent(chapterUrl)}`
+      : `/api/external/chapter-pages?url=${encodeURIComponent(chapterUrl)}`;
+    const res = await fetch(pagesEndpoint);
     const data = await res.json();
     state.currentChapterData = {
-      pages: data.pages,
-      dataSaverPages: data.pages,
-      totalPages: data.pages.length
+      pages: data.pages || [],
+      dataSaverPages: data.pages || [],
+      totalPages: (data.pages || []).length
     };
 
     renderReaderPages(state.currentChapterData);

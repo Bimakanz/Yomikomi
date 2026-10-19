@@ -942,3 +942,125 @@ export function initOfflineDownloadControls() {
     await OfflineManager.enqueueMultipleChapters(mangaObj, unreadUnDownloaded, state.currentSource);
   });
 }
+
+export async function renderKomikuChaptersList(chapters, comicInfo) {
+  const container = document.getElementById('chapters-list');
+  if (!container) return;
+
+  state.currentSource = 'komiku';
+  state.rawKomikuChapters = chapters || [];
+
+  const langPills = document.getElementById('mangadex-lang-pills');
+  if (langPills) langPills.style.display = 'none';
+
+  const badge = document.getElementById('chapters-total-badge');
+  if (badge) badge.textContent = `${chapters.length} Chapter (Komiku)`;
+
+  if (!chapters || chapters.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <i data-lucide="book-x"></i>
+        <h3>Tidak Ada Chapter Ditemukan</h3>
+        <p>Belum ada rilis chapter dari Komiku untuk judul ini.</p>
+      </div>
+    `;
+    initIcons();
+    return;
+  }
+
+  // Parse and sort chapters
+  const parsed = chapters.map(c => {
+    const numMatch = (c.title || '').match(/chapter\s*([\d.]+)/i) || (c.url || '').match(/chapter-([\d.]+)/i);
+    const num = numMatch ? parseFloat(numMatch[1]) : 0;
+    return { ...c, num };
+  });
+
+  const order = state.komikuOrder || 'asc';
+  parsed.sort((a, b) => order === 'asc' ? a.num - b.num : b.num - a.num);
+
+  state.externalChapters = parsed;
+
+  const mangaId = state.currentManga?.id || comicInfo?.id || 'komiku';
+  const downloadedSet = window.OfflineManager
+    ? await OfflineManager.getDownloadedChapterIds(mangaId)
+    : new Set();
+
+  let html = `<div class="mirror-chapters-grid">`;
+  parsed.forEach((ch, idx) => {
+    const cleanChTitle = ch.title.replace(/\s+/g, ' ').trim();
+    const isDownloaded = downloadedSet.has(ch.url);
+    html += `
+      <div class="chapter-item" data-ch-idx="${idx}">
+        <div class="chapter-item-left">
+          <span class="chapter-number-pill">${cleanChTitle}</span>
+          <span class="chapter-group-badge" style="color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3);">🇮🇩 Komiku Indo Scan</span>
+          ${ch.releaseDate ? `<span class="chapter-date" style="font-size: 0.75rem; color: var(--color-text-muted); margin-left: 0.5rem;">${ch.releaseDate}</span>` : ''}
+        </div>
+        <div class="chapter-item-right">
+          ${isDownloaded ? `
+            <span class="badge-downloaded-success" title="Chapter tersimpan di penyimpanan offline browser">
+              <i data-lucide="check-circle-2"></i> Tersimpan
+            </span>
+            <button class="btn-delete-download" title="Hapus dari penyimpanan offline" data-ch-url="${ch.url}">
+              <i data-lucide="trash-2"></i>
+            </button>
+          ` : `
+            <button class="btn-ch-download" title="Download Chapter ini ke memori offline" data-ch-idx="${idx}">
+              <i data-lucide="download"></i>
+            </button>
+          `}
+          <span>Baca Chapter</span>
+          <i data-lucide="chevron-right"></i>
+        </div>
+      </div>
+    `;
+  });
+  html += `</div>`;
+
+  container.innerHTML = html;
+
+  container.querySelectorAll('.mirror-chapters-grid .chapter-item').forEach(item => {
+    item.addEventListener('click', (e) => {
+      if (e.target.closest('.btn-ch-download') || e.target.closest('.btn-delete-download')) return;
+      const idx = parseInt(item.dataset.chIdx);
+      const ch = parsed[idx];
+      openExternalReader(ch.url, ch.title.replace(/\s+/g, ' ').trim(), parsed, idx);
+    });
+
+    item.querySelector('.btn-ch-download')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const idx = parseInt(item.dataset.chIdx);
+      const ch = parsed[idx];
+      if (!window.OfflineManager) return;
+
+      const mangaObj = {
+        id: mangaId,
+        title: state.currentManga ? getMangaTitle(state.currentManga.attributes) : (comicInfo?.title || 'Komik'),
+        coverUrl: state.currentManga ? getCoverUrl(state.currentManga) : (comicInfo?.coverUrl || ''),
+        synopsis: state.currentManga?.attributes?.description?.id || state.currentManga?.attributes?.description?.en || ''
+      };
+
+      OfflineManager.enqueueChapter(
+        mangaObj,
+        {
+          id: ch.url,
+          url: ch.url,
+          number: ch.num,
+          title: ch.title.replace(/\s+/g, ' ').trim()
+        },
+        'komiku'
+      );
+    });
+
+    item.querySelector('.btn-delete-download')?.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const chUrl = e.currentTarget.dataset.chUrl;
+      if (!window.OfflineManager || !chUrl) return;
+      await OfflineManager.deleteChapter(chUrl);
+      renderKomikuChaptersList(chapters, comicInfo);
+    });
+  });
+
+  initIcons();
+}
+

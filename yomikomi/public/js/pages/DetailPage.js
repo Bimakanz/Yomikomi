@@ -19,9 +19,11 @@ import {
   initLanguagePills,
   initOfflineDownloadControls,
   loadChaptersFeed,
-  updateSortButtonLabel
+  updateSortButtonLabel,
+  renderKomikuChaptersList
 } from '../components/ChapterList.js';
-import { openReader } from '../components/Reader.js';
+import { openReader, openExternalReader } from '../components/Reader.js';
+import { fetchKomikuManga } from '../services/api.js';
 
 export function renderDetailPageMarkup() {
   return `
@@ -197,6 +199,11 @@ export function renderMangaDetailHero(manga) {
       window.resumeReadingChapter(manga.id, last.chapterId, last.chapterNum);
       return;
     }
+    if (state.currentSource === 'komiku' && state.externalChapters?.length > 0) {
+      const firstCh = state.externalChapters[0];
+      openExternalReader(firstCh.url, firstCh.title, state.externalChapters, 0);
+      return;
+    }
     if (state.currentChapters.length > 0) {
       openReader(state.currentChapters[0].id, 0);
     } else {
@@ -207,13 +214,71 @@ export function renderMangaDetailHero(manga) {
   initIcons();
 }
 
-export async function openMangaDetail(mangaId) {
+export async function openMangaDetail(mangaId, maybeMangaData = null) {
   if (typeof window.switchView === 'function') {
     window.switchView('detail');
   }
 
   const heroContent = document.getElementById('detail-hero-content');
   const chaptersList = document.getElementById('chapters-list');
+
+  const isKomiku = (typeof mangaId === 'string' && mangaId.startsWith('komiku-')) || maybeMangaData?.source === 'komiku';
+
+  if (isKomiku) {
+    const slug = (maybeMangaData?.slug || mangaId).replace(/^komiku-/, '');
+    state.currentSource = 'komiku';
+
+    // Optimistic render if partial data already available
+    if (maybeMangaData) {
+      state.currentManga = {
+        id: `komiku-${slug}`,
+        slug,
+        source: 'komiku',
+        title: maybeMangaData.title,
+        coverUrl: maybeMangaData.coverUrl,
+        attributes: {
+          title: { en: maybeMangaData.title, id: maybeMangaData.title },
+          description: { id: maybeMangaData.synopsis || 'Memuat sinopsis komik...', en: maybeMangaData.synopsis || '' },
+          status: maybeMangaData.status || 'ONGOING',
+          tags: (maybeMangaData.genres || []).map(g => ({ attributes: { name: { en: g } } }))
+        }
+      };
+      renderMangaDetailHero(state.currentManga);
+    } else if (heroContent) {
+      heroContent.innerHTML = `<div class="spinner" style="margin: 3rem auto;"></div>`;
+    }
+
+    if (chaptersList) {
+      chaptersList.innerHTML = `<div class="spinner" style="margin: 2rem auto;"></div>`;
+    }
+
+    try {
+      const kData = await fetchKomikuManga(slug);
+      if (kData) {
+        state.currentManga = {
+          id: `komiku-${slug}`,
+          slug,
+          source: 'komiku',
+          title: kData.title,
+          coverUrl: kData.coverUrl,
+          attributes: {
+            title: { en: kData.title, id: kData.title },
+            description: { id: kData.synopsis, en: kData.synopsis },
+            status: kData.status,
+            tags: (kData.genres || []).map(g => ({ attributes: { name: { en: g } } }))
+          }
+        };
+        CoverCache.set(`komiku-${slug}`, kData.title, kData.coverUrl);
+        renderMangaDetailHero(state.currentManga);
+        renderKomikuChaptersList(kData.chapters || [], kData);
+        return;
+      }
+    } catch (kErr) {
+      console.error('Failed to load Komiku details:', kErr);
+      showToast('Gagal memuat detail komik dari server Komiku');
+      return;
+    }
+  }
 
   const existing = state.mangaList?.find(m => m.id === mangaId);
   if (existing) {

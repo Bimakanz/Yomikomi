@@ -4,6 +4,7 @@
  */
 
 import { searchManga } from '../services/mangadex.js';
+import { fetchKomikuSearch } from '../services/api.js';
 import { getMangaTitle, getCoverUrl, getLanguageFlag, initIcons } from '../state.js';
 
 let searchDebounceTimeout = null;
@@ -30,7 +31,6 @@ export function renderSearchModalMarkup() {
         </div>
         <div class="search-results-container" id="search-results">
           <div class="search-placeholder-state">
-            <i data-lucide="sparkles"></i>
             <p>Ketik judul komik favorit Anda untuk mencari dari katalog komik</p>
           </div>
         </div>
@@ -82,7 +82,6 @@ export function initSearchModalEvents({ onSelectManga } = {}) {
       if (resultsContainer) {
         resultsContainer.innerHTML = `
           <div class="search-placeholder-state">
-            <i data-lucide="sparkles"></i>
             <p>Ketik judul komik favorit Anda untuk mencari dari katalog komik</p>
           </div>
         `;
@@ -138,7 +137,6 @@ async function performSearch(query, onSelectManga) {
   if (!query) {
     container.innerHTML = `
       <div class="search-placeholder-state">
-        <i data-lucide="sparkles"></i>
         <p>Ketik judul komik favorit Anda untuk mencari dari katalog komik</p>
       </div>
     `;
@@ -154,8 +152,34 @@ async function performSearch(query, onSelectManga) {
   `;
 
   try {
-    const res = await searchManga(query);
-    const results = res.data || [];
+    const [mangadexSettled, komikuSettled] = await Promise.allSettled([
+      searchManga(query),
+      fetchKomikuSearch(query)
+    ]);
+
+    let mangadexResults = [];
+    if (mangadexSettled.status === 'fulfilled' && mangadexSettled.value?.data) {
+      mangadexResults = mangadexSettled.value.data.map(m => ({
+        ...m,
+        source: 'mangadex'
+      }));
+    }
+
+    let komikuResults = [];
+    if (komikuSettled.status === 'fulfilled' && Array.isArray(komikuSettled.value)) {
+      komikuResults = komikuSettled.value.map(k => ({
+        ...k,
+        source: 'komiku'
+      }));
+    }
+
+    // Interleave results so user gets both MangaDex and Komiku matches
+    const results = [];
+    const maxLen = Math.max(mangadexResults.length, komikuResults.length);
+    for (let i = 0; i < maxLen; i++) {
+      if (i < mangadexResults.length) results.push(mangadexResults[i]);
+      if (i < komikuResults.length) results.push(komikuResults[i]);
+    }
 
     if (results.length === 0) {
       container.innerHTML = `
@@ -170,14 +194,19 @@ async function performSearch(query, onSelectManga) {
 
     container.innerHTML = '';
     results.forEach(manga => {
-      const title = getMangaTitle(manga.attributes);
-      const coverUrl = getCoverUrl(manga);
-      const year = manga.attributes?.year || '';
-      const status = manga.attributes?.status ? manga.attributes.status.toUpperCase() : 'ONGOING';
+      const isKomiku = manga.source === 'komiku' || manga.id?.startsWith('komiku-');
+      const title = isKomiku ? manga.title : getMangaTitle(manga.attributes);
+      const coverUrl = isKomiku ? manga.coverUrl : getCoverUrl(manga);
+      const year = (!isKomiku && manga.attributes?.year) ? manga.attributes.year : '';
+      const status = (!isKomiku && manga.attributes?.status) ? manga.attributes.status.toUpperCase() : 'ONGOING';
       const statusClass = 'status-' + status.toLowerCase();
-      const origLang = manga.attributes?.originalLanguage || 'ja';
-      const flag = getLanguageFlag(origLang);
-      const typeLabel = origLang === 'ko' ? 'Manhwa' : (origLang === 'zh' || origLang === 'zh-hk' ? 'Manhua' : 'Manga');
+      const origLang = (!isKomiku && manga.attributes?.originalLanguage) ? manga.attributes.originalLanguage : 'id';
+      const flag = isKomiku ? '🇮🇩' : getLanguageFlag(origLang);
+      const typeLabel = isKomiku 
+        ? (manga.type ? manga.type.toUpperCase() : 'MANGA')
+        : (origLang === 'ko' ? 'Manhwa' : (origLang === 'zh' || origLang === 'zh-hk' ? 'Manhua' : 'Manga'));
+      const sourceName = isKomiku ? 'Komiku' : 'MangaDex';
+      const sourceClass = isKomiku ? 'komiku' : 'mangadex';
 
       const item = document.createElement('div');
       item.className = 'search-result-item';
@@ -191,6 +220,7 @@ async function performSearch(query, onSelectManga) {
         <div class="search-result-info">
           <div class="search-result-title" title="${title}">${title}</div>
           <div class="search-result-meta">
+            <span class="search-badge badge-source-${sourceClass}">${sourceName}</span>
             <span class="search-badge ${statusClass}">${status}</span>
             <span class="search-badge search-badge-type">${flag} ${typeLabel}</span>
             ${year ? `<span class="search-badge search-badge-year">${year}</span>` : ''}
@@ -204,9 +234,9 @@ async function performSearch(query, onSelectManga) {
       const handleSelect = () => {
         closeSearchModal();
         if (typeof onSelectManga === 'function') {
-          onSelectManga(manga.id);
+          onSelectManga(manga.id, manga);
         } else if (typeof window.openMangaDetail === 'function') {
-          window.openMangaDetail(manga.id);
+          window.openMangaDetail(manga.id, manga);
         }
       };
 

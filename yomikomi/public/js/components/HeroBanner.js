@@ -4,7 +4,7 @@
  */
 
 import { state, getMangaTitle, getCoverUrl, initIcons } from '../state.js';
-import { fetchAniListBanner } from '../services/api.js';
+import { fetchAniList } from '../services/api.js';
 
 export function renderHeroBanner(containerOrItems, maybeItems, onReadClick, onDetailClick) {
   let container, items;
@@ -40,6 +40,7 @@ export function renderHeroBanner(containerOrItems, maybeItems, onReadClick, onDe
           </span>
           <span class="badge-tag">${status}</span>
           ${tags.map(t => `<span class="badge-tag">${t}</span>`).join('')}
+          <span class="badge-tag rating-badge hidden" id="hero-rating-${idx}"></span>
         </div>
         <h1 class="hero-title">${title}</h1>
         <p class="hero-desc">${desc}</p>
@@ -56,10 +57,19 @@ export function renderHeroBanner(containerOrItems, maybeItems, onReadClick, onDe
       </div>
     `;
 
-    // Attempt HD banner from AniList in the background
-    fetchAniListBanner(title).then(hdBanner => {
-      if (hdBanner) {
-        slide.style.backgroundImage = `url('${hdBanner}')`;
+    // Enrich with AniList GraphQL (HD landscape banner & rating badge)
+    fetchAniList(title).then(meta => {
+      if (meta) {
+        if (meta.bannerImage) {
+          slide.style.backgroundImage = `url('${meta.bannerImage}')`;
+        }
+        if (meta.ratingFormatted) {
+          const ratingEl = slide.querySelector(`#hero-rating-${idx}`);
+          if (ratingEl) {
+            ratingEl.textContent = meta.ratingFormatted;
+            ratingEl.classList.remove('hidden');
+          }
+        }
       }
     });
 

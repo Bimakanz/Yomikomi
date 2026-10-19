@@ -1,6 +1,7 @@
 import { BaseMangaProvider } from '../providers/base.provider.js';
 import { MangaDexProvider } from '../providers/mangadex.provider.js';
 import { LocalIndoProvider } from '../providers/local-indo.provider.js';
+import { KomikuProvider } from '../providers/komiku.provider.js';
 import { ConsumetProvider } from '../providers/consumet.provider.js';
 import { enrichWithAniList } from '../enrichers/anilist.enricher.js';
 import {
@@ -24,6 +25,7 @@ export class MangaAggregatorService {
 
   constructor() {
     this.registerProvider(new MangaDexProvider());
+    this.registerProvider(new KomikuProvider());
     this.registerProvider(new LocalIndoProvider());
     this.registerProvider(new ConsumetProvider());
   }

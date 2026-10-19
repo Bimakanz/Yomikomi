@@ -4,6 +4,7 @@ const http = require('http');
 const dns = require('dns');
 const path = require('path');
 const fs = require('fs');
+const cheerio = require('cheerio');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -756,6 +757,8 @@ app.get(['/api/proxy-image', '/api/proxy/image'], async (req, res) => {
         referer = 'https://mangapill.com/';
       } else if (host.includes('komikindo.ch') || host.includes('komikindo')) {
         referer = 'https://komikindo.ch/';
+      } else if (host.includes('komiku.org') || host.includes('komiku.to') || host.includes('komiku')) {
+        referer = 'https://komiku.org/';
       } else {
         referer = `${parsed.protocol}//${parsed.host}/`;
       }
@@ -976,6 +979,349 @@ app.get('/api/external/en/chapter-pages', async (req, res) => {
     res.json(result);
   } catch (err) {
     console.error('English mirror chapter pages error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// ANILIST GRAPHQL API (Hero Banner & Rating)
+// ==========================================
+const ANILIST_QUERY = `
+query ($search: String) {
+  Media (search: $search, type: MANGA) {
+    id
+    title {
+      romaji
+      english
+      native
+    }
+    bannerImage
+    coverImage {
+      extraLarge
+      large
+      color
+    }
+    description(asHtml: false)
+    averageScore
+    genres
+    status
+  }
+}
+`;
+
+function cleanAniListTitle(title) {
+  if (!title) return '';
+  return title
+    .replace(/\(.*?\)|\[.*?\]/g, '')
+    .replace(/[-_:]/g, ' ')
+    .replace(/\s+(manga|manhwa|manhua|bahasa indonesia|indo|chapter\s*\d+).*$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+async function fetchAniListGraphQL(title) {
+  const cleanTitle = cleanAniListTitle(title);
+  if (!cleanTitle) return null;
+
+  const cacheKey = `anilist_${cleanTitle.toLowerCase()}`;
+  const cached = getCache(cacheKey);
+  if (cached) return cached;
+
+  return new Promise((resolve) => {
+    const postData = JSON.stringify({
+      query: ANILIST_QUERY,
+      variables: { search: cleanTitle }
+    });
+
+    const req = https.request({
+      hostname: 'graphql.anilist.co',
+      port: 443,
+      path: '/',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Content-Length': Buffer.byteLength(postData),
+        'User-Agent': 'Yomikomi/2.0 (Personal Manga Reader)'
+      },
+      timeout: 6000
+    }, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(data);
+          const media = json.data?.Media;
+          if (media) {
+            const rating = typeof media.averageScore === 'number' ? Math.round((media.averageScore / 10) * 10) / 10 : null;
+            const ratingFormatted = rating ? `⭐ ${rating.toFixed(1)}` : null;
+            const result = {
+              id: media.id,
+              title: media.title,
+              bannerImage: media.bannerImage || null,
+              coverImage: media.coverImage || null,
+              averageScore: media.averageScore || null,
+              rating,
+              ratingFormatted,
+              genres: media.genres || [],
+              description: media.description || '',
+              status: media.status || ''
+            };
+            setCache(cacheKey, result, 24 * 60 * 60 * 1000); // 24 hours
+            return resolve(result);
+          }
+          resolve(null);
+        } catch (e) {
+          resolve(null);
+        }
+      });
+    });
+
+    req.on('timeout', () => {
+      req.destroy();
+      resolve(null);
+    });
+    req.on('error', () => resolve(null));
+    req.write(postData);
+    req.end();
+  });
+}
+
+app.get(['/api/anilist', '/api/anilist/banner'], async (req, res) => {
+  try {
+    const title = req.query.title || req.query.q || '';
+    if (!title) return res.status(400).json({ error: 'Missing title parameter' });
+    const meta = await fetchAniListGraphQL(title);
+    if (!meta) {
+      return res.json({ bannerImage: null, rating: null, ratingFormatted: null });
+    }
+    res.json(meta);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// KOMIKU INDO SCRAPER (ID Indo Scan Provider)
+// ==========================================
+
+// 1. Search Komiku
+app.get('/api/komiku/search', async (req, res) => {
+  try {
+    const rawQuery = (req.query.q || req.query.query || '').trim();
+    if (!rawQuery) return res.json({ source: 'komiku', total: 0, data: [] });
+
+    const cleanQuery = rawQuery.replace(/[()\[\]'":_]/g, ' ').replace(/\s+/g, ' ').trim();
+    const cacheKey = `komiku_search_${cleanQuery.toLowerCase()}`;
+    const cached = getCache(cacheKey);
+    if (cached) return res.json(cached);
+
+    const searchUrl = `https://api.komiku.org/?post_type=manga&s=${encodeURIComponent(cleanQuery)}`;
+    const html = await fetchExternalHtml(searchUrl);
+    const $ = cheerio.load(html);
+    const results = [];
+
+    $('.bge').each((_, el) => {
+      const a = $(el).find('a').first();
+      const href = a.attr('href') || '';
+      const rawTitle = $(el).find('h3, .tt').first().text().trim() || a.attr('title') || '';
+      const img = $(el).find('img').first().attr('data-src') || $(el).find('img').first().attr('src') || '';
+      const typeRaw = $(el).find('.tpe1_inf, .type').first().text().trim().toLowerCase();
+      const lastChapter = $(el).find('.new1, .epx, .lsch').first().text().trim().replace(/awal:\s*/i, '').trim();
+
+      if (href && rawTitle) {
+        const cleanHref = href.replace(/\/+$/, '');
+        const slug = cleanHref.split('/').pop();
+        const type = typeRaw.includes('manhwa') ? 'manhwa' : (typeRaw.includes('manhua') ? 'manhua' : 'manga');
+        const title = rawTitle.replace(/^Komik\s*/i, '').trim();
+
+        results.push({
+          id: `komiku-${slug}`,
+          slug,
+          source: 'komiku',
+          title,
+          coverUrl: img ? `/api/proxy-image?url=${encodeURIComponent(img)}` : '',
+          rawCoverUrl: img,
+          type,
+          lastChapter: lastChapter || undefined
+        });
+      }
+    });
+
+    const response = { source: 'komiku', query: cleanQuery, total: results.length, data: results };
+    setCache(cacheKey, response, CACHE_TTL.search);
+    res.json(response);
+  } catch (err) {
+    console.error('Komiku search error:', err.message);
+    res.status(500).json({ error: err.message, data: [] });
+  }
+});
+
+// 2. Latest Releases on Komiku
+app.get('/api/komiku/latest', async (req, res) => {
+  try {
+    const cacheKey = 'komiku_latest';
+    const cached = getCache(cacheKey);
+    if (cached) return res.json(cached);
+
+    const html = await fetchExternalHtml('https://komiku.org/');
+    const $ = cheerio.load(html);
+    const results = [];
+
+    $('.ls2, .ls4, .ls12').each((_, el) => {
+      const a = $(el).find('a').first();
+      const href = a.attr('href') || '';
+      const rawTitle = $(el).find('h4, h3, .tt').first().text().trim() || a.attr('title') || '';
+      const img = $(el).find('img').first().attr('data-src') || $(el).find('img').first().attr('src') || '';
+      const latestCh = $(el).find('.epx, .lsch, .chapter').first().text().trim();
+
+      if (href && rawTitle) {
+        const cleanHref = href.replace(/\/+$/, '');
+        const slug = cleanHref.split('/').pop();
+        if (!results.some(r => r.slug === slug)) {
+          const title = rawTitle.replace(/^Komik\s*/i, '').trim();
+          const tLower = title.toLowerCase();
+          const type = tLower.includes('manhwa') ? 'manhwa' : (tLower.includes('manhua') ? 'manhua' : 'manga');
+          results.push({
+            id: `komiku-${slug}`,
+            slug,
+            source: 'komiku',
+            title,
+            coverUrl: img ? `/api/proxy-image?url=${encodeURIComponent(img)}` : '',
+            rawCoverUrl: img,
+            type,
+            lastChapter: latestCh || 'Update'
+          });
+        }
+      }
+    });
+
+    const response = { source: 'komiku', total: results.length, data: results };
+    setCache(cacheKey, response, CACHE_TTL.latest);
+    res.json(response);
+  } catch (err) {
+    console.error('Komiku latest error:', err.message);
+    res.status(500).json({ error: err.message, data: [] });
+  }
+});
+
+// 3. Comic Detail & Chapters from Komiku
+app.get('/api/komiku/manga/:slug', async (req, res) => {
+  try {
+    const slug = req.params.slug.replace(/^komiku-/, '');
+    const cacheKey = `komiku_detail_${slug}`;
+    const cached = getCache(cacheKey);
+    if (cached) return res.json(cached);
+
+    const detailUrl = `https://komiku.org/manga/${slug}/`;
+    const html = await fetchExternalHtml(detailUrl);
+    const $ = cheerio.load(html);
+
+    const rawTitle = $('h1, .entry-title').first().text().replace(/^Komik\s*/i, '').trim();
+    const synopsis = $('.desc, #sinopsis, .sinopsis, p.desc').text().replace(/\s+/g, ' ').trim();
+    const imgEl = $('.ims img, .thumb img').first();
+    const coverRaw = imgEl.attr('data-src') || imgEl.attr('src') || '';
+
+    const genres = [];
+    $('.genre li a, ul.genre a, .genre a').each((_, g) => {
+      const name = $(g).text().trim();
+      if (name && !genres.includes(name)) genres.push(name);
+    });
+
+    const statusText = $('table.inftable, .spe').text().toLowerCase();
+    const status = statusText.includes('tamat') || statusText.includes('completed') ? 'completed' : 'ongoing';
+
+    const chapters = [];
+    $('#Daftar_Chapter tr, .chapter-list tr, table.table tr').each((_, row) => {
+      const a = $(row).find('a').first();
+      const href = a.attr('href') || '';
+      const rawChTitle = a.text().replace(/\s+/g, ' ').trim();
+      const dateText = $(row).find('.tgl, .date').text().trim();
+
+      if (href && rawChTitle) {
+        const cleanHref = href.replace(/\/+$/, '');
+        const chSlug = cleanHref.split('/').pop();
+        const numMatch = rawChTitle.match(/chapter\s*([\d.]+)/i) || href.match(/chapter-([\d.]+)/i);
+        const number = numMatch ? numMatch[1] : (chapters.length + 1).toString();
+
+        chapters.push({
+          id: chSlug,
+          number,
+          title: `Chapter ${number}`,
+          url: href.startsWith('http') ? href : `https://komiku.org${href}`,
+          releaseDate: dateText || undefined,
+          source: 'komiku',
+          language: 'id'
+        });
+      }
+    });
+
+    const result = {
+      source: 'komiku',
+      data: {
+        id: `komiku-${slug}`,
+        slug,
+        source: 'komiku',
+        title: rawTitle || slug,
+        coverUrl: coverRaw ? `/api/proxy-image?url=${encodeURIComponent(coverRaw)}` : '',
+        rawCoverUrl: coverRaw,
+        synopsis: synopsis || 'Tidak ada sinopsis tersedia untuk judul ini.',
+        status,
+        genres,
+        chapters
+      }
+    };
+
+    setCache(cacheKey, result, CACHE_TTL.manga);
+    res.json(result);
+  } catch (err) {
+    console.error('Komiku manga detail error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 4. Chapter Reader Pages from Komiku
+app.get(['/api/komiku/chapter-pages', '/api/komiku/chapter/:chapterSlug'], async (req, res) => {
+  try {
+    let targetUrl = req.query.url;
+    if (!targetUrl && req.params.chapterSlug) {
+      targetUrl = `https://komiku.org/${req.params.chapterSlug.replace(/^\/+|\/+$/g, '')}/`;
+    }
+    if (!targetUrl) return res.status(400).json({ error: 'Missing chapter url or slug' });
+    if (!targetUrl.startsWith('http')) targetUrl = `https://komiku.org/${targetUrl.replace(/^\/+|\/+$/g, '')}/`;
+
+    const cacheKey = `komiku_pages_${targetUrl}`;
+    const cached = getCache(cacheKey);
+    if (cached) return res.json(cached);
+
+    const html = await fetchExternalHtml(targetUrl);
+    const $ = cheerio.load(html);
+    const pages = [];
+
+    $('#Baca_Komik img, .main-reading-area img').each((idx, el) => {
+      const src = $(el).attr('data-src') || $(el).attr('src') || '';
+      if (
+        src &&
+        !src.includes('iklan') &&
+        !src.includes('banner') &&
+        !src.includes('promosi') &&
+        (src.includes('.webp') || src.includes('.jpg') || src.includes('.jpeg') || src.includes('.png'))
+      ) {
+        pages.push(`/api/proxy-image?url=${encodeURIComponent(src)}`);
+      }
+    });
+
+    const result = {
+      source: 'komiku',
+      url: targetUrl,
+      total: pages.length,
+      pages
+    };
+
+    setCache(cacheKey, result, CACHE_TTL.chapters);
+    res.json(result);
+  } catch (err) {
+    console.error('Komiku chapter pages error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });

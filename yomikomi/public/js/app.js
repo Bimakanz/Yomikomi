@@ -1161,7 +1161,6 @@ function initSearch() {
     searchInput.value = '';
     resultsContainer.innerHTML = `
       <div class="search-placeholder-state">
-        <i data-lucide="sparkles"></i>
         <p>Ketik judul komik favorit Anda untuk mencari dari katalog komik</p>
       </div>
     `;
@@ -1203,7 +1202,6 @@ function initSearch() {
     if (!q) {
       resultsContainer.innerHTML = `
         <div class="search-placeholder-state">
-          <i data-lucide="sparkles"></i>
           <p>Ketik judul komik favorit Anda untuk mencari dari katalog komik</p>
         </div>
       `;

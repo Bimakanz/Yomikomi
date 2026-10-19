@@ -14,6 +14,7 @@ import {
   MANGADEX_POPULAR_THEMES
 } from '../state.js';
 import { renderHeroBanner } from '../components/HeroBanner.js';
+import { fetchAniList, fetchKomikuLatest } from '../services/api.js';
 
 export function renderHomePageMarkup() {
   return `
@@ -121,11 +122,20 @@ export function renderMangaGrid(mangaList) {
   }
 
   grid.innerHTML = '';
-  mangaList.forEach(manga => {
-    const title = getMangaTitle(manga.attributes);
-    const coverUrl = getCoverUrl(manga);
-    const status = manga.attributes.status ? manga.attributes.status.toUpperCase() : 'ONGOING';
-    const lastChapter = manga.attributes.lastChapter ? `Ch. ${manga.attributes.lastChapter}` : 'Update';
+  mangaList.forEach((manga, idx) => {
+    const isKomiku = manga.source === 'komiku' || manga.id?.startsWith('komiku-');
+    const sourceName = isKomiku ? 'Komiku' : 'MangaDex';
+    const sourceClass = isKomiku ? 'komiku' : 'mangadex';
+    const title = isKomiku ? manga.title : getMangaTitle(manga.attributes);
+    const coverUrl = isKomiku ? manga.coverUrl : getCoverUrl(manga);
+    const status = isKomiku 
+      ? (manga.status ? manga.status.toUpperCase() : 'ONGOING') 
+      : (manga.attributes?.status ? manga.attributes.status.toUpperCase() : 'ONGOING');
+    const lastChapter = isKomiku
+      ? (manga.latestChapter || manga.lastChapter || 'Update')
+      : (manga.attributes?.lastChapter ? `Ch. ${manga.attributes.lastChapter}` : 'Update');
+    const rating = manga.rating || manga.attributes?.rating || null;
+    const cardId = `card-manga-${idx}`;
 
     const card = document.createElement('article');
     card.className = 'manga-card';
@@ -134,6 +144,12 @@ export function renderMangaGrid(mangaList) {
       <div class="card-poster">
         <img src="${coverUrl}" alt="${title}" loading="lazy" onerror="this.src='https://placehold.co/300x420/1e2025/ffffff?text=Cover';">
         <div class="card-overlay-gradient"></div>
+        <div class="card-badges-top">
+          <span class="card-rating-badge ${rating ? '' : 'hidden'}" id="${cardId}-rating">
+            ${rating ? `⭐ ${rating.toFixed(1)}` : ''}
+          </span>
+          <span class="card-source-badge ${sourceClass}">${sourceName}</span>
+        </div>
         <span class="card-status-badge">${status}</span>
       </div>
       <div class="card-content">
@@ -141,16 +157,30 @@ export function renderMangaGrid(mangaList) {
         <div class="card-meta">
           <span>${lastChapter}</span>
           <div class="card-languages">
-            ${manga.attributes.availableTranslatedLanguages?.includes('id') ? '<span class="lang-flag" title="Tersedia Bahasa Indonesia">🇮🇩</span>' : ''}
-            ${manga.attributes.availableTranslatedLanguages?.includes('en') ? '<span class="lang-flag" title="Tersedia English">🇬🇧</span>' : ''}
+            ${isKomiku ? '<span class="lang-flag" title="Tersedia Bahasa Indonesia (Komiku Indo Scan)">🇮🇩 ID</span>' : ''}
+            ${!isKomiku && manga.attributes?.availableTranslatedLanguages?.includes('id') ? '<span class="lang-flag" title="Tersedia Bahasa Indonesia">🇮🇩</span>' : ''}
+            ${!isKomiku && manga.attributes?.availableTranslatedLanguages?.includes('en') ? '<span class="lang-flag" title="Tersedia English">🇬🇧</span>' : ''}
           </div>
         </div>
       </div>
     `;
 
+    // Dynamic AniList rating badge enrichment
+    if (!rating && title) {
+      fetchAniList(title).then(meta => {
+        if (meta && meta.ratingFormatted) {
+          const badge = card.querySelector(`#${cardId}-rating`);
+          if (badge) {
+            badge.textContent = meta.ratingFormatted;
+            badge.classList.remove('hidden');
+          }
+        }
+      });
+    }
+
     card.addEventListener('click', () => {
       if (typeof window.openMangaDetail === 'function') {
-        window.openMangaDetail(manga.id);
+        window.openMangaDetail(manga.id, manga);
       }
     });
     grid.appendChild(card);
@@ -167,7 +197,7 @@ export async function loadPopularManga() {
   try {
     const res = await fetch('/api/popular');
     const data = await res.json();
-    state.mangaList = data.data || [];
+    state.mangaList = (data.data || []).map(m => ({ ...m, source: 'mangadex' }));
     state.mangaList.forEach(m => {
       CoverCache.set(m.id, getMangaTitle(m.attributes), getCoverUrl(m));
     });
@@ -192,7 +222,7 @@ export async function loadLatestManga() {
   try {
     const res = await fetch('/api/latest');
     const data = await res.json();
-    state.mangaList = data.data || [];
+    state.mangaList = (data.data || []).map(m => ({ ...m, source: 'mangadex' }));
     renderMangaGrid(state.mangaList);
   } catch (error) {
     console.error('Failed to load latest manga:', error);
@@ -202,16 +232,45 @@ export async function loadLatestManga() {
 
 export async function loadIndonesianManga() {
   const sectionTitle = document.getElementById('grid-section-title');
-  if (sectionTitle) sectionTitle.textContent = 'Manga Terjemahan Bahasa Indonesia 🇮🇩';
+  if (sectionTitle) sectionTitle.textContent = 'Manga Terjemahan Bahasa Indonesia (MangaDex + Komiku) 🇮🇩';
   showGridSkeleton();
 
   try {
-    const res = await fetch('/api/search?lang=id&limit=24');
-    const data = await res.json();
-    state.mangaList = data.data || [];
+    // Combine MangaDex (ID) and Komiku (ID) using Promise.allSettled
+    const [mangadexSettled, komikuSettled] = await Promise.allSettled([
+      fetch('/api/search?lang=id&limit=24').then(r => r.json()),
+      fetchKomikuLatest()
+    ]);
+
+    let mangadexList = [];
+    if (mangadexSettled.status === 'fulfilled' && mangadexSettled.value?.data) {
+      mangadexList = mangadexSettled.value.data.map(m => ({
+        ...m,
+        source: 'mangadex'
+      }));
+    }
+
+    let komikuList = [];
+    if (komikuSettled.status === 'fulfilled' && Array.isArray(komikuSettled.value)) {
+      komikuList = komikuSettled.value.map(k => ({
+        ...k,
+        source: 'komiku'
+      }));
+    }
+
+    // Interleave results so user sees comics from both MangaDex and Komiku Indo Scan
+    const combined = [];
+    const maxLen = Math.max(mangadexList.length, komikuList.length);
+    for (let i = 0; i < maxLen; i++) {
+      if (i < komikuList.length) combined.push(komikuList[i]);
+      if (i < mangadexList.length) combined.push(mangadexList[i]);
+    }
+
+    state.mangaList = combined.length > 0 ? combined : mangadexList;
     renderMangaGrid(state.mangaList);
   } catch (error) {
     console.error('Failed to load Indonesian manga:', error);
+    showToast('Gagal memuat komik Bahasa Indonesia');
   }
 }
 

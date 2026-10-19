@@ -195,7 +195,7 @@ export function renderMangaDetailHero(manga) {
     const hList = getStoredList(STORAGE_KEY_HISTORY);
     const last = hList.find(item => item.mangaId === manga.id);
     if (last && last.chapterId && window.resumeReadingChapter) {
-      window.resumeReadingChapter(manga.id, last.chapterId, last.chapterNum);
+      window.resumeReadingChapter(manga.id, last.chapterId, last.chapterNum, last);
       return;
     }
 

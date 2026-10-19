@@ -310,8 +310,20 @@ export async function openReader(chapterId, chapterIndex) {
   if (readerContainer) readerContainer.scrollTop = 0;
 
   const mangaTitle = getMangaTitle(state.currentManga?.attributes) || state.currentManga?.title || 'Manga';
-  const chObj = state.currentUnifiedChapter || state.currentChapters[chapterIndex] || state.allMangaDexChapters.find(c => c.id === chapterId);
-  const chNum = chObj?.title || (chObj?.attributes?.chapter ? `Chapter ${chObj.attributes.chapter}` : 'Special Chapter');
+  let chObj = null;
+  if (state.currentUnifiedChapter && (state.currentUnifiedChapter.id === chapterId || state.currentUnifiedChapter.url === chapterId)) {
+    chObj = state.currentUnifiedChapter;
+  } else {
+    state.currentUnifiedChapter = null;
+    const pool = (state.activeChapters && state.activeChapters.length > 0) ? state.activeChapters : (state.currentChapters || []);
+    chObj = pool.find(c => c.id === chapterId || c.url === chapterId) ||
+            state.allMangaDexChapters?.find(c => c.id === chapterId) ||
+            pool[chapterIndex] ||
+            null;
+  }
+  const chNum = chObj?.title ||
+    (chObj?.attributes?.chapter ? `Chapter ${chObj.attributes.chapter}` : '') ||
+    (chObj?.chapterNumStr ? `Chapter ${chObj.chapterNumStr}` : 'Chapter');
   if (chObj?.language || chObj?.attributes?.translatedLanguage) {
     state.currentReadingLang = chObj.language || chObj.attributes.translatedLanguage;
     state.activeDetailLang = state.currentReadingLang;
@@ -1409,20 +1421,32 @@ export function initScrollPageObserver() {
 }
 
 export function extractChapterNumber(ch) {
-  if (!ch) return NaN;
+  if (ch === null || ch === undefined) return NaN;
+  if (typeof ch === 'number') return isNaN(ch) ? NaN : ch;
+  if (typeof ch === 'string') {
+    const trimmed = ch.trim();
+    const match = trimmed.match(/(?:chapter|ch\.?|bab)\s*([\d.]+)/i) || trimmed.match(/([\d.]+)/);
+    if (match) {
+      const p = parseFloat(match[1]);
+      if (!isNaN(p)) return p;
+    }
+    const direct = parseFloat(trimmed);
+    return isNaN(direct) ? NaN : direct;
+  }
   if (typeof ch.number === 'number' && !isNaN(ch.number)) return ch.number;
   if (typeof ch.num === 'number' && !isNaN(ch.num)) return ch.num;
   const raw = ch.chapterNumStr || ch.chapterNumber || ch.attributes?.chapter || ch.num || '';
   const parsed = parseFloat(raw);
   if (!isNaN(parsed)) return parsed;
   const str = String(ch.title || ch.attributes?.title || '');
-  const match = str.match(/(?:chapter|ch\.?|bab)\s*([\d.]+)/i);
+  const match = str.match(/(?:chapter|ch\.?|bab)\s*([\d.]+)/i) || str.match(/([\d.]+)/);
   if (match) {
     const p = parseFloat(match[1]);
     if (!isNaN(p)) return p;
   }
   return NaN;
 }
+window.extractChapterNumber = extractChapterNumber;
 
 export function findSmartNextChapter() {
   const currentLang = state.activeDetailLang || state.currentReadingLang || 'id';

@@ -638,14 +638,25 @@ export function syncActiveLanguageAndChapters(currentChapterId = null) {
   let activeLang = state.activeDetailLang || state.currentReadingLang || 'id';
 
   if (currentChapterId) {
-    const inEn = (state.unifiedChapters.en || []).some(c => c.id === currentChapterId || c.url === currentChapterId);
-    const inId = (state.unifiedChapters.id || []).some(c => c.id === currentChapterId || c.url === currentChapterId);
+    const inEn = (state.unifiedChapters.en || []).some(c => c.id === currentChapterId || c.url === currentChapterId || c.raw?.id === currentChapterId);
+    const inId = (state.unifiedChapters.id || []).some(c => c.id === currentChapterId || c.url === currentChapterId || c.raw?.id === currentChapterId);
     if (inEn && !inId) {
       activeLang = 'en';
     } else if (inId && !inEn) {
       activeLang = 'id';
     } else if (String(currentChapterId).includes('mangapill') || String(currentChapterId).includes('english') || state.currentSource === 'english') {
       activeLang = 'en';
+    } else if (!inEn && !inId && typeof window.extractChapterNumber === 'function') {
+      const num = window.extractChapterNumber(currentChapterId);
+      if (!isNaN(num)) {
+        const numInEn = (state.unifiedChapters.en || []).some(c => window.extractChapterNumber(c) === num);
+        const numInId = (state.unifiedChapters.id || []).some(c => window.extractChapterNumber(c) === num);
+        if (numInEn && !numInId) {
+          activeLang = 'en';
+        } else if (numInId && !numInEn) {
+          activeLang = 'id';
+        }
+      }
     }
   }
 

@@ -101,13 +101,16 @@ export async function saveReadingHistory(manga, chapter) {
 
   chNum = chNum.replace(/^(chapter|bab)\s+(chapter|bab)\b/i, 'Chapter').trim();
 
+  const curLang = state.currentReadingLang || state.activeDetailLang || chapter.language || chapter.attributes?.translatedLanguage || 'id';
   const updated = history.filter(item => item.mangaId !== manga.id);
   updated.unshift({
     mangaId: manga.id,
     title: title,
     coverUrl: coverUrl,
-    chapterId: chapter.id,
+    chapterId: chapter.id || chapter.url || state.currentChapterId,
     chapterNum: chNum,
+    language: curLang,
+    source: state.currentSource || chapter.source || '',
     timestamp: Date.now()
   });
 

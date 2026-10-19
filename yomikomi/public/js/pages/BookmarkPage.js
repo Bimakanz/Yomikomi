@@ -17,7 +17,7 @@ import {
   STORAGE_KEY_HISTORY
 } from '../state.js';
 import { getBookmarks, updateAllCollectionBadges } from '../services/storage.js';
-import { openReader, openExternalReader, openEnglishReader } from '../components/Reader.js';
+import { openReader, openExternalReader, openEnglishReader, extractChapterNumber } from '../components/Reader.js';
 import { ensureUnifiedChapterList, openUnifiedChapter } from '../components/ChapterList.js';
 
 export function renderBookmarkPageMarkup() {
@@ -188,8 +188,12 @@ export function renderBookmarksList() {
 }
 window.renderBookmarksList = renderBookmarksList;
 
-export async function resumeReadingChapter(mangaId, chapterId, chapterNum) {
+export async function resumeReadingChapter(mangaId, chapterId, chapterNum, historyItem = null) {
   showToast(`Melanjutkan ${chapterNum || 'chapter'}...`);
+
+  state.currentUnifiedChapter = null;
+  state.currentChapterId = chapterId;
+  state.isAutoNavigatingNext = false;
 
   if (window.OfflineManager) {
     try {
@@ -257,17 +261,14 @@ export async function resumeReadingChapter(mangaId, chapterId, chapterNum) {
     }
   }
 
-  // Online resume:
-  const isEn = (chapterId && (chapterId.includes('mangapill') || chapterId.includes('asuracomic') || chapterId.includes('flamecomic') || chapterId.includes('/en/'))) ||
-    (chapterNum && /\[en\]/i.test(chapterNum)) ||
-    (mangaId && mangaId.includes('english'));
+  // 1. Reset stale chapters if switching manga
+  if (!state.currentManga || state.currentManga.id !== mangaId) {
+    state.unifiedChapters = null;
+    state.activeChapters = [];
+    state.currentChapters = [];
+  }
 
-  const targetLang = isEn ? 'en' : 'id';
-  state.activeDetailLang = targetLang;
-  state.currentReadingLang = targetLang;
-  state.currentChapterId = chapterId;
-
-  // Hydrate manga metadata if needed
+  // 2. Hydrate manga metadata if needed
   if (mangaId && !mangaId.startsWith('http') && mangaId.length > 20) {
     if (!state.currentManga || state.currentManga.id !== mangaId) {
       try {
@@ -278,48 +279,171 @@ export async function resumeReadingChapter(mangaId, chapterId, chapterNum) {
         }
       } catch (e) {}
     }
+  } else if (!state.currentManga || state.currentManga.id !== mangaId) {
+    state.currentManga = {
+      id: mangaId,
+      title: historyItem?.title || 'Manga',
+      coverUrl: historyItem?.coverUrl || ''
+    };
   }
 
-  // Ensure full chapter list is hydrated in background or from cache
+  // 3. Hydrate unified chapter list and AWAIT completion
+  let unified = null;
   if (mangaId) {
-    ensureUnifiedChapterList(mangaId, chapterId, state.currentManga);
+    unified = await ensureUnifiedChapterList(mangaId, chapterId, state.currentManga);
+  }
+  if (!unified && state.unifiedChapters) {
+    unified = state.unifiedChapters;
   }
 
-  // If already in memory with chapters, resolve chapter and index!
-  const pool = state.unifiedChapters?.[targetLang];
-  if (pool && pool.length > 0) {
-    const idx = pool.findIndex(c => c.id === chapterId || c.url === chapterId);
-    const resolvedIdx = idx !== -1 ? idx : 0;
-    openUnifiedChapter(pool[resolvedIdx], resolvedIdx);
+  const idChapters = unified?.id || [];
+  const enChapters = unified?.en || [];
+  const targetNum = extractChapterNumber(chapterNum || chapterId);
+
+  const isEnHint = (historyItem?.language === 'en') ||
+    (chapterId && (chapterId.includes('mangapill') || chapterId.includes('asuracomic') || chapterId.includes('flamecomic') || chapterId.includes('/en/'))) ||
+    (chapterNum && /\[en\]/i.test(chapterNum)) ||
+    (mangaId && mangaId.includes('english'));
+
+  // 4. Search by exact ID / URL
+  let foundCh = null;
+  let foundIdx = -1;
+  let foundLang = null;
+
+  if (isEnHint) {
+    const idx = enChapters.findIndex(c => c.id === chapterId || c.url === chapterId || c.raw?.id === chapterId);
+    if (idx !== -1) {
+      foundCh = enChapters[idx];
+      foundIdx = idx;
+      foundLang = 'en';
+    }
+  }
+
+  if (!foundCh) {
+    const idx = idChapters.findIndex(c => c.id === chapterId || c.url === chapterId || c.raw?.id === chapterId);
+    if (idx !== -1) {
+      foundCh = idChapters[idx];
+      foundIdx = idx;
+      foundLang = 'id';
+    }
+  }
+
+  if (!foundCh && !isEnHint) {
+    const idx = enChapters.findIndex(c => c.id === chapterId || c.url === chapterId || c.raw?.id === chapterId);
+    if (idx !== -1) {
+      foundCh = enChapters[idx];
+      foundIdx = idx;
+      foundLang = 'en';
+    }
+  }
+
+  // 5. Search by numeric chapter number (e.g. Chapter 87)
+  if (!foundCh && !isNaN(targetNum)) {
+    if (isEnHint) {
+      const idx = enChapters.findIndex(c => extractChapterNumber(c) === targetNum);
+      if (idx !== -1) {
+        foundCh = enChapters[idx];
+        foundIdx = idx;
+        foundLang = 'en';
+      }
+    }
+
+    if (!foundCh) {
+      const idx = idChapters.findIndex(c => extractChapterNumber(c) === targetNum);
+      if (idx !== -1) {
+        foundCh = idChapters[idx];
+        foundIdx = idx;
+        foundLang = 'id';
+      }
+    }
+
+    if (!foundCh && !isEnHint) {
+      const idx = enChapters.findIndex(c => extractChapterNumber(c) === targetNum);
+      if (idx !== -1) {
+        foundCh = enChapters[idx];
+        foundIdx = idx;
+        foundLang = 'en';
+      }
+    }
+  }
+
+  // 6. Closest chapter number fallback (e.g. 87.1 or within 0.5)
+  if (!foundCh && !isNaN(targetNum)) {
+    const findClosestIn = (pool) => {
+      let best = -1;
+      let minDiff = Infinity;
+      pool.forEach((c, i) => {
+        const n = extractChapterNumber(c);
+        if (!isNaN(n)) {
+          const diff = Math.abs(n - targetNum);
+          if (diff < minDiff) {
+            minDiff = diff;
+            best = i;
+          }
+        }
+      });
+      return (minDiff <= 1.0) ? best : -1;
+    };
+
+    if (isEnHint) {
+      const cIdx = findClosestIn(enChapters);
+      if (cIdx !== -1) {
+        foundCh = enChapters[cIdx];
+        foundIdx = cIdx;
+        foundLang = 'en';
+      }
+    }
+    if (!foundCh) {
+      const cIdx = findClosestIn(idChapters);
+      if (cIdx !== -1) {
+        foundCh = idChapters[cIdx];
+        foundIdx = cIdx;
+        foundLang = 'id';
+      }
+    }
+    if (!foundCh && !isEnHint) {
+      const cIdx = findClosestIn(enChapters);
+      if (cIdx !== -1) {
+        foundCh = enChapters[cIdx];
+        foundIdx = cIdx;
+        foundLang = 'en';
+      }
+    }
+  }
+
+  // 7. If found in unified pool, launch reader immediately with accurate chapter & language!
+  if (foundCh && foundIdx !== -1) {
+    state.activeDetailLang = foundLang;
+    state.currentReadingLang = foundLang;
+    openUnifiedChapter(foundCh, foundIdx);
     return;
   }
 
-  // Otherwise launch immediate reader with fallback, and background hydration will update it as soon as loaded
-  if (isEn || (chapterId && chapterId.startsWith('http') && (mangaId.includes('english') || chapterId.includes('mangapill')))) {
+  // 8. Fallback if chapter list could not be retrieved from network:
+  const fallbackLang = (isEnHint || (enChapters.length > 0 && idChapters.length === 0)) ? 'en' : 'id';
+  state.activeDetailLang = fallbackLang;
+  state.currentReadingLang = fallbackLang;
+
+  if (fallbackLang === 'en' || (chapterId && chapterId.startsWith('http') && (mangaId.includes('english') || chapterId.includes('mangapill')))) {
     state.currentSource = 'english';
-    const chapters = state.englishChapters?.length > 0 ? state.englishChapters : [{ url: chapterId, title: chapterNum || 'Chapter' }];
-    const idx = chapters.findIndex(c => c.url === chapterId || c.id === chapterId);
+    const chapters = enChapters.length > 0 ? enChapters.map(c => c.raw || c) : (state.englishChapters?.length > 0 ? state.englishChapters : [{ url: chapterId, title: chapterNum || 'Chapter' }]);
+    const idx = chapters.findIndex(c => c.url === chapterId || c.id === chapterId || (!isNaN(targetNum) && extractChapterNumber(c) === targetNum));
     openEnglishReader(chapterId, chapterNum || 'Chapter', chapters, idx !== -1 ? idx : 0);
     return;
   }
 
   if (chapterId && chapterId.startsWith('http')) {
     state.currentSource = 'bacakomik';
-    const chapters = state.externalChapters?.length > 0 ? state.externalChapters : [{ url: chapterId, title: chapterNum || 'Chapter' }];
-    const idx = chapters.findIndex(c => c.url === chapterId || c.id === chapterId);
+    const chapters = idChapters.length > 0 ? idChapters.map(c => c.raw || c) : (state.externalChapters?.length > 0 ? state.externalChapters : [{ url: chapterId, title: chapterNum || 'Chapter' }]);
+    const idx = chapters.findIndex(c => c.url === chapterId || c.id === chapterId || (!isNaN(targetNum) && extractChapterNumber(c) === targetNum));
     openExternalReader(chapterId, chapterNum || 'Chapter', chapters, idx !== -1 ? idx : 0);
     return;
   }
 
   // MangaDex chapter ID
   const mdChapters = state.allMangaDexChapters?.length > 0 ? state.allMangaDexChapters : (state.currentChapters || []);
-  const idx = mdChapters.findIndex(c => c.id === chapterId);
+  const idx = mdChapters.findIndex(c => c.id === chapterId || (!isNaN(targetNum) && extractChapterNumber(c) === targetNum));
   openReader(chapterId, idx !== -1 ? idx : 0);
-  return;
-
-  if (typeof window.openMangaDetail === 'function') {
-    window.openMangaDetail(mangaId);
-  }
 }
 
 window.resumeReadingChapter = resumeReadingChapter;
@@ -445,7 +569,7 @@ export async function renderHistoryList() {
     });
 
     card.querySelector('.btn-resume-reading')?.addEventListener('click', () => {
-      resumeReadingChapter(item.mangaId, item.chapterId, item.chapterNum);
+      resumeReadingChapter(item.mangaId, item.chapterId, item.chapterNum, item);
     });
 
     grid.appendChild(card);

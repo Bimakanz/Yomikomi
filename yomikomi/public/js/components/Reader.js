@@ -20,33 +20,39 @@ export function getReaderStageUrl(rawUrl, stage = 0, retryTimestamp = null) {
     cleanUrl = decodeURIComponent(cleanUrl.replace(/^\/api\/proxy[-/]image\?url=/, ''));
   }
 
+  const ts = retryTimestamp || Date.now();
   const isMangaDex = cleanUrl.includes('mangadex.org') || cleanUrl.includes('mangadex.network');
 
   if (isMangaDex) {
-    const qs = retryTimestamp ? `&retry=${retryTimestamp}` : '';
     if (stage === 0) {
+      const qs = retryTimestamp ? `&retry=${retryTimestamp}` : '';
       return `/api/proxy/image?url=${encodeURIComponent(cleanUrl)}${qs}`;
     } else if (stage === 1) {
-      const cacheBust = retryTimestamp || Date.now();
-      return `/api/proxy/image?url=${encodeURIComponent(cleanUrl)}&t=${cacheBust}&stage=1`;
+      // Stage 1: Try alternate format (swap data-saver <-> data)
+      let altUrl = cleanUrl;
+      if (altUrl.includes('/data-saver/')) {
+        altUrl = altUrl.replace('/data-saver/', '/data/');
+      } else if (altUrl.includes('/data/')) {
+        altUrl = altUrl.replace('/data/', '/data-saver/');
+      }
+      return `/api/proxy/image?url=${encodeURIComponent(altUrl)}&t=${ts}&stage=1`;
     } else {
-      const cacheBust = retryTimestamp || Date.now();
-      return `/api/proxy/image?url=${encodeURIComponent(cleanUrl)}&t=${cacheBust}&retry=last`;
+      // Stage 2: Public edge CDN proxy with WebP converter
+      return `https://wsrv.nl/?url=${encodeURIComponent(cleanUrl)}&we=1&n=-1&t=${ts}`;
     }
   }
 
+  // Non-MangaDex mirrors (Komiku, Komikindo, Mangapill)
   if (stage === 0) {
     const qs = retryTimestamp ? `&retry=${retryTimestamp}` : '';
     return `/api/proxy/image?url=${encodeURIComponent(cleanUrl)}${qs}`;
   } else if (stage === 1) {
-    const sep = cleanUrl.includes('?') ? '&' : '?';
-    const qs = retryTimestamp ? `${sep}retry=${retryTimestamp}` : '';
-    return cleanUrl + qs;
-  } else if (stage === 2) {
-    const cacheBust = retryTimestamp || Date.now();
-    return `https://wsrv.nl/?url=${encodeURIComponent(cleanUrl)}&we=1&n=-1&t=${cacheBust}`;
+    // Stage 1: Retry through proxy with alt flag (NEVER direct unproxied third-party URL!)
+    return `/api/proxy/image?url=${encodeURIComponent(cleanUrl)}&alt=1&t=${ts}`;
+  } else {
+    // Stage 2: Edge CDN fallback (wsrv.nl)
+    return `https://wsrv.nl/?url=${encodeURIComponent(cleanUrl)}&we=1&n=-1&t=${ts}`;
   }
-  return cleanUrl;
 }
 
 window.getReaderStageUrl = getReaderStageUrl;
@@ -61,7 +67,7 @@ export function loadReaderPageImage(imgEl) {
 
   imgEl.dataset.retryStage = '0';
   imgEl.removeAttribute('referrerpolicy');
-  imgEl.crossOrigin = 'anonymous';
+  imgEl.removeAttribute('crossorigin');
   imgEl.src = getReaderStageUrl(rawUrl, 0);
 }
 
@@ -143,17 +149,15 @@ export function handlePageImageError(imgEl) {
     const nextStage = stage + 1;
     imgEl.dataset.retryStage = String(nextStage);
 
-    if (nextStage === 1) {
-      imgEl.referrerPolicy = 'no-referrer';
-      imgEl.crossOrigin = 'anonymous';
-      imgEl.src = getReaderStageUrl(rawUrl, 1);
-      return;
-    } else if (nextStage === 2) {
+    // Exponential backoff between retries to allow failovers to settle
+    const backoffMs = nextStage === 1 ? 500 : 1200;
+    setTimeout(() => {
+      if (!imgEl.isConnected) return;
       imgEl.removeAttribute('crossorigin');
       imgEl.removeAttribute('referrerpolicy');
-      imgEl.src = getReaderStageUrl(rawUrl, 2, Date.now());
-      return;
-    }
+      imgEl.src = getReaderStageUrl(rawUrl, nextStage, Date.now());
+    }, backoffMs);
+    return;
   }
 
   imgEl.dataset.retryStage = '3';
@@ -179,7 +183,7 @@ export function handlePageImageError(imgEl) {
 
     imgEl.dataset.retryStage = '0';
     imgEl.removeAttribute('referrerpolicy');
-    imgEl.crossOrigin = 'anonymous';
+    imgEl.removeAttribute('crossorigin');
     const retryTimestamp = Date.now();
     imgEl.src = getReaderStageUrl(rawUrl, 0, retryTimestamp);
   });

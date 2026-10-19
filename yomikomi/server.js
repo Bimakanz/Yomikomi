@@ -73,12 +73,67 @@ try {
   publicResolver.setServers(['1.1.1.1', '8.8.8.8', '1.0.0.1']);
 } catch (e) {}
 
-// Custom DNS lookup with dual IP rotation to bypass ISP DNS hijacking and prevent DDoS Guard throttling
+// Anti-ISP DNS Hijack & DoH Resolution Engine
 const MANGADEX_IPS = [
   { address: '45.129.229.1', family: 4 },
   { address: '45.129.229.2', family: 4 }
 ];
+const CLOUDFLARE_MANGADEX_NETWORK_IPS = [
+  { address: '104.26.3.73', family: 4 },
+  { address: '172.67.73.44', family: 4 },
+  { address: '104.26.2.73', family: 4 }
+];
 let ipCounter = 0;
+const dohCache = new Map();
+
+function isIspHijacked(ip) {
+  if (!ip || typeof ip !== 'string') return false;
+  return (
+    ip.startsWith('36.86.') ||      // Telkom Internet Positif
+    ip.startsWith('158.140.') ||    // Moratel / TrustPositif
+    ip.startsWith('180.250.') ||    // Telkomsel
+    ip.startsWith('118.98.') ||     // Kemdikbud / Telkom
+    ip.startsWith('202.134.') ||    // Telkom DNS
+    ip.startsWith('103.10.') ||     // TrustPositif redirect
+    ip.startsWith('103.149.') ||    // FirstMedia block
+    ip.startsWith('10.0.') ||
+    ip.startsWith('127.') ||
+    ip === '0.0.0.0'
+  );
+}
+
+async function queryDoH(hostname) {
+  if (dohCache.has(hostname)) {
+    const item = dohCache.get(hostname);
+    if (Date.now() < item.exp) return item.ips;
+  }
+  try {
+    const res = await fetch(`https://dns.google/resolve?name=${encodeURIComponent(hostname)}&type=A`, {
+      signal: AbortSignal.timeout(2500)
+    });
+    const j = await res.json();
+    const ips = (j.Answer || []).filter(a => a.type === 1).map(a => a.data).filter(ip => !isIspHijacked(ip));
+    if (ips.length > 0) {
+      dohCache.set(hostname, { ips, exp: Date.now() + 600000 });
+      return ips;
+    }
+  } catch (e) {}
+
+  try {
+    const res2 = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(hostname)}&type=A`, {
+      headers: { accept: 'application/dns-json' },
+      signal: AbortSignal.timeout(2500)
+    });
+    const j2 = await res2.json();
+    const ips2 = (j2.Answer || []).filter(a => a.type === 1).map(a => a.data).filter(ip => !isIspHijacked(ip));
+    if (ips2.length > 0) {
+      dohCache.set(hostname, { ips: ips2, exp: Date.now() + 600000 });
+      return ips2;
+    }
+  } catch (e2) {}
+
+  return null;
+}
 
 function customLookup(hostname, options, callback) {
   if (typeof options === 'function') {
@@ -92,32 +147,76 @@ function customLookup(hostname, options, callback) {
     return dns.lookup(hostname, options, callback);
   }
 
+  // MangaDex official domains: bypass ISP DNS completely with static Anycast DDoS-Guard IPs
+  if (h === 'api.mangadex.org' || h === 'uploads.mangadex.org' || h.endsWith('.mangadex.org')) {
+    if (options && options.all) {
+      return callback(null, MANGADEX_IPS);
+    }
+    const ip = MANGADEX_IPS[ipCounter++ % MANGADEX_IPS.length].address;
+    return callback(null, ip, 4);
+  }
+
+  // MangaDex @Home volunteer nodes (*.mangadex.network): resolve via DoH or Cloudflare Anycast IPs
+  if (h.endsWith('.mangadex.network')) {
+    queryDoH(h).then(ips => {
+      if (ips && ips.length > 0) {
+        if (options && options.all) {
+          return callback(null, ips.map(a => ({ address: a, family: 4 })));
+        }
+        return callback(null, ips[0], 4);
+      }
+      if (options && options.all) return callback(null, CLOUDFLARE_MANGADEX_NETWORK_IPS);
+      return callback(null, CLOUDFLARE_MANGADEX_NETWORK_IPS[0].address, 4);
+    }).catch(() => {
+      if (options && options.all) return callback(null, CLOUDFLARE_MANGADEX_NETWORK_IPS);
+      return callback(null, CLOUDFLARE_MANGADEX_NETWORK_IPS[0].address, 4);
+    });
+    return;
+  }
+
   // Native system DNS lookup first
   dns.lookup(hostname, options, (err, address, family) => {
-    // Detect Indonesian ISP DNS poisoning (TrustPositif / Internet Positif 158.140.x.x)
-    const isHijacked = !err && (
-      (typeof address === 'string' && address.startsWith('158.140.')) ||
-      (Array.isArray(address) && address.some(a => a.address && a.address.startsWith('158.140.')))
-    );
+    let checkIp = '';
+    if (Array.isArray(address) && address[0]) {
+      checkIp = address[0].address || '';
+    } else if (typeof address === 'string') {
+      checkIp = address;
+    }
 
-    if (err || isHijacked) {
-      // Fallback to public DNS resolver (1.1.1.1 / 8.8.8.8)
-      publicResolver.resolve4(hostname, (resErr, addresses) => {
-        if (!resErr && addresses && addresses.length > 0) {
+    const hijacked = isIspHijacked(checkIp);
+
+    if (err || hijacked) {
+      // Fallback 1: Query DoH
+      queryDoH(h).then(ips => {
+        if (ips && ips.length > 0) {
           if (options && options.all) {
-            return callback(null, addresses.map(addr => ({ address: addr, family: 4 })));
+            return callback(null, ips.map(a => ({ address: a, family: 4 })));
           }
-          return callback(null, addresses[0], 4);
+          return callback(null, ips[0], 4);
         }
-        // Last resort fallback for MangaDex
-        if (h === 'api.mangadex.org' || h === 'uploads.mangadex.org' || h.endsWith('.mangadex.org')) {
-          if (options && options.all) {
-            return callback(null, MANGADEX_IPS);
+        // Fallback 2: Public DNS Resolver (1.1.1.1 / 8.8.8.8)
+        publicResolver.resolve4(hostname, (resErr, addresses) => {
+          if (!resErr && addresses && addresses.length > 0) {
+            const clean = addresses.filter(a => !isIspHijacked(a));
+            if (clean.length > 0) {
+              if (options && options.all) {
+                return callback(null, clean.map(addr => ({ address: addr, family: 4 })));
+              }
+              return callback(null, clean[0], 4);
+            }
           }
-          const ip = MANGADEX_IPS[ipCounter++ % MANGADEX_IPS.length].address;
-          return callback(null, ip, 4);
-        }
-        callback(err || new Error(`DNS resolution failed for ${hostname}`));
+          callback(err || new Error(`DNS resolution failed or hijacked for ${hostname}`));
+        });
+      }).catch(() => {
+        publicResolver.resolve4(hostname, (resErr, addresses) => {
+          if (!resErr && addresses && addresses.length > 0) {
+            if (options && options.all) {
+              return callback(null, addresses.map(addr => ({ address: addr, family: 4 })));
+            }
+            return callback(null, addresses[0], 4);
+          }
+          callback(err || new Error(`DNS resolution failed for ${hostname}`));
+        });
       });
       return;
     }
@@ -410,7 +509,7 @@ app.get('/api/manga/:id/chapters', async (req, res) => {
 app.get('/api/chapter/:chapterId', async (req, res) => {
   try {
     const { chapterId } = req.params;
-    const cacheKey = `athome_v3_${chapterId}`;
+    const cacheKey = `athome_v4_${chapterId}`;
     const cached = getCache(cacheKey);
     if (cached) return res.json(cached);
 
@@ -429,13 +528,13 @@ app.get('/api/chapter/:chapterId', async (req, res) => {
     const originalFiles = data.chapter.data || [];
     const totalPages = Math.max(dataSaverFiles.length, originalFiles.length);
 
-    // Primary URLs: prioritize uploads.mangadex.org data-saver for stability, speed, and 70% smaller size
-    const dataSaverPages = dataSaverFiles.map(fn => `${cdnBase}/data-saver/${hash}/${fn}`);
-    const originalPages = originalFiles.map(fn => `${cdnBase}/data/${hash}/${fn}`);
+    // Primary URLs: Use assigned homeBase node for high-speed, authorized, unthrottled streaming
+    const dataSaverPages = dataSaverFiles.map(fn => `${homeBase}/data-saver/${hash}/${fn}`);
+    const originalPages = originalFiles.map(fn => `${homeBase}/data/${hash}/${fn}`);
 
-    // Home volunteer node URLs
-    const homeDataSaverPages = dataSaverFiles.map(fn => `${homeBase}/data-saver/${hash}/${fn}`);
-    const homeOriginalPages = originalFiles.map(fn => `${homeBase}/data/${hash}/${fn}`);
+    // High-availability CDN fallback URLs
+    const cdnDataSaverPages = dataSaverFiles.map(fn => `${cdnBase}/data-saver/${hash}/${fn}`);
+    const cdnOriginalPages = originalFiles.map(fn => `${cdnBase}/data/${hash}/${fn}`);
 
     // Rich page objects with multi-tier fallback URLs
     const pageDetails = [];
@@ -444,12 +543,12 @@ app.get('/api/chapter/:chapterId', async (req, res) => {
       const origFn = originalFiles[i] || dataSaverFiles[i];
       pageDetails.push({
         pageNumber: i + 1,
-        // High stability CDN
-        dataSaverUrl: `${cdnBase}/data-saver/${hash}/${dsFn}`,
-        originalUrl: `${cdnBase}/data/${hash}/${origFn}`,
-        // MangaDex@Home volunteer node
-        homeDataSaverUrl: `${homeBase}/data-saver/${hash}/${dsFn}`,
-        homeOriginalUrl: `${homeBase}/data/${hash}/${origFn}`
+        // Primary At-Home node
+        dataSaverUrl: `${homeBase}/data-saver/${hash}/${dsFn}`,
+        originalUrl: `${homeBase}/data/${hash}/${origFn}`,
+        // CDN fallback
+        cdnDataSaverUrl: `${cdnBase}/data-saver/${hash}/${dsFn}`,
+        cdnOriginalUrl: `${cdnBase}/data/${hash}/${origFn}`
       });
     }
 
@@ -460,8 +559,10 @@ app.get('/api/chapter/:chapterId', async (req, res) => {
       hash: hash,
       pages: originalPages,
       dataSaverPages: dataSaverPages,
-      homePages: homeOriginalPages,
-      homeDataSaverPages: homeDataSaverPages,
+      homePages: originalPages,
+      homeDataSaverPages: dataSaverPages,
+      cdnPages: cdnOriginalPages,
+      cdnDataSaverPages: cdnDataSaverPages,
       pageDetails: pageDetails,
       totalPages: totalPages
     };
@@ -474,7 +575,7 @@ app.get('/api/chapter/:chapterId', async (req, res) => {
   }
 });
 
-// 7. Cover Art Proxy with LOCAL DISK CACHING (Instant 0ms on repeat views)
+// 7. Cover Art Proxy with LOCAL DISK CACHING & Multi-Tier Fallback (Instant 0ms on repeat views)
 app.get('/api/cover/:mangaId/:filename', (req, res) => {
   const { mangaId, filename } = req.params;
   const safeFilename = `${mangaId}_${filename}`;
@@ -487,47 +588,86 @@ app.get('/api/cover/:mangaId/:filename', (req, res) => {
     return fs.createReadStream(diskPath).pipe(res);
   }
 
-  // Otherwise, fetch from MangaDex, save to disk, and stream to client
-  const targetPath = `/covers/${mangaId}/${filename}`;
-  const options = {
-    hostname: 'uploads.mangadex.org',
-    port: 443,
-    path: targetPath,
-    method: 'GET',
-    agent: httpsAgent,
-    headers: {
-      'User-Agent': 'MangaDexPersonalReader/1.0',
-      'Referer': 'https://mangadex.org/'
-    }
+  // Helper to fetch from MangaDex
+  const fetchMangaDexCover = (targetFn) => {
+    return new Promise((resolve, reject) => {
+      const targetPath = `/covers/${mangaId}/${targetFn}`;
+      const options = {
+        hostname: 'uploads.mangadex.org',
+        port: 443,
+        path: targetPath,
+        method: 'GET',
+        agent: httpsAgent,
+        lookup: customLookup,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+          'Referer': 'https://mangadex.org/'
+        },
+        timeout: 8000
+      };
+
+      const proxyReq = https.request(options, (proxyRes) => {
+        if (proxyRes.statusCode === 200) {
+          const chunks = [];
+          proxyRes.on('data', c => chunks.push(c));
+          proxyRes.on('end', () => resolve({
+            buffer: Buffer.concat(chunks),
+            contentType: proxyRes.headers['content-type'] || 'image/jpeg'
+          }));
+        } else {
+          reject(new Error(`Status ${proxyRes.statusCode}`));
+        }
+      });
+      proxyReq.on('timeout', () => { proxyReq.destroy(); reject(new Error('Cover fetch timeout')); });
+      proxyReq.on('error', reject);
+      proxyReq.end();
+    });
   };
 
-  const proxyReq = https.request(options, (proxyRes) => {
-    if (proxyRes.statusCode !== 200) {
-      if (filename.endsWith('.512.jpg') || filename.endsWith('.256.jpg')) {
-        const rawFilename = filename.replace(/\.(512|256)\.jpg$/, '');
-        return res.redirect(302, `/api/cover/${mangaId}/${rawFilename}`);
-      }
-      return res.status(proxyRes.statusCode).end();
-    }
-
-    res.writeHead(200, {
-      'Content-Type': proxyRes.headers['content-type'] || 'image/jpeg',
-      'Cache-Control': 'public, max-age=2592000, s-maxage=2592000, stale-while-revalidate=86400, immutable'
-    });
-
+  (async () => {
     try {
-      const fileStream = fs.createWriteStream(diskPath);
-      proxyRes.pipe(fileStream);
-    } catch (e) {}
-    proxyRes.pipe(res);
-  });
+      let coverData = null;
+      try {
+        coverData = await fetchMangaDexCover(filename);
+      } catch (e1) {
+        // Fallback 1: If requested .512.jpg or .256.jpg failed, try raw filename
+        if (filename.endsWith('.512.jpg') || filename.endsWith('.256.jpg')) {
+          const rawFn = filename.replace(/\.(512|256)\.jpg$/, '');
+          try {
+            coverData = await fetchMangaDexCover(rawFn);
+          } catch (e2) {}
+        }
+      }
 
-  proxyReq.on('error', (err) => {
-    console.error(`Error proxying cover ${filename}:`, err.message);
-    res.status(502).end();
-  });
+      // Fallback 2: wsrv.nl Edge CDN proxy
+      if (!coverData) {
+        try {
+          const wsrvUrl = `https://wsrv.nl/?url=https://uploads.mangadex.org/covers/${mangaId}/${filename}&output=jpg&q=80`;
+          const wsrvRes = await fetch(wsrvUrl, { signal: AbortSignal.timeout(5000) });
+          if (wsrvRes.ok) {
+            const arrBuf = await wsrvRes.arrayBuffer();
+            coverData = { buffer: Buffer.from(arrBuf), contentType: 'image/jpeg' };
+          }
+        } catch (e3) {}
+      }
 
-  proxyReq.end();
+      if (coverData && coverData.buffer && coverData.buffer.length > 500) {
+        try {
+          fs.writeFileSync(diskPath, coverData.buffer);
+        } catch (e) {}
+        res.writeHead(200, {
+          'Content-Type': coverData.contentType,
+          'Cache-Control': 'public, max-age=2592000, s-maxage=2592000, stale-while-revalidate=86400, immutable'
+        });
+        return res.end(coverData.buffer);
+      }
+
+      // Fallback 3: Clean placeholder image
+      res.redirect(302, 'https://placehold.co/300x420/1e2025/ffffff?text=Cover');
+    } catch (err) {
+      res.redirect(302, 'https://placehold.co/300x420/1e2025/ffffff?text=Cover');
+    }
+  })();
 });
 
 // ==========================================
@@ -746,7 +886,37 @@ app.get('/api/external/chapter-pages', async (req, res) => {
   }
 });
 
-// Strengthened Image Proxy to bypass hotlink referer protection with 12s AbortController timeout
+// In-memory LRU Image Cache (max 250 images, TTL 1 hour)
+const proxyImageMemoryCache = new Map();
+const MAX_PROXY_IMAGE_CACHE_ENTRIES = 250;
+const PROXY_IMAGE_CACHE_TTL = 60 * 60 * 1000; // 1 hour
+
+function getCachedProxyImage(key) {
+  const item = proxyImageMemoryCache.get(key);
+  if (!item) return null;
+  if (Date.now() > item.expiresAt) {
+    proxyImageMemoryCache.delete(key);
+    return null;
+  }
+  // LRU bump
+  proxyImageMemoryCache.delete(key);
+  proxyImageMemoryCache.set(key, item);
+  return item;
+}
+
+function setCachedProxyImage(key, buffer, contentType) {
+  if (proxyImageMemoryCache.size >= MAX_PROXY_IMAGE_CACHE_ENTRIES) {
+    const oldestKey = proxyImageMemoryCache.keys().next().value;
+    proxyImageMemoryCache.delete(oldestKey);
+  }
+  proxyImageMemoryCache.set(key, {
+    buffer,
+    contentType: contentType || 'image/jpeg',
+    expiresAt: Date.now() + PROXY_IMAGE_CACHE_TTL
+  });
+}
+
+// Strengthened Image Proxy with Multi-Tier Fallbacks, DoH, and Smart Anti-Hotlink Bypasses
 app.get(['/api/proxy-image', '/api/proxy/image'], async (req, res) => {
   let imageUrl = req.query.url;
   if (!imageUrl) return res.status(400).end();
@@ -773,35 +943,69 @@ app.get(['/api/proxy-image', '/api/proxy/image'], async (req, res) => {
     }
   }
 
+  // Fast Memory Cache Hit
+  const cacheKey = `img_${imageUrl}`;
+  const memCached = getCachedProxyImage(cacheKey);
+  if (memCached) {
+    res.writeHead(200, {
+      'Content-Type': memCached.contentType,
+      'Cache-Control': 'public, max-age=604800, stale-while-revalidate=86400',
+      'Access-Control-Allow-Origin': '*'
+    });
+    return res.end(memCached.buffer);
+  }
+
   try {
     const parsed = new URL(imageUrl);
     const host = parsed.hostname.toLowerCase();
     const isMangaDex = host.includes('mangadex.org') || host.includes('mangadex.network');
 
     // Smart Referer determination:
-    // ALWAYS enforce https://mangadex.org/ for MangaDex domains to defeat anti-hotlink placeholder
-    let referer = 'https://mangadex.org/';
-    if (!isMangaDex) {
-      if (req.query.referer) {
-        referer = req.query.referer;
-      } else if (host.includes('readdetectiveconan.com') || host.includes('mangapill.com')) {
-        referer = 'https://mangapill.com/';
-      } else if (host.includes('komikindo.ch') || host.includes('komikindo')) {
-        referer = 'https://komikindo.ch/';
-      } else if (host.includes('komiku.org') || host.includes('komiku.to') || host.includes('komiku')) {
-        referer = 'https://komiku.org/';
-      } else {
-        referer = `${parsed.protocol}//${parsed.host}/`;
+    function getSmartReferer(targetUrl) {
+      if (req.query.referer) return req.query.referer;
+      const u = new URL(targetUrl);
+      const h = u.hostname.toLowerCase();
+      if (
+        h.includes('googleusercontent.com') ||
+        h.includes('blogspot.com') ||
+        h.includes('ggpht.com') ||
+        h.includes('wp.com') ||
+        h.includes('wordpress.com')
+      ) {
+        return ''; // Google & WordPress Photon block foreign Referers with 403 Forbidden
       }
+      if (h.includes('mangadex.org') || h.includes('mangadex.network')) {
+        return 'https://mangadex.org/';
+      }
+      if (h.includes('readdetectiveconan.com') || h.includes('mangapill.com')) {
+        return 'https://mangapill.com/';
+      }
+      if (h.includes('komikindo.ch') || h.includes('komikindo')) {
+        return 'https://komikindo.ch/';
+      }
+      if (h.includes('komiku.org') || h.includes('komiku.to') || h.includes('komiku')) {
+        return 'https://komiku.org/';
+      }
+      return `${u.protocol}//${u.host}/`;
     }
 
-    function fetchProxyStream(targetUrl, currentReferer, redirectCount = 0) {
+    // Single Stream Fetch with 7.5s Timeout
+    function fetchSingleStream(targetUrl, currentReferer, redirectCount = 0) {
       return new Promise((resolve, reject) => {
         if (redirectCount > 3) return reject(new Error('Too many redirects'));
         const u = new URL(targetUrl);
         const isHttps = u.protocol === 'https:';
         const client = isHttps ? https : http;
         const agent = isHttps ? httpsAgent : null;
+
+        const headers = {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+          'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9,id;q=0.8'
+        };
+        if (currentReferer) {
+          headers['Referer'] = currentReferer;
+        }
 
         const reqOpts = {
           protocol: u.protocol,
@@ -811,19 +1015,14 @@ app.get(['/api/proxy-image', '/api/proxy/image'], async (req, res) => {
           method: 'GET',
           agent: agent,
           lookup: customLookup,
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-            'Referer': currentReferer,
-            'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.9,id;q=0.8'
-          },
-          timeout: 15000
+          headers: headers,
+          timeout: 7500
         };
 
         const req = client.request(reqOpts, (proxyRes) => {
           if (proxyRes.statusCode >= 300 && proxyRes.statusCode < 400 && proxyRes.headers.location) {
             const redirectUrl = new URL(proxyRes.headers.location, targetUrl).href;
-            return resolve(fetchProxyStream(redirectUrl, currentReferer, redirectCount + 1));
+            return resolve(fetchSingleStream(redirectUrl, currentReferer, redirectCount + 1));
           }
 
           if (proxyRes.statusCode < 200 || proxyRes.statusCode >= 300) {
@@ -844,55 +1043,93 @@ app.get(['/api/proxy-image', '/api/proxy/image'], async (req, res) => {
         });
 
         req.on('timeout', () => {
-          req.destroy(new Error('Proxy request timed out after 15s'));
+          req.destroy(new Error('Proxy request timed out'));
         });
         req.on('error', reject);
         req.end();
       });
     }
 
-    let proxyResult = await fetchProxyStream(imageUrl, referer);
-    let imageBuffer = proxyResult.buffer;
+    // Build ordered list of candidate URLs for multi-tier resilience
+    const candidates = [];
 
-    // MangaDex Anti-Hotlink Placeholder Banner Guard (exact size ~59480 bytes)
-    if (isMangaDex && imageBuffer && imageBuffer.length >= 59400 && imageBuffer.length <= 59600) {
-      console.warn(`[Proxy Guard] Intercepted MangaDex anti-hotlink banner (${imageBuffer.length} bytes) for ${imageUrl}. Retrying via alternate direct CDN node...`);
+    // For Komiku: if url is on timing-out image3/image4, prioritize alive image2.komiku.to
+    if (host.includes('komiku.to')) {
+      const aliveUrl = imageUrl.replace(/^https?:\/\/image\d*\.komiku\.to\//i, 'https://image2.komiku.to/');
+      candidates.push({ url: aliveUrl, referer: 'https://komiku.org/' });
+      if (aliveUrl !== imageUrl) {
+        candidates.push({ url: imageUrl, referer: getSmartReferer(imageUrl) });
+      }
+    } else {
+      candidates.push({ url: imageUrl, referer: getSmartReferer(imageUrl) });
+    }
+
+    if (isMangaDex) {
+      // If node is At-Home (*.mangadex.network), add official CDN fallback
+      if (host.includes('mangadex.network')) {
+        const cdnUrl = `https://uploads.mangadex.org${parsed.pathname}${parsed.search}`;
+        candidates.push({ url: cdnUrl, referer: 'https://mangadex.org/' });
+      }
+
+      // If requested /data-saver/, add /data/ as fallback (and vice-versa)
+      if (parsed.pathname.includes('/data-saver/')) {
+        const fullResPath = parsed.pathname.replace('/data-saver/', '/data/');
+        candidates.push({ url: `https://uploads.mangadex.org${fullResPath}${parsed.search}`, referer: 'https://mangadex.org/' });
+      } else if (parsed.pathname.includes('/data/')) {
+        const saverPath = parsed.pathname.replace('/data/', '/data-saver/');
+        candidates.push({ url: `https://uploads.mangadex.org${saverPath}${parsed.search}`, referer: 'https://mangadex.org/' });
+      }
+
+      // Public Edge Proxy fallback (wsrv.nl)
+      candidates.push({
+        url: `https://wsrv.nl/?url=${encodeURIComponent(imageUrl)}&we=1&n=-1`,
+        referer: ''
+      });
+    } else {
+      // Non-MangaDex mirrors (Komiku, Mangapill, etc.)
+      // Retry candidate with clean empty Referer (bypasses strict CDN referer validations)
+      candidates.push({ url: imageUrl, referer: '' });
+      // Edge CDN fallback
+      candidates.push({
+        url: `https://wsrv.nl/?url=${encodeURIComponent(imageUrl)}&we=1&n=-1`,
+        referer: ''
+      });
+    }
+
+    let successfulResult = null;
+    let lastError = null;
+
+    for (const cand of candidates) {
       try {
-        const altBuffer = await new Promise((resolve, reject) => {
-          const reqOpts = {
-            hostname: '45.129.229.2',
-            path: parsed.pathname + parsed.search,
-            headers: {
-              'Host': 'uploads.mangadex.org',
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-              'Referer': 'https://mangadex.org/'
-            },
-            servername: 'uploads.mangadex.org',
-            method: 'GET',
-            timeout: 10000
-          };
-          const altReq = https.request(reqOpts, (proxyRes) => {
-            const ch = [];
-            proxyRes.on('data', c => ch.push(c));
-            proxyRes.on('end', () => resolve(Buffer.concat(ch)));
-            proxyRes.on('error', reject);
-          });
-          altReq.on('timeout', () => altReq.destroy(new Error('Alt retry timeout')));
-          altReq.on('error', reject);
-          altReq.end();
-        });
+        const result = await fetchSingleStream(cand.url, cand.referer);
+        const buf = result.buffer;
 
-        if (altBuffer && (altBuffer.length < 59400 || altBuffer.length > 59600)) {
-          imageBuffer = altBuffer;
-        } else {
-          return res.status(502).json({ error: 'MangaDex hotlink blocked' });
+        // Discard MangaDex anti-hotlink placeholder banner (~59480 bytes)
+        const isPlaceholderBanner = isMangaDex && buf && buf.length >= 59400 && buf.length <= 59600;
+        if (isPlaceholderBanner) {
+          console.warn(`[Proxy Guard] Intercepted anti-hotlink banner (${buf.length} bytes) for ${cand.url}. Proceeding to next candidate...`);
+          continue;
         }
-      } catch (e) {
-        return res.status(502).json({ error: 'MangaDex hotlink blocked' });
+
+        if (buf && buf.length > 200) {
+          successfulResult = result;
+          break;
+        }
+      } catch (err) {
+        lastError = err;
       }
     }
 
-    const contentType = proxyResult.headers['content-type'] || 'image/jpeg';
+    if (!successfulResult) {
+      throw lastError || new Error('All image proxy candidates failed');
+    }
+
+    const contentType = successfulResult.headers['content-type'] || 'image/jpeg';
+    const imageBuffer = successfulResult.buffer;
+
+    // Save to Memory Cache
+    setCachedProxyImage(cacheKey, imageBuffer, contentType);
+
     res.writeHead(200, {
       'Content-Type': contentType,
       'Cache-Control': 'public, max-age=604800, stale-while-revalidate=86400',
@@ -901,7 +1138,7 @@ app.get(['/api/proxy-image', '/api/proxy/image'], async (req, res) => {
 
     res.end(imageBuffer);
   } catch (err) {
-    console.error('Image proxy error:', err.message);
+    console.error('Image proxy final error for', imageUrl, ':', err.message);
     res.status(502).json({ error: 'Bad Gateway: ' + err.message });
   }
 });
@@ -1330,7 +1567,7 @@ app.get(['/api/komiku/chapter-pages', '/api/komiku/chapter/:chapterSlug'], async
     const pages = [];
 
     $('#Baca_Komik img, .main-reading-area img').each((idx, el) => {
-      const src = $(el).attr('data-src') || $(el).attr('src') || '';
+      let src = $(el).attr('data-src') || $(el).attr('src') || '';
       if (
         src &&
         !src.includes('iklan') &&
@@ -1338,6 +1575,8 @@ app.get(['/api/komiku/chapter-pages', '/api/komiku/chapter/:chapterSlug'], async
         !src.includes('promosi') &&
         (src.includes('.webp') || src.includes('.jpg') || src.includes('.jpeg') || src.includes('.png'))
       ) {
+        // Rewrite dead/timing-out mirror subdomains (image3, image4, etc) to high-speed image2
+        src = src.replace(/^https?:\/\/image\d*\.komiku\.to\//i, 'https://image2.komiku.to/');
         pages.push(`/api/proxy-image?url=${encodeURIComponent(src)}`);
       }
     });

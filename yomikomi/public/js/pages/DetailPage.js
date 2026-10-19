@@ -1,6 +1,7 @@
 /**
  * DetailPage
- * Manga Detail view: backdrop, poster, synopsis, tags, bookmarking, and multi-source chapter list
+ * Manga Detail view: backdrop, poster, synopsis, tags, bookmarking,
+ * clean Unified Language Tabs (🇮🇩 Indonesia & 🇬🇧 English), and Smart Chapter Merger
  */
 
 import {
@@ -15,14 +16,12 @@ import {
 } from '../state.js';
 import { isBookmarked, toggleBookmark } from '../services/storage.js';
 import {
-  initSourceTabs,
-  initLanguagePills,
+  initLanguageFilterTabs,
   initOfflineDownloadControls,
-  loadChaptersFeed,
-  updateSortButtonLabel,
-  renderKomikuChaptersList
+  loadUnifiedChapters,
+  toggleChapterSort,
+  openUnifiedChapter
 } from '../components/ChapterList.js';
-import { openReader, openExternalReader } from '../components/Reader.js';
 import { fetchKomikuManga } from '../services/api.js';
 
 export function renderDetailPageMarkup() {
@@ -44,38 +43,19 @@ export function renderDetailPageMarkup() {
           <div class="chapters-header">
             <div class="chapters-title-wrap">
               <h3 class="chapters-title">Daftar Chapter</h3>
-              <span class="chapters-count-badge" id="chapters-total-badge">0 Chapter</span>
+              <span class="chapters-count-badge" id="chapters-total-badge">Memuat chapter...</span>
             </div>
 
-            <!-- Multi-Source Switcher (MangaDex, Indo Mirror, English Mirror) -->
-            <div class="source-tabs" id="source-tabs">
-              <button class="source-tab active" id="source-tab-mangadex" data-source="mangadex">
-                <i data-lucide="shield-check"></i>
-                <span>Server Utama</span>
-              </button>
-              <button class="source-tab" id="source-tab-bacakomik" data-source="bacakomik">
-                <i data-lucide="globe"></i>
-                <span>🇮🇩 Indo Mirror</span>
-              </button>
-              <button class="source-tab" id="source-tab-english" data-source="english">
-                <i data-lucide="book-open"></i>
-                <span>🇬🇧 English Mirror</span>
-              </button>
-            </div>
-
-            <div class="chapters-filter-controls" id="mangadex-filters">
-              <div class="lang-pills-wrap" id="mangadex-lang-pills">
-                <button class="lang-pill active" data-lang="all" type="button" title="Tampilkan seluruh chapter ID & EN">
-                  <span>Semua</span>
-                  <span class="pill-count" id="count-lang-all">0</span>
+            <!-- Clean Unified Language Filter Tabs & Sort Toggle -->
+            <div class="chapters-header-controls">
+              <div class="lang-filter-tabs" id="chapter-lang-tabs">
+                <button class="lang-filter-tab active" data-lang="id" id="tab-lang-id" type="button" title="Chapter Bahasa Indonesia (Gabungan MangaDex & Komiku)">
+                  <span class="lang-tab-label">🇮🇩 Indonesia</span>
+                  <span class="lang-count-badge" id="lang-count-id">0</span>
                 </button>
-                <button class="lang-pill" data-lang="id" type="button" title="Hanya Bahasa Indonesia">
-                  <span>🇮🇩 ID</span>
-                  <span class="pill-count" id="count-lang-id">0</span>
-                </button>
-                <button class="lang-pill" data-lang="en" type="button" title="Hanya English">
-                  <span>🇬🇧 EN</span>
-                  <span class="pill-count" id="count-lang-en">0</span>
+                <button class="lang-filter-tab" data-lang="en" id="tab-lang-en" type="button" title="Chapter English (MangaDex & Mirror)">
+                  <span class="lang-tab-label">🇬🇧 English</span>
+                  <span class="lang-count-badge" id="lang-count-en">0</span>
                 </button>
               </div>
 
@@ -132,7 +112,7 @@ export function renderMangaDetailHero(manga) {
   const author = getAuthorName(manga);
   const status = manga.attributes.status ? manga.attributes.status.toUpperCase() : 'UNKNOWN';
   const year = manga.attributes.year || 'N/A';
-  const desc = manga.attributes.description?.en || manga.attributes.description?.id || 'Tidak ada deskripsi tersedia.';
+  const desc = manga.attributes.description?.id || manga.attributes.description?.en || 'Tidak ada deskripsi tersedia.';
   const tags = manga.attributes.tags?.map(t => t.attributes.name.en) || [];
 
   const backdrop = document.getElementById('detail-backdrop');
@@ -199,13 +179,11 @@ export function renderMangaDetailHero(manga) {
       window.resumeReadingChapter(manga.id, last.chapterId, last.chapterNum);
       return;
     }
-    if (state.currentSource === 'komiku' && state.externalChapters?.length > 0) {
-      const firstCh = state.externalChapters[0];
-      openExternalReader(firstCh.url, firstCh.title, state.externalChapters, 0);
-      return;
-    }
-    if (state.currentChapters.length > 0) {
-      openReader(state.currentChapters[0].id, 0);
+
+    const currentList = state.unifiedChapters?.[state.activeDetailLang] || state.currentChapters || [];
+    if (currentList.length > 0) {
+      const firstCh = currentList[0];
+      openUnifiedChapter(firstCh, 0);
     } else {
       showToast('Tidak ada chapter yang tersedia untuk dibaca.');
     }
@@ -252,6 +230,9 @@ export async function openMangaDetail(mangaId, maybeMangaData = null) {
       chaptersList.innerHTML = `<div class="spinner" style="margin: 2rem auto;"></div>`;
     }
 
+    // Trigger Smart Chapter Merger immediately
+    loadUnifiedChapters(mangaId, state.currentManga);
+
     try {
       const kData = await fetchKomikuManga(slug);
       if (kData) {
@@ -270,7 +251,8 @@ export async function openMangaDetail(mangaId, maybeMangaData = null) {
         };
         CoverCache.set(`komiku-${slug}`, kData.title, kData.coverUrl);
         renderMangaDetailHero(state.currentManga);
-        renderKomikuChaptersList(kData.chapters || [], kData);
+        // Refresh with detailed Komiku chapters
+        loadUnifiedChapters(mangaId, state.currentManga, kData.chapters);
         return;
       }
     } catch (kErr) {
@@ -280,6 +262,7 @@ export async function openMangaDetail(mangaId, maybeMangaData = null) {
     }
   }
 
+  // MangaDex or standard manga
   const existing = state.mangaList?.find(m => m.id === mangaId);
   if (existing) {
     state.currentManga = existing;
@@ -292,8 +275,8 @@ export async function openMangaDetail(mangaId, maybeMangaData = null) {
     chaptersList.innerHTML = `<div class="spinner" style="margin: 2rem auto;"></div>`;
   }
 
-  // Parallel fetch: immediately trigger chapter feed loading simultaneously with manga detail
-  loadChaptersFeed(mangaId);
+  // Parallel fetch: immediately trigger smart chapter merger simultaneously with manga detail
+  loadUnifiedChapters(mangaId, state.currentManga);
 
   try {
     const res = await fetch(`/api/manga/${mangaId}`);
@@ -339,34 +322,9 @@ export function initDetailPageEvents() {
   // Chapter sorting button toggle
   const sortBtn = document.getElementById('chapter-sort-btn');
   sortBtn?.addEventListener('click', () => {
-    const currentOrder = sortBtn.dataset.order || 'asc';
-    const nextOrder = currentOrder === 'asc' ? 'desc' : 'asc';
-    sortBtn.dataset.order = nextOrder;
-
-    if (state.currentSource === 'mangadex') {
-      state.currentSort = nextOrder;
-      updateSortButtonLabel(nextOrder);
-      if (state.currentManga) loadChaptersFeed(state.currentManga.id);
-    } else if (state.currentSource === 'bacakomik') {
-      state.mirrorOrder = nextOrder;
-      updateSortButtonLabel(nextOrder);
-      if (state.rawMirrorChapters && state.activeMirrorComic) {
-        import('../components/ChapterList.js').then(mod => {
-          mod.renderBacakomikChaptersList(state.rawMirrorChapters, state.activeMirrorComic, state.matchedMirrorComics);
-        });
-      }
-    } else if (state.currentSource === 'english') {
-      state.englishOrder = nextOrder;
-      updateSortButtonLabel(nextOrder);
-      if (state.rawEnglishChapters && state.activeEnglishComic) {
-        import('../components/ChapterList.js').then(mod => {
-          mod.renderEnglishChaptersList(state.rawEnglishChapters, state.activeEnglishComic, state.matchedEnglishComics);
-        });
-      }
-    }
+    toggleChapterSort();
   });
 
-  initSourceTabs();
-  initLanguagePills();
+  initLanguageFilterTabs();
   initOfflineDownloadControls();
 }

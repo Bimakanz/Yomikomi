@@ -38,8 +38,10 @@ export const state = {
   activeObjectUrls: [],
   bookmarkSet: new Set(),
   activeDetailSource: 'mangadex',
-  activeDetailLang: 'all',
-  activeDetailSort: 'asc'
+  activeDetailLang: 'id', // 'id' or 'en'
+  activeDetailSort: 'asc', // 'asc' or 'desc'
+  unifiedChapters: { id: [], en: [] },
+  activeChapters: []
 };
 
 // Storage Constants

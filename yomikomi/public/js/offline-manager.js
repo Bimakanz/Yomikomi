@@ -422,7 +422,11 @@
 
         // 2. Fetch Chapter Pages URLs
         let pageUrls = [];
-        if (source === 'bacakomik') {
+        if (source === 'komiku') {
+          const res = await fetch(`/api/komiku/chapter-pages?url=${encodeURIComponent(chapter.url || chapterId)}`);
+          const data = await res.json();
+          pageUrls = data.pages || [];
+        } else if (source === 'bacakomik') {
           const res = await fetch(`/api/external/chapter-pages?url=${encodeURIComponent(chapter.url || chapterId)}`);
           const data = await res.json();
           pageUrls = data.pages || [];

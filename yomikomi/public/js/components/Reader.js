@@ -206,11 +206,11 @@ export async function openReader(chapterId, chapterIndex) {
   const readerContainer = document.getElementById('view-reader');
   if (readerContainer) readerContainer.scrollTop = 0;
 
-  const mangaTitle = getMangaTitle(state.currentManga?.attributes);
-  const chObj = state.currentChapters[chapterIndex] || state.allMangaDexChapters.find(c => c.id === chapterId);
-  const chNum = chObj?.attributes?.chapter ? `Chapter ${chObj.attributes.chapter}` : 'Special Chapter';
-  if (chObj?.attributes?.translatedLanguage) {
-    state.currentReadingLang = chObj.attributes.translatedLanguage;
+  const mangaTitle = getMangaTitle(state.currentManga?.attributes) || state.currentManga?.title || 'Manga';
+  const chObj = state.currentUnifiedChapter || state.currentChapters[chapterIndex] || state.allMangaDexChapters.find(c => c.id === chapterId);
+  const chNum = chObj?.title || (chObj?.attributes?.chapter ? `Chapter ${chObj.attributes.chapter}` : 'Special Chapter');
+  if (chObj?.language || chObj?.attributes?.translatedLanguage) {
+    state.currentReadingLang = chObj.language || chObj.attributes.translatedLanguage;
   }
 
   const viewport = document.getElementById('reader-viewport');
@@ -241,16 +241,31 @@ export async function openReader(chapterId, chapterIndex) {
   document.getElementById('reader-toolbar')?.classList.remove('hidden-bar');
   document.getElementById('reader-footer')?.classList.remove('hidden-bar');
 
-  const dropItems = state.currentChapters.map((ch, idx) => {
-    const lFlag = ch.attributes?.translatedLanguage === 'id' ? 'id' : 'en';
-    const lText = ch.attributes?.translatedLanguage === 'id' ? '[ID]' : '[EN]';
+  const activeChapterPool = (state.activeChapters && state.activeChapters.length > 0)
+    ? state.activeChapters
+    : state.currentChapters;
+
+  const dropItems = activeChapterPool.map((ch, idx) => {
+    const val = ch.id || ch.url;
+    const lFlag = ch.language || (ch.attributes?.translatedLanguage === 'id' ? 'id' : 'en');
+    const lText = lFlag === 'id' ? '[ID]' : '[EN]';
+    const numText = ch.chapterNumStr || ch.attributes?.chapter || idx + 1;
+    const titleText = ch.subTitle || (ch.attributes?.title ? `- ${ch.attributes.title}` : '');
+    const srcText = ch.scanlationGroup ? `[${ch.scanlationGroup}]` : '';
     return {
-      value: ch.id,
-      label: `Chapter ${ch.attributes?.chapter || idx + 1} ${lText} ${ch.attributes?.title ? '- ' + ch.attributes.title : ''}`,
+      value: val,
+      label: `Chapter ${numText} ${lText} ${srcText} ${titleText}`.trim(),
       lang: lFlag
     };
   });
   updateCustomChapterDropdown(dropItems, chapterId, (val) => {
+    if (state.activeChapters && state.activeChapters.length > 0) {
+      const newIdx = state.activeChapters.findIndex(c => (c.id === val || c.url === val));
+      if (newIdx !== -1 && window.openUnifiedChapter) {
+        window.openUnifiedChapter(state.activeChapters[newIdx], newIdx);
+        return;
+      }
+    }
     const newIdx = state.currentChapters.findIndex(c => c.id === val);
     if (newIdx !== -1) {
       openReader(val, newIdx);
@@ -1161,6 +1176,18 @@ export function initScrollPageObserver() {
 }
 
 export function findSmartNextChapter() {
+  if (state.activeChapters && state.activeChapters.length > 0) {
+    if (state.currentChapterIndex < state.activeChapters.length - 1) {
+      return {
+        type: 'unified',
+        chapter: state.activeChapters[state.currentChapterIndex + 1],
+        index: state.currentChapterIndex + 1,
+        isFallback: false
+      };
+    }
+    return null;
+  }
+
   if (state.isExternal) {
     if (state.currentSource === 'english') {
       if (state.currentChapterIndex < state.englishChapters.length - 1) {
@@ -1244,6 +1271,18 @@ export function findSmartNextChapter() {
 }
 
 export function findSmartPrevChapter() {
+  if (state.activeChapters && state.activeChapters.length > 0) {
+    if (state.currentChapterIndex > 0) {
+      return {
+        type: 'unified',
+        chapter: state.activeChapters[state.currentChapterIndex - 1],
+        index: state.currentChapterIndex - 1,
+        isFallback: false
+      };
+    }
+    return null;
+  }
+
   if (state.isExternal) {
     if (state.currentSource === 'english') {
       if (state.currentChapterIndex > 0) {
@@ -1330,6 +1369,13 @@ export function advanceToNextChapter() {
   const next = findSmartNextChapter();
   if (!next) return;
 
+  if (next.type === 'unified') {
+    if (window.openUnifiedChapter) {
+      window.openUnifiedChapter(next.chapter, next.index);
+    }
+    return;
+  }
+
   if (next.type === 'english') {
     openEnglishReader(next.chapter.url, next.chapter.title, state.englishChapters, next.index);
   } else if (next.type === 'bacakomik') {
@@ -1345,6 +1391,13 @@ export function advanceToNextChapter() {
 export function advanceToPrevChapter() {
   const prev = findSmartPrevChapter();
   if (!prev) return;
+
+  if (prev.type === 'unified') {
+    if (window.openUnifiedChapter) {
+      window.openUnifiedChapter(prev.chapter, prev.index);
+    }
+    return;
+  }
 
   if (prev.type === 'english') {
     openEnglishReader(prev.chapter.url, prev.chapter.title, state.englishChapters, prev.index);

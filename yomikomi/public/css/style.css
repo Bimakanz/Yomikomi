@@ -1672,36 +1672,65 @@ img {
   border-bottom: 1px solid var(--border-subtle);
 }
 
-.source-tabs {
-  display: flex;
-  background: var(--bg-card);
-  border-radius: var(--radius-md);
-  padding: 0.25rem;
-  border: 1px solid var(--border-subtle);
-  gap: 0.25rem;
-}
-
-.source-tab {
+/* Unified Language Filter Tabs & Controls */
+.chapters-header-controls {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.4rem 0.85rem;
-  border-radius: var(--radius-sm);
-  font-size: 0.82rem;
-  font-weight: 600;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.lang-filter-tabs {
+  display: inline-flex;
+  align-items: center;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+  padding: 3px;
+  gap: 3px;
+}
+
+.lang-filter-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 1rem;
+  border-radius: var(--radius-full);
+  border: none;
+  background: transparent;
   color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
   transition: all var(--transition-fast);
+  user-select: none;
+  line-height: 1.2;
 }
 
-.source-tab:hover {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.05);
+.lang-filter-tab:hover {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.06);
 }
 
-.source-tab.active {
+.lang-filter-tab.active {
   background: var(--accent);
   color: #fff;
-  box-shadow: 0 2px 8px var(--accent-glow);
+  box-shadow: 0 2px 10px var(--accent-glow);
+}
+
+.lang-count-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.12rem 0.5rem;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+  line-height: 1.2;
+}
+
+.lang-filter-tab.active .lang-count-badge {
+  background: rgba(255, 255, 255, 0.25);
+  color: #fff;
 }
 
 .mirror-search-box {
@@ -1900,10 +1929,57 @@ img {
   margin-left: 0.5rem;
 }
 
+.chapter-source-pill {
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-xs);
+  letter-spacing: 0.02em;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  white-space: nowrap;
+}
+
+.chapter-source-pill.source-mangadex {
+  background: rgba(99, 102, 241, 0.16);
+  color: #818cf8;
+  border: 1px solid rgba(99, 102, 241, 0.32);
+}
+
+.chapter-source-pill.source-komiku {
+  background: rgba(16, 185, 129, 0.16);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.32);
+}
+
+.chapter-source-pill.source-mangapill {
+  background: rgba(245, 158, 11, 0.16);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.32);
+}
+
+.chapter-date {
+  font-size: 0.75rem;
+  color: var(--text-subtle);
+  margin-left: 0.25rem;
+}
+
+.chapter-action-text {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  transition: color var(--transition-fast);
+}
+
+.chapter-item:hover .chapter-action-text {
+  color: var(--accent);
+}
+
 .chapter-item-right {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 0.85rem;
   font-size: 0.8rem;
   color: var(--text-subtle);
 }
@@ -6074,6 +6150,46 @@ img {
   }
 
   .explore-nav-btn {
+    display: none;
+  }
+
+  /* Chapter Header & Unified Language Tabs Mobile */
+  .chapters-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.85rem;
+  }
+
+  .chapters-header-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    gap: 0.5rem;
+  }
+
+  .lang-filter-tabs {
+    flex: 1;
+  }
+
+  .lang-filter-tab {
+    flex: 1;
+    justify-content: center;
+    padding: 0.4rem 0.5rem;
+    font-size: 0.8rem;
+    gap: 0.35rem;
+  }
+
+  .chapter-item {
+    padding: 0.75rem 0.85rem;
+  }
+
+  .chapter-number-pill {
+    min-width: 65px;
+    font-size: 0.88rem;
+  }
+
+  .chapter-action-text {
     display: none;
   }
 }

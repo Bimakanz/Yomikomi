@@ -27,8 +27,14 @@ const state = {
   isExternal: false,
   externalChapters: [],
   mirrorOrder: 'asc',
+  activeMirrorComic: null,
+  rawMirrorChapters: [],
+  matchedMirrorComics: [],
   englishChapters: [],
   englishOrder: 'asc',
+  activeEnglishComic: null,
+  rawEnglishChapters: [],
+  matchedEnglishComics: [],
   currentSource: 'mangadex', // 'mangadex', 'bacakomik', or 'english'
   activeObjectUrls: [],
   selectedGenre: null, // { id, name }
@@ -1176,18 +1182,26 @@ function renderMangaDetailHero(manga) {
   initIcons();
 }
 
+function updateSortButtonLabel(order) {
+  const btn = document.getElementById('chapter-sort-btn');
+  const label = document.getElementById('chapter-sort-label');
+  if (btn) btn.dataset.order = order;
+  if (label) label.textContent = order === 'asc' ? 'Chapter 1 → Akhir' : 'Terbaru → Awal';
+}
+
 // Multi-Source Chapter Feed Controller
 function initSourceTabs() {
   const tabMd = document.getElementById('source-tab-mangadex');
   const tabBk = document.getElementById('source-tab-bacakomik');
   const tabEn = document.getElementById('source-tab-english');
-  const filtersMd = document.getElementById('mangadex-filters');
+  const langPills = document.getElementById('mangadex-lang-pills');
 
   tabMd?.addEventListener('click', () => {
     tabMd.classList.add('active');
     tabBk?.classList.remove('active');
     tabEn?.classList.remove('active');
-    if (filtersMd) filtersMd.style.display = 'flex';
+    if (langPills) langPills.style.display = 'flex';
+    updateSortButtonLabel(state.currentSort || 'asc');
     state.currentSource = 'mangadex';
     if (state.currentManga) loadChaptersFeed(state.currentManga.id);
   });
@@ -1196,7 +1210,8 @@ function initSourceTabs() {
     tabBk.classList.add('active');
     tabMd?.classList.remove('active');
     tabEn?.classList.remove('active');
-    if (filtersMd) filtersMd.style.display = 'none';
+    if (langPills) langPills.style.display = 'none';
+    updateSortButtonLabel(state.mirrorOrder || 'asc');
     state.currentSource = 'bacakomik';
     if (state.currentManga) loadBacakomikChaptersFeed();
   });
@@ -1205,7 +1220,8 @@ function initSourceTabs() {
     tabEn.classList.add('active');
     tabMd?.classList.remove('active');
     tabBk?.classList.remove('active');
-    if (filtersMd) filtersMd.style.display = 'none';
+    if (langPills) langPills.style.display = 'none';
+    updateSortButtonLabel(state.englishOrder || 'asc');
     state.currentSource = 'english';
     if (state.currentManga) loadEnglishChaptersFeed();
   });
@@ -1242,8 +1258,10 @@ async function loadChaptersFeed(mangaId) {
   document.getElementById('source-tab-mangadex')?.classList.add('active');
   document.getElementById('source-tab-bacakomik')?.classList.remove('active');
   document.getElementById('source-tab-english')?.classList.remove('active');
-  const filtersMd = document.getElementById('mangadex-filters');
-  if (filtersMd) filtersMd.style.display = 'flex';
+  const langPills = document.getElementById('mangadex-lang-pills');
+  if (langPills) langPills.style.display = 'flex';
+  updateSortButtonLabel(state.currentSort || 'asc');
+  state.currentSource = 'mangadex';
 
   const sortBtn = document.getElementById('chapter-sort-btn');
   const sort = sortBtn?.dataset.order || 'asc';
@@ -1276,115 +1294,180 @@ async function loadChaptersFeed(mangaId) {
   }
 }
 
-async function loadBacakomikChaptersFeed(customSearchQuery = null) {
-  const chaptersContainer = document.getElementById('chapters-list');
-  chaptersContainer.innerHTML = `<div class="spinner" style="margin: 2rem auto;"></div>`;
-  const badge = document.getElementById('chapters-total-badge');
-  badge.textContent = 'Mencari mirror...';
+// ==========================================
+// TITLE NORMALIZATION & FUZZY MATCH HELPER
+// ==========================================
 
-  let comics = [];
-  let matchedQuery = '';
+function normalizeTitle(t) {
+  if (!t) return '';
+  return t
+    .toLowerCase()
+    .replace(/\(.*?\)|\[.*?\]/g, '') // remove brackets like (Official), [Raw]
+    .replace(/[-_:]/g, ' ')
+    .replace(/[^a-z0-9\s]/g, '')   // keep alphanumeric & spaces
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
-  if (customSearchQuery) {
-    try {
-      const res = await fetch(`/api/external/search?q=${encodeURIComponent(customSearchQuery)}`);
-      const data = await res.json();
-      comics = data.data || [];
-      matchedQuery = customSearchQuery;
-    } catch (e) { }
-  } else {
-    const attrs = state.currentManga?.attributes;
-    const primaryTitle = getMangaTitle(attrs);
+function calculateTitleSimilarity(titleA, titleB) {
+  const normA = normalizeTitle(titleA);
+  const normB = normalizeTitle(titleB);
 
-    // Gather all candidate titles from primary & altTitles
-    const candidates = [primaryTitle];
-    if (attrs?.altTitles && Array.isArray(attrs.altTitles)) {
-      attrs.altTitles.forEach(at => {
-        Object.values(at).forEach(val => {
-          if (val && typeof val === 'string' && !candidates.includes(val)) {
-            candidates.push(val);
-          }
-        });
-      });
-    }
+  if (!normA || !normB) return 0;
+  if (normA === normB) return 1.0;
 
-    // Add unhyphenated variants (e.g. "Gye Baek-sun" -> "Gye Baeksun", "Unemployed Gye Baeksun")
-    const variants = [];
-    candidates.forEach(c => {
-      const s1 = c.replace(/[-_:]/g, ' ').replace(/\s+/g, ' ').trim();
-      if (!candidates.includes(s1)) variants.push(s1);
-      const s2 = c.replace(/[-_:]/g, '').replace(/\s+/g, ' ').trim();
-      if (!candidates.includes(s2)) variants.push(s2);
-    });
-    const allQueries = [...candidates, ...variants];
+  const compactA = normA.replace(/\s+/g, '');
+  const compactB = normB.replace(/\s+/g, '');
+  if (compactA === compactB) return 1.0;
 
-    // Try candidates sequentially until one returns results
-    for (const q of allQueries) {
-      try {
-        const res = await fetch(`/api/external/search?q=${encodeURIComponent(q)}`);
-        const data = await res.json();
-        if (data.data && data.data.length > 0) {
-          comics = data.data;
-          matchedQuery = q;
-          break;
-        }
-      } catch (e) { }
+  // Check containment for long titles (e.g. "Unemployed Gye Baeksun" vs "Gye Baeksun")
+  if (compactA.includes(compactB) || compactB.includes(compactA)) {
+    const minLen = Math.min(compactA.length, compactB.length);
+    const maxLen = Math.max(compactA.length, compactB.length);
+    if (minLen >= 4 && (minLen / maxLen) >= 0.5) {
+      return 0.85;
     }
   }
 
-  if (comics.length === 0) {
+  // Token-based Jaccard similarity
+  const wordsA = new Set(normA.split(' ').filter(w => w.length > 1));
+  const wordsB = new Set(normB.split(' ').filter(w => w.length > 1));
+
+  if (wordsA.size === 0 || wordsB.size === 0) return 0;
+
+  let intersection = 0;
+  for (const w of wordsA) {
+    if (wordsB.has(w)) intersection++;
+  }
+
+  const union = new Set([...wordsA, ...wordsB]).size;
+  const jaccard = intersection / union;
+  const overlapA = intersection / wordsA.size;
+  const overlapB = intersection / wordsB.size;
+
+  return Math.max(jaccard, Math.min(overlapA, overlapB));
+}
+
+function filterAndSortMatchingComics(targetTitles, candidateComics) {
+  if (!candidateComics || !Array.isArray(candidateComics) || candidateComics.length === 0) return [];
+
+  const scored = [];
+  for (const comic of candidateComics) {
+    let maxScore = 0;
+    for (const target of targetTitles) {
+      const score = calculateTitleSimilarity(target, comic.title);
+      if (score > maxScore) maxScore = score;
+    }
+    // Strict threshold: at least 0.55 similarity to prevent false matches
+    if (maxScore >= 0.55) {
+      scored.push({ comic, score: maxScore });
+    }
+  }
+
+  scored.sort((a, b) => b.score - a.score);
+  return scored.map(s => s.comic);
+}
+
+// ==========================================
+// INDO MIRROR (Bacakomik / Komikindo)
+// ==========================================
+
+async function loadBacakomikChaptersFeed() {
+  const chaptersContainer = document.getElementById('chapters-list');
+  chaptersContainer.innerHTML = `<div class="spinner" style="margin: 2rem auto;"></div>`;
+  const badge = document.getElementById('chapters-total-badge');
+  badge.textContent = 'Mencari Indo mirror...';
+
+  const attrs = state.currentManga?.attributes;
+  const primaryTitle = getMangaTitle(attrs);
+
+  // Gather candidate titles from primary & altTitles
+  const candidates = [primaryTitle];
+  if (attrs?.altTitles && Array.isArray(attrs.altTitles)) {
+    attrs.altTitles.forEach(at => {
+      Object.values(at).forEach(val => {
+        if (val && typeof val === 'string' && !candidates.includes(val)) {
+          candidates.push(val);
+        }
+      });
+    });
+  }
+
+  // Add variants
+  const variants = [];
+  candidates.forEach(c => {
+    const s1 = c.replace(/[-_:]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!candidates.includes(s1)) variants.push(s1);
+    const s2 = c.replace(/[-_:]/g, '').replace(/\s+/g, ' ').trim();
+    if (!candidates.includes(s2)) variants.push(s2);
+  });
+  const allQueries = [...candidates, ...variants];
+
+  let matchedComics = [];
+
+  for (const q of allQueries) {
+    try {
+      const res = await fetch(`/api/external/search?q=${encodeURIComponent(q)}`);
+      const data = await res.json();
+      if (data.data && data.data.length > 0) {
+        const matches = filterAndSortMatchingComics(candidates, data.data);
+        if (matches.length > 0) {
+          matchedComics = matches;
+          break;
+        }
+      }
+    } catch (e) { }
+  }
+
+  if (matchedComics.length === 0) {
     chaptersContainer.innerHTML = `
-      <div class="mirror-search-box">
-        <input type="text" id="mirror-search-input" placeholder="Ketik judul di Bacakomik (misal: Unemployed Gye Baeksun)...">
-        <button id="btn-mirror-search"><i data-lucide="search"></i> Cari</button>
-      </div>
       <div class="empty-state">
-        <i data-lucide="search-x"></i>
-        <h4>Komik Tidak Ditemukan Otomatis di Bacakomik</h4>
-        <p>Ketik judul alternatif pada kotak pencarian di atas untuk mencari manual.</p>
+        <i data-lucide="book-x"></i>
+        <h4>Komik Ini Tidak Tersedia di Indo Mirror</h4>
+        <p>Komik "<strong>${primaryTitle}</strong>" belum ditemukan di server Indo Mirror. Silakan gunakan Server Utama.</p>
       </div>
     `;
-    badge.textContent = '0 Chapter';
-    initMirrorSearchHandler();
+    badge.textContent = '0 Chapter (Indo Mirror)';
     initIcons();
     return;
   }
 
-  // Use the best matched comic
-  const comic = comics[0];
+  const comic = matchedComics[0];
+  state.activeMirrorComic = comic;
+  state.matchedMirrorComics = matchedComics;
+
   try {
     const chRes = await fetch(`/api/external/chapters?url=${encodeURIComponent(comic.url)}`);
     const chData = await chRes.json();
     const chapters = chData.chapters || [];
-    badge.textContent = `${chapters.length} Chapter (Mirror)`;
+    state.rawMirrorChapters = chapters;
+    badge.textContent = `${chapters.length} Chapter (Indo Mirror)`;
 
-    renderBacakomikChaptersList(chapters, comic, comics);
+    renderBacakomikChaptersList(chapters, comic, matchedComics);
   } catch (err) {
     console.error('Failed to load bacakomik chapters:', err);
-    chaptersContainer.innerHTML = `<p class="empty-state">Gagal memuat chapter dari mirror Bacakomik.</p>`;
+    chaptersContainer.innerHTML = `<p class="empty-state">Gagal memuat chapter dari mirror Indo.</p>`;
     badge.textContent = 'Error';
+    initIcons();
   }
-}
-
-function initMirrorSearchHandler() {
-  const input = document.getElementById('mirror-search-input');
-  const btn = document.getElementById('btn-mirror-search');
-
-  function doSearch() {
-    const q = input?.value.trim();
-    if (q) loadBacakomikChaptersFeed(q);
-  }
-
-  btn?.addEventListener('click', doSearch);
-  input?.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') doSearch();
-  });
 }
 
 async function renderBacakomikChaptersList(chapters, activeComic, allMatchedComics = []) {
   const container = document.getElementById('chapters-list');
+  const badge = document.getElementById('chapters-total-badge');
+  if (badge && chapters) {
+    badge.textContent = `${chapters.length} Chapter (Indo Mirror)`;
+  }
+
   if (chapters.length === 0) {
-    container.innerHTML = `<p class="empty-state">Tidak ada chapter tersedia di mirror.</p>`;
+    container.innerHTML = `
+      <div class="empty-state">
+        <i data-lucide="folder-x"></i>
+        <h4>Tidak Ada Chapter Tersedia di Indo Mirror</h4>
+        <p>Belum ada rilis chapter untuk komik ini di mirror.</p>
+      </div>
+    `;
+    initIcons();
     return;
   }
 
@@ -1402,30 +1485,20 @@ async function renderBacakomikChaptersList(chapters, activeComic, allMatchedComi
 
   state.externalChapters = parsed;
 
-  const cleanComicTitle = activeComic.title.replace(/\s+/g, ' ').replace(/^Warna\s*/, '').trim();
-
   // Query offline downloaded chapters for this mirror comic
   const mangaId = state.currentManga?.id || activeComic.url;
   const downloadedSet = window.OfflineManager
     ? await OfflineManager.getDownloadedChapterIds(mangaId)
     : new Set();
 
-  let html = `
-    <div class="mirror-search-box">
-      <input type="text" id="mirror-search-input" value="${cleanComicTitle}" placeholder="Cari judul lain di Bacakomik...">
-      <button id="btn-mirror-search"><i data-lucide="search"></i> Cari</button>
-      <button id="btn-mirror-sort" class="btn-ghost" style="white-space: nowrap; font-size: 0.85rem; padding: 0.5rem 1rem; border-radius: 8px; border: 1px solid var(--border-color); background: rgba(255,255,255,0.05); color: var(--text-primary); cursor: pointer; display: flex; align-items: center; gap: 0.4rem;">
-        <i data-lucide="arrow-down-up"></i> <span>${state.mirrorOrder === 'asc' ? 'Chapter 1 → Akhir' : 'Terbaru → Awal'}</span>
-      </button>
-    </div>
-  `;
+  let html = '';
 
   // If multiple comics matched, show switch chips
   if (allMatchedComics.length > 1) {
     html += `
       <div class="mirror-matches-row">
         <span class="quick-tag-label">Pilih Judul Cocok:</span>
-        ${allMatchedComics.map((c, i) => {
+        ${allMatchedComics.map((c) => {
       const t = c.title.replace(/\s+/g, ' ').replace(/^Warna\s*/, '').trim();
       const isAct = c.url === activeComic.url;
       return `<button class="quick-tag-chip ${isAct ? 'active' : ''}" data-url="${c.url}">${t}</button>`;
@@ -1467,15 +1540,7 @@ async function renderBacakomikChaptersList(chapters, activeComic, allMatchedComi
 
   container.innerHTML = html;
 
-  initMirrorSearchHandler();
-
-  // Sort button toggle
-  document.getElementById('btn-mirror-sort')?.addEventListener('click', () => {
-    state.mirrorOrder = state.mirrorOrder === 'asc' ? 'desc' : 'asc';
-    renderBacakomikChaptersList(chapters, activeComic, allMatchedComics);
-  });
-
-  // Chips click handler
+  // Chips click handler to switch between matched versions
   container.querySelectorAll('.mirror-matches-row .quick-tag-chip').forEach(chip => {
     chip.addEventListener('click', async () => {
       const u = chip.dataset.url;
@@ -1483,8 +1548,14 @@ async function renderBacakomikChaptersList(chapters, activeComic, allMatchedComi
       try {
         const res = await fetch(`/api/external/chapters?url=${encodeURIComponent(u)}`);
         const data = await res.json();
-        renderBacakomikChaptersList(data.chapters || [], { title: chip.textContent, url: u }, allMatchedComics);
-      } catch (e) { }
+        const chs = data.chapters || [];
+        const matchC = allMatchedComics.find(x => x.url === u) || { url: u, title: chip.textContent };
+        state.activeMirrorComic = matchC;
+        state.rawMirrorChapters = chs;
+        renderBacakomikChaptersList(chs, matchC, allMatchedComics);
+      } catch (e) {
+        showToast('Gagal memuat chapter untuk judul ini');
+      }
     });
   });
 
@@ -1725,112 +1796,101 @@ async function openExternalReader(chapterUrl, chapterTitle, allChapters, chapter
 // ENGLISH MIRROR (Mangapill / WeebCentral)
 // ==========================================
 
-async function loadEnglishChaptersFeed(customSearchQuery = null) {
+async function loadEnglishChaptersFeed() {
   const chaptersContainer = document.getElementById('chapters-list');
   chaptersContainer.innerHTML = `<div class="spinner" style="margin: 2rem auto;"></div>`;
   const badge = document.getElementById('chapters-total-badge');
   badge.textContent = 'Mencari mirror EN...';
 
-  let comics = [];
-  let matchedQuery = '';
+  const attrs = state.currentManga?.attributes;
+  const primaryTitle = getMangaTitle(attrs);
 
-  if (customSearchQuery) {
-    try {
-      const res = await fetch(`/api/external/en/search?q=${encodeURIComponent(customSearchQuery)}`);
-      const data = await res.json();
-      comics = data.data || [];
-      matchedQuery = customSearchQuery;
-    } catch (e) { }
-  } else {
-    const attrs = state.currentManga?.attributes;
-    const primaryTitle = getMangaTitle(attrs);
-
-    // Gather all candidate titles with English priority
-    const candidates = [primaryTitle];
-    if (attrs?.altTitles && Array.isArray(attrs.altTitles)) {
-      attrs.altTitles.forEach(at => {
-        Object.values(at).forEach(val => {
-          if (val && typeof val === 'string' && !candidates.includes(val)) {
-            candidates.push(val);
-          }
-        });
-      });
-    }
-
-    const variants = [];
-    candidates.forEach(c => {
-      const s1 = c.replace(/[-_:]/g, ' ').replace(/\s+/g, ' ').trim();
-      if (!candidates.includes(s1)) variants.push(s1);
-      const s2 = c.replace(/[-_:]/g, '').replace(/\s+/g, ' ').trim();
-      if (!candidates.includes(s2)) variants.push(s2);
-    });
-    const allQueries = [...candidates, ...variants];
-
-    for (const q of allQueries) {
-      try {
-        const res = await fetch(`/api/external/en/search?q=${encodeURIComponent(q)}`);
-        const data = await res.json();
-        if (data.data && data.data.length > 0) {
-          comics = data.data;
-          matchedQuery = q;
-          break;
+  // Gather all candidate titles with English priority
+  const candidates = [primaryTitle];
+  if (attrs?.altTitles && Array.isArray(attrs.altTitles)) {
+    attrs.altTitles.forEach(at => {
+      Object.values(at).forEach(val => {
+        if (val && typeof val === 'string' && !candidates.includes(val)) {
+          candidates.push(val);
         }
-      } catch (e) { }
-    }
+      });
+    });
   }
 
-  if (comics.length === 0) {
+  const variants = [];
+  candidates.forEach(c => {
+    const s1 = c.replace(/[-_:]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!candidates.includes(s1)) variants.push(s1);
+    const s2 = c.replace(/[-_:]/g, '').replace(/\s+/g, ' ').trim();
+    if (!candidates.includes(s2)) variants.push(s2);
+  });
+  const allQueries = [...candidates, ...variants];
+
+  let matchedComics = [];
+
+  for (const q of allQueries) {
+    try {
+      const res = await fetch(`/api/external/en/search?q=${encodeURIComponent(q)}`);
+      const data = await res.json();
+      if (data.data && data.data.length > 0) {
+        const matches = filterAndSortMatchingComics(candidates, data.data);
+        if (matches.length > 0) {
+          matchedComics = matches;
+          break;
+        }
+      }
+    } catch (e) { }
+  }
+
+  if (matchedComics.length === 0) {
     chaptersContainer.innerHTML = `
-      <div class="mirror-search-box">
-        <input type="text" id="en-mirror-search-input" placeholder="Ketik judul manga versi Inggris...">
-        <button id="btn-en-mirror-search"><i data-lucide="search"></i> Cari</button>
-      </div>
       <div class="empty-state">
-        <i data-lucide="search-x"></i>
-        <h4>Komik Tidak Ditemukan di English Mirror</h4>
-        <p>Ketik judul alternatif pada kotak pencarian di atas untuk mencari manual.</p>
+        <i data-lucide="book-x"></i>
+        <h4>Komik Ini Tidak Tersedia di English Mirror</h4>
+        <p>Komik "<strong>${primaryTitle}</strong>" belum ditemukan di server English Mirror. Silakan gunakan Server Utama.</p>
       </div>
     `;
-    badge.textContent = '0 Chapter';
-    initEnglishMirrorSearchHandler();
+    badge.textContent = '0 Chapter (EN Mirror)';
     initIcons();
     return;
   }
 
-  const comic = comics[0];
+  const comic = matchedComics[0];
+  state.activeEnglishComic = comic;
+  state.matchedEnglishComics = matchedComics;
+
   try {
     const chRes = await fetch(`/api/external/en/chapters?url=${encodeURIComponent(comic.url)}`);
     const chData = await chRes.json();
     const chapters = chData.chapters || [];
+    state.rawEnglishChapters = chapters;
     badge.textContent = `${chapters.length} Chapter (EN Mirror)`;
 
-    renderEnglishChaptersList(chapters, comic, comics);
+    renderEnglishChaptersList(chapters, comic, matchedComics);
   } catch (err) {
     console.error('Failed to load English mirror chapters:', err);
     chaptersContainer.innerHTML = `<p class="empty-state">Gagal memuat chapter dari English mirror.</p>`;
     badge.textContent = 'Error';
+    initIcons();
   }
-}
-
-function initEnglishMirrorSearchHandler() {
-  const input = document.getElementById('en-mirror-search-input');
-  const btn = document.getElementById('btn-en-mirror-search');
-
-  function doSearch() {
-    const q = input?.value.trim();
-    if (q) loadEnglishChaptersFeed(q);
-  }
-
-  btn?.addEventListener('click', doSearch);
-  input?.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') doSearch();
-  });
 }
 
 async function renderEnglishChaptersList(chapters, activeComic, allMatchedComics = []) {
   const container = document.getElementById('chapters-list');
+  const badge = document.getElementById('chapters-total-badge');
+  if (badge && chapters) {
+    badge.textContent = `${chapters.length} Chapter (EN Mirror)`;
+  }
+
   if (chapters.length === 0) {
-    container.innerHTML = `<p class="empty-state">Tidak ada chapter tersedia di English mirror.</p>`;
+    container.innerHTML = `
+      <div class="empty-state">
+        <i data-lucide="folder-x"></i>
+        <h4>Tidak Ada Chapter Tersedia di English Mirror</h4>
+        <p>Belum ada rilis chapter untuk komik ini di mirror.</p>
+      </div>
+    `;
+    initIcons();
     return;
   }
 
@@ -1852,15 +1912,7 @@ async function renderEnglishChaptersList(chapters, activeComic, allMatchedComics
     ? await OfflineManager.getDownloadedChapterIds(mangaId)
     : new Set();
 
-  let html = `
-    <div class="mirror-search-box">
-      <input type="text" id="en-mirror-search-input" value="${cleanComicTitle}" placeholder="Cari judul lain di English Mirror...">
-      <button id="btn-en-mirror-search"><i data-lucide="search"></i> Cari</button>
-      <button id="btn-en-mirror-sort" class="btn-ghost" style="white-space: nowrap; font-size: 0.85rem; padding: 0.5rem 1rem; border-radius: 8px; border: 1px solid var(--border-color); background: rgba(255,255,255,0.05); color: var(--text-primary); cursor: pointer; display: flex; align-items: center; gap: 0.4rem;">
-        <i data-lucide="arrow-down-up"></i> <span>${state.englishOrder === 'asc' ? 'Chapter 1 → Akhir' : 'Terbaru → Awal'}</span>
-      </button>
-    </div>
-  `;
+  let html = '';
 
   if (allMatchedComics.length > 1) {
     html += `
@@ -1907,12 +1959,6 @@ async function renderEnglishChaptersList(chapters, activeComic, allMatchedComics
   html += `</div>`;
 
   container.innerHTML = html;
-  initEnglishMirrorSearchHandler();
-
-  document.getElementById('btn-en-mirror-sort')?.addEventListener('click', () => {
-    state.englishOrder = state.englishOrder === 'asc' ? 'desc' : 'asc';
-    renderEnglishChaptersList(chapters, activeComic, allMatchedComics);
-  });
 
   container.querySelectorAll('.mirror-matches-row .quick-tag-chip').forEach(chip => {
     chip.addEventListener('click', async () => {
@@ -1921,8 +1967,14 @@ async function renderEnglishChaptersList(chapters, activeComic, allMatchedComics
       try {
         const res = await fetch(`/api/external/en/chapters?url=${encodeURIComponent(u)}`);
         const data = await res.json();
-        renderEnglishChaptersList(data.chapters || [], { title: chip.textContent, url: u }, allMatchedComics);
-      } catch (e) { }
+        const chs = data.chapters || [];
+        const matchC = allMatchedComics.find(x => x.url === u) || { url: u, title: chip.textContent };
+        state.activeEnglishComic = matchC;
+        state.rawEnglishChapters = chs;
+        renderEnglishChaptersList(chs, matchC, allMatchedComics);
+      } catch (e) {
+        showToast('Gagal memuat chapter untuk judul ini');
+      }
     });
   });
 
@@ -2088,16 +2140,28 @@ async function openEnglishReader(chapterUrl, chapterTitle, allChapters, chapterI
 // Chapter sort listeners
 document.getElementById('chapter-sort-btn')?.addEventListener('click', () => {
   const btn = document.getElementById('chapter-sort-btn');
-  const label = document.getElementById('chapter-sort-label');
-  const newOrder = btn.dataset.order === 'asc' ? 'desc' : 'asc';
-  btn.dataset.order = newOrder;
-  label.textContent = newOrder === 'asc' ? 'Chapter 1 → Akhir' : 'Terbaru → Awal';
+  const currentOrder = btn?.dataset.order || 'asc';
+  const newOrder = currentOrder === 'asc' ? 'desc' : 'asc';
+  updateSortButtonLabel(newOrder);
 
-  if (state.allMangaDexChapters && state.allMangaDexChapters.length > 0) {
-    state.allMangaDexChapters.reverse();
-    filterAndRenderMangaDexChapters();
-  } else if (state.currentManga) {
-    loadChaptersFeed(state.currentManga.id);
+  if (state.currentSource === 'mangadex') {
+    state.currentSort = newOrder;
+    if (state.allMangaDexChapters && state.allMangaDexChapters.length > 0) {
+      state.allMangaDexChapters.reverse();
+      filterAndRenderMangaDexChapters();
+    } else if (state.currentManga) {
+      loadChaptersFeed(state.currentManga.id);
+    }
+  } else if (state.currentSource === 'bacakomik') {
+    state.mirrorOrder = newOrder;
+    if (state.activeMirrorComic && state.rawMirrorChapters && state.rawMirrorChapters.length > 0) {
+      renderBacakomikChaptersList(state.rawMirrorChapters, state.activeMirrorComic, state.matchedMirrorComics);
+    }
+  } else if (state.currentSource === 'english') {
+    state.englishOrder = newOrder;
+    if (state.activeEnglishComic && state.rawEnglishChapters && state.rawEnglishChapters.length > 0) {
+      renderEnglishChaptersList(state.rawEnglishChapters, state.activeEnglishComic, state.matchedEnglishComics);
+    }
   }
 });
 

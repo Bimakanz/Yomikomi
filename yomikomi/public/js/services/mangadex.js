@@ -39,7 +39,7 @@ export async function fetchMangaByGenre(tagId) {
 }
 
 export async function searchManga(query) {
-  if (!query || !query.trim()) return [];
+  if (!query || !query.trim()) return { data: [] };
   const res = await fetch(`/api/search?q=${encodeURIComponent(query.trim())}`);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const data = await res.json();
@@ -47,7 +47,7 @@ export async function searchManga(query) {
   list.forEach(m => {
     CoverCache.set(m.id, getMangaTitle(m.attributes), getCoverUrl(m));
   });
-  return list;
+  return data;
 }
 
 export async function fetchMangaDetail(mangaId) {

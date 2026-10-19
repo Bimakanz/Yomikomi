@@ -3,7 +3,7 @@
  * Provides instantaneous offline loading and smooth App Shell fallback
  */
 
-const CACHE_NAME = 'yomikomi-app-shell-v10';
+const CACHE_NAME = 'yomikomi-app-shell-v11';
 
 // Static App Shell assets required to render the application offline
 const PRECACHE_ASSETS = [
@@ -11,8 +11,25 @@ const PRECACHE_ASSETS = [
   '/index.html',
   '/manifest.json',
   '/css/style.css',
-  '/js/app.js',
+  '/js/main.js',
+  '/js/state.js',
   '/js/offline-manager.js',
+  '/js/services/mangadex.js',
+  '/js/services/api.js',
+  '/js/services/storage.js',
+  '/js/components/Navbar.js',
+  '/js/components/MobileDrawer.js',
+  '/js/components/SearchModal.js',
+  '/js/components/HeroBanner.js',
+  '/js/components/MangaCard.js',
+  '/js/components/ChapterList.js',
+  '/js/components/DownloadQueue.js',
+  '/js/components/Reader.js',
+  '/js/pages/HomePage.js',
+  '/js/pages/ExplorePage.js',
+  '/js/pages/DetailPage.js',
+  '/js/pages/BookmarkPage.js',
+  '/js/pages/OfflinePage.js',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
   '/icons/apple-touch-icon.png',

@@ -651,15 +651,15 @@ app.get(['/api/proxy-image', '/api/proxy/image'], async (req, res) => {
 
   try {
     const parsed = new URL(imageUrl);
+    const host = parsed.hostname.toLowerCase();
+    const isMangaDex = host.includes('mangadex.org') || host.includes('mangadex.network');
 
     // Smart Referer determination:
-    // If domain is mangadex.org or mangadex.network -> https://mangadex.org/
-    // Otherwise -> origin of the image URL
-    let referer = req.query.referer;
-    if (!referer) {
-      const host = parsed.hostname.toLowerCase();
-      if (host.includes('mangadex.org') || host.includes('mangadex.network')) {
-        referer = 'https://mangadex.org/';
+    // ALWAYS enforce https://mangadex.org/ for MangaDex domains to defeat anti-hotlink placeholder
+    let referer = 'https://mangadex.org/';
+    if (!isMangaDex) {
+      if (req.query.referer) {
+        referer = req.query.referer;
       } else if (host.includes('readdetectiveconan.com') || host.includes('mangapill.com')) {
         referer = 'https://mangapill.com/';
       } else if (host.includes('komikindo.ch') || host.includes('komikindo')) {
@@ -669,11 +669,11 @@ app.get(['/api/proxy-image', '/api/proxy/image'], async (req, res) => {
       }
     }
 
-    // 12-second AbortController timeout to prevent hung proxy connections
+    // 7.5-second AbortController timeout to prevent hung proxy connections (safe for Vercel 10s limit)
     const controller = new AbortController();
     const timeout = setTimeout(() => {
       controller.abort();
-    }, 12000);
+    }, 7500);
 
     let response;
     let fallbackStream = null;
@@ -728,6 +728,55 @@ app.get(['/api/proxy-image', '/api/proxy/image'], async (req, res) => {
       return res.status(response.status).json({ error: `Upstream error ${response.status}` });
     }
 
+    // Read image buffer to verify content integrity and guard against MangaDex anti-hotlink banner
+    let imageBuffer = null;
+    if (fallbackStream) {
+      const chunks = [];
+      await new Promise((resolve, reject) => {
+        fallbackStream.on('data', c => chunks.push(c));
+        fallbackStream.on('end', () => { imageBuffer = Buffer.concat(chunks); resolve(); });
+        fallbackStream.on('error', reject);
+      });
+    } else {
+      imageBuffer = Buffer.from(await response.arrayBuffer());
+    }
+
+    // MangaDex Anti-Hotlink Placeholder Banner Guard (exact size ~59480 bytes)
+    if (isMangaDex && imageBuffer && imageBuffer.length >= 59400 && imageBuffer.length <= 59600) {
+      console.warn(`[Proxy Guard] Intercepted MangaDex anti-hotlink banner (${imageBuffer.length} bytes) for ${imageUrl}. Retrying via alternate direct CDN...`);
+      try {
+        const altBuffer = await new Promise((resolve, reject) => {
+          const reqOpts = {
+            hostname: '45.129.229.1',
+            path: parsed.pathname + parsed.search,
+            headers: {
+              'Host': 'uploads.mangadex.org',
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+              'Referer': 'https://mangadex.org/'
+            },
+            servername: 'uploads.mangadex.org',
+            method: 'GET'
+          };
+          const altReq = https.request(reqOpts, (proxyRes) => {
+            const ch = [];
+            proxyRes.on('data', c => ch.push(c));
+            proxyRes.on('end', () => resolve(Buffer.concat(ch)));
+            proxyRes.on('error', reject);
+          });
+          altReq.on('error', reject);
+          altReq.end();
+        });
+
+        if (altBuffer && (altBuffer.length < 59400 || altBuffer.length > 59600)) {
+          imageBuffer = altBuffer;
+        } else {
+          return res.status(502).json({ error: 'MangaDex hotlink blocked' });
+        }
+      } catch (e) {
+        return res.status(502).json({ error: 'MangaDex hotlink blocked' });
+      }
+    }
+
     const contentType = response.headers.get('content-type') || 'image/jpeg';
     res.writeHead(200, {
       'Content-Type': contentType,
@@ -735,21 +784,11 @@ app.get(['/api/proxy-image', '/api/proxy/image'], async (req, res) => {
       'Access-Control-Allow-Origin': '*'
     });
 
-    if (fallbackStream) {
-      fallbackStream.pipe(res);
-    } else {
-      const { Readable } = require('stream');
-      if (response.body && typeof Readable.fromWeb === 'function') {
-        Readable.fromWeb(response.body).pipe(res);
-      } else {
-        const buf = Buffer.from(await response.arrayBuffer());
-        res.end(buf);
-      }
-    }
+    res.end(imageBuffer);
   } catch (err) {
     if (err.name === 'AbortError') {
-      console.warn(`[Proxy Timeout] Aborted image request after 12s: ${imageUrl}`);
-      return res.status(504).json({ error: 'Gateway Timeout: upstream image request exceeded 12s' });
+      console.warn(`[Proxy Timeout] Aborted image request after 7.5s: ${imageUrl}`);
+      return res.status(504).json({ error: 'Gateway Timeout: upstream image request exceeded 7.5s' });
     }
     console.error('Image proxy error:', err.message);
     res.status(502).json({ error: 'Bad Gateway: failed to fetch image' });

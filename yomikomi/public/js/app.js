@@ -1915,24 +1915,39 @@ window.getReaderStageUrl = function (rawUrl, stage = 0, retryTimestamp = null) {
     cleanUrl = decodeURIComponent(cleanUrl.replace(/^\/api\/proxy[-/]image\?url=/, ''));
   }
 
-  // If rawUrl is MangaDex volunteer node that was cached earlier, optimize to uploads.mangadex.org
-  if (cleanUrl.includes('mangadex.network/data-saver/')) {
-    cleanUrl = cleanUrl.replace(/https?:\/\/[^\/]+\/data-saver\//, 'https://uploads.mangadex.org/data-saver/');
-  } else if (cleanUrl.includes('mangadex.network/data/')) {
-    cleanUrl = cleanUrl.replace(/https?:\/\/[^\/]+\/data\//, 'https://uploads.mangadex.org/data/');
+  const isMangaDex = cleanUrl.includes('mangadex.org') || cleanUrl.includes('mangadex.network');
+
+  if (isMangaDex) {
+    // CRITICAL: Direct browser requests to uploads.mangadex.org from third-party websites
+    // are ALWAYS intercepted by MangaDex Cloudflare to serve the "You can read this at MangaDex" banner.
+    // Therefore, MangaDex images MUST always be loaded through our backend proxy!
+    const qs = retryTimestamp ? `&retry=${retryTimestamp}` : '';
+    if (stage === 0) {
+      // Stage 0: Standard proxy
+      return `/api/proxy/image?url=${encodeURIComponent(cleanUrl)}${qs}`;
+    } else if (stage === 1) {
+      // Stage 1: Fallback proxy with cache-bust & alternative routing
+      const cacheBust = retryTimestamp || Date.now();
+      return `/api/proxy/image?url=${encodeURIComponent(cleanUrl)}&t=${cacheBust}&stage=1`;
+    } else {
+      // Stage 2: Secondary proxy retry with timestamp
+      const cacheBust = retryTimestamp || Date.now();
+      return `/api/proxy/image?url=${encodeURIComponent(cleanUrl)}&t=${cacheBust}&retry=last`;
+    }
   }
 
+  // For other comic sources (Komikindo, Mangapill, etc.)
   if (stage === 0) {
-    // Stage 0 (Jalur Utama - Cepat): Muat melalui proxy internal /api/proxy/image
+    // Stage 0: Internal proxy
     const qs = retryTimestamp ? `&retry=${retryTimestamp}` : '';
     return `/api/proxy/image?url=${encodeURIComponent(cleanUrl)}${qs}`;
   } else if (stage === 1) {
-    // Stage 1 (Auto-Fallback 1 - Ganti Proxy / Direct No-Referer): Direct URL
+    // Stage 1: Direct No-Referer
     const sep = cleanUrl.includes('?') ? '&' : '?';
     const qs = retryTimestamp ? `${sep}retry=${retryTimestamp}` : '';
     return cleanUrl + qs;
   } else if (stage === 2) {
-    // Stage 2 (Auto-Fallback 2 - Jalur Alternatif + Cache Bust): wsrv.nl proxy
+    // Stage 2: wsrv.nl proxy
     const cacheBust = retryTimestamp || Date.now();
     return `https://wsrv.nl/?url=${encodeURIComponent(cleanUrl)}&we=1&n=-1&t=${cacheBust}`;
   }
@@ -1979,6 +1994,20 @@ window.triggerNextPageLoad = function (imgEl) {
  * Handle successful page image load
  */
 window.handlePageImageLoad = function (imgEl) {
+  // Client-side guard against MangaDex Anti-Hotlink Placeholder Banner:
+  // The placeholder is an exact 700x700 square image (aspect ratio 1.0, w === h) with cat icons.
+  // Real manga & webtoon panels are tall vertical strips (aspect ratio > 1.25 or < 0.85).
+  if (imgEl.naturalWidth > 0 && imgEl.naturalHeight > 0) {
+    const isSquareBanner = Math.abs(imgEl.naturalWidth - imgEl.naturalHeight) <= 5 && imgEl.naturalWidth >= 400 && imgEl.naturalWidth <= 900;
+    const raw = imgEl.dataset.rawUrl || '';
+    if (isSquareBanner && (raw.includes('mangadex') || (imgEl.src && imgEl.src.includes('mangadex')))) {
+      console.warn(`[ReaderImage] Intercepted MangaDex placeholder banner (${imgEl.naturalWidth}x${imgEl.naturalHeight}). Discarding and retrying...`);
+      imgEl.classList.remove('visible');
+      window.handlePageImageError(imgEl);
+      return;
+    }
+  }
+
   const wrapper = imgEl.closest('.reader-page-wrapper');
   if (wrapper) {
     wrapper.classList.add('page-loaded');
@@ -2015,13 +2044,13 @@ window.handlePageImageError = function (imgEl) {
     imgEl.dataset.retryStage = String(nextStage);
 
     if (nextStage === 1) {
-      // Stage 1: Direct No-Referer
+      // Stage 1
       imgEl.referrerPolicy = 'no-referrer';
       imgEl.crossOrigin = 'anonymous';
       imgEl.src = window.getReaderStageUrl(rawUrl, 1);
       return;
     } else if (nextStage === 2) {
-      // Stage 2: wsrv.nl proxy + cache-bust
+      // Stage 2
       imgEl.removeAttribute('crossorigin');
       imgEl.removeAttribute('referrerpolicy');
       imgEl.src = window.getReaderStageUrl(rawUrl, 2, Date.now());

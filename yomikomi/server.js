@@ -89,20 +89,33 @@ function customLookup(hostname, options, callback) {
     if (options && options.all) {
       return callback(null, MANGADEX_IPS);
     }
-    // Round-robin between the two MangaDex nodes
     const ip = MANGADEX_IPS[ipCounter++ % MANGADEX_IPS.length].address;
     return callback(null, ip, 4);
   }
 
-  // Resolve external mirrors using public DNS to avoid ISP poisoning
-  publicResolver.resolve4(hostname, (err, addresses) => {
-    if (!err && addresses && addresses.length > 0) {
-      if (options && options.all) {
-        return callback(null, addresses.map(addr => ({ address: addr, family: 4 })));
-      }
-      return callback(null, addresses[0], 4);
+  // Native system DNS lookup first (instantaneous in cloud/Vercel and local systems)
+  dns.lookup(hostname, options, (err, address, family) => {
+    // Detect Indonesian ISP DNS poisoning (TrustPositif / Internet Positif 158.140.x.x)
+    const isHijacked = !err && (
+      (typeof address === 'string' && address.startsWith('158.140.')) ||
+      (Array.isArray(address) && address.some(a => a.address && a.address.startsWith('158.140.')))
+    );
+
+    if (err || isHijacked) {
+      // Fallback to public DNS resolver (1.1.1.1 / 8.8.8.8)
+      publicResolver.resolve4(hostname, (resErr, addresses) => {
+        if (!resErr && addresses && addresses.length > 0) {
+          if (options && options.all) {
+            return callback(null, addresses.map(addr => ({ address: addr, family: 4 })));
+          }
+          return callback(null, addresses[0], 4);
+        }
+        callback(err || new Error(`DNS resolution failed for ${hostname}`));
+      });
+      return;
     }
-    dns.lookup(hostname, options, callback);
+
+    callback(null, address, family);
   });
 }
 

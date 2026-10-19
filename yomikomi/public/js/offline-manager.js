@@ -54,77 +54,76 @@
   /**
    * Helper: Convert fetch response to Blob with timeout, validation, and multi-tier fallbacks
    */
-  async function fetchImageAsBlob(url, referer, timeoutMs = 15000) {
+  async function fetchImageAsBlob(url, referer, timeoutMs = 25000) {
     if (!url || typeof url !== 'string') {
       throw new Error('URL gambar tidak valid');
     }
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-
-    try {
-      // 1. If it's a relative URL on our own server (e.g. /api/cover/... or /api/proxy-image?url=...)
-      // Fetch directly from our local backend - NO external proxy needed!
-      if (url.startsWith('/')) {
+    // 1. If it's a relative URL on our own server (e.g. /api/cover/... or /api/proxy-image?url=...)
+    // Fetch directly from our local backend - NO external proxy needed!
+    if (url.startsWith('/')) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
         const res = await fetch(url, { signal: controller.signal });
         if (!res.ok) throw new Error(`Server lokal error HTTP ${res.status}`);
         const blob = await res.blob();
         if (isValidImageBlob(blob)) return blob;
         throw new Error('Respon dari server lokal bukan gambar yang valid');
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    const isMangaDex = url.includes('mangadex.org') || url.includes('mangadex.network');
+
+    // 2. MangaDex: Ultra-resilient Multi-CDN download
+    if (isMangaDex) {
+      // Build candidate URLs to guarantee success even if one CDN or node is down
+      const candidates = [url];
+      if (url.includes('/data/')) {
+        candidates.push(url.replace('/data/', '/data-saver/'));
+      }
+      if (!url.includes('uploads.mangadex.org') && url.includes('/data-saver/')) {
+        const pathPart = url.substring(url.indexOf('/data-saver/'));
+        candidates.push(`https://uploads.mangadex.org${pathPart}`);
       }
 
-      const isMangaDex = url.includes('mangadex.org') || url.includes('mangadex.network');
-
-      // 2. MangaDex: ALWAYS download via internal hardened server proxy!
-      // Direct browser requests are intercepted by MangaDex CDN to return the placeholder banner.
-      if (isMangaDex) {
-        // Attempt 1: Direct proxy request
-        try {
-          const proxyUrl = `/api/proxy/image?url=${encodeURIComponent(url)}`;
-          const proxyRes = await fetch(proxyUrl, { signal: controller.signal });
-          if (proxyRes.ok) {
-            const blob = await proxyRes.blob();
-            if (isValidImageBlob(blob)) return blob;
-          }
-        } catch (e) {}
-
-        // Attempt 2: If volunteer node or original data, fallback to uploads.mangadex.org data-saver
-        let altUrl = null;
-        if (url.includes('/data/')) {
-          altUrl = url.replace('/data/', '/data-saver/');
-        } else if (!url.includes('uploads.mangadex.org') && url.includes('/data-saver/')) {
-          const pathPart = url.substring(url.indexOf('/data-saver/'));
-          altUrl = `https://uploads.mangadex.org${pathPart}`;
-        }
-
-        if (altUrl && altUrl !== url) {
+      for (let cIdx = 0; cIdx < candidates.length; cIdx++) {
+        const targetCandidate = candidates[cIdx];
+        for (let retry = 0; retry < 2; retry++) {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), timeoutMs);
           try {
-            const altProxyUrl = `/api/proxy/image?url=${encodeURIComponent(altUrl)}`;
-            const altRes = await fetch(altProxyUrl, { signal: controller.signal });
-            if (altRes.ok) {
-              const blob = await altRes.blob();
-              if (isValidImageBlob(blob)) return blob;
+            const qs = retry > 0 ? `&t=${Date.now()}` : '';
+            const proxyUrl = `/api/proxy/image?url=${encodeURIComponent(targetCandidate)}${qs}`;
+            const proxyRes = await fetch(proxyUrl, { signal: controller.signal });
+            if (proxyRes.ok) {
+              const blob = await proxyRes.blob();
+              if (isValidImageBlob(blob)) {
+                clearTimeout(timer);
+                return blob;
+              }
             }
-          } catch (e) {}
-        }
-
-        // Attempt 3: Retry with cache-bust timestamp
-        try {
-          const retryProxyUrl = `/api/proxy/image?url=${encodeURIComponent(altUrl || url)}&t=${Date.now()}`;
-          const retryRes = await fetch(retryProxyUrl, { signal: controller.signal });
-          if (retryRes.ok) {
-            const blob = await retryRes.blob();
-            if (isValidImageBlob(blob)) return blob;
+          } catch (e) {
+            // Short backoff before next attempt
+            await new Promise(r => setTimeout(r, 400));
+          } finally {
+            clearTimeout(timer);
           }
-        } catch (e) {}
-
-        throw new Error('Gagal mengunduh panel MangaDex dari server proxy');
+        }
       }
 
-      // 3. Primary fallback for other mirrors: Local server proxy (/api/proxy/image)
+      throw new Error('Gagal mengunduh panel MangaDex dari server proxy (koneksi timeout / ISP)');
+    }
+
+    // 3. Fallback for other mirrors (Indo mirror, English mirror, etc.)
+    const mirrorController = new AbortController();
+    const mirrorTimer = setTimeout(() => mirrorController.abort(), timeoutMs);
+    try {
       try {
         const proxyUrl = `/api/proxy/image?url=${encodeURIComponent(url)}${referer ? '&referer=' + encodeURIComponent(referer) : ''}`;
-        const proxyRes = await fetch(proxyUrl, { signal: controller.signal });
+        const proxyRes = await fetch(proxyUrl, { signal: mirrorController.signal });
         if (proxyRes.ok) {
           const blob = await proxyRes.blob();
           if (isValidImageBlob(blob)) return blob;
@@ -135,7 +134,7 @@
       if (url.startsWith('http') && !url.includes('localhost') && !url.includes('127.0.0.1')) {
         try {
           const wsrvUrl = `https://wsrv.nl/?url=${encodeURIComponent(url)}&output=webp&q=85`;
-          const wsrvRes = await fetch(wsrvUrl, { signal: controller.signal });
+          const wsrvRes = await fetch(wsrvUrl, { signal: mirrorController.signal });
           if (wsrvRes.ok) {
             const blob = await wsrvRes.blob();
             if (isValidImageBlob(blob)) return blob;
@@ -145,7 +144,7 @@
 
       throw new Error(`Gagal mengunduh panel gambar dari: ${url.substring(0, 50)}...`);
     } finally {
-      clearTimeout(timer);
+      clearTimeout(mirrorTimer);
     }
   }
 
@@ -452,9 +451,9 @@
         queueState.activeProgress.totalPages = pageUrls.length;
         this.notifySubscribers();
 
-        // 3. Download image blobs with max concurrency: 3 (Anti Rate-Limit & Serverless Friendly)
+        // 3. Download image blobs with max concurrency: 2 (Anti Rate-Limit & Serverless Friendly)
         let totalBytes = 0;
-        await mapConcurrent(pageUrls, 3, async (imgUrl, idx) => {
+        await mapConcurrent(pageUrls, 2, async (imgUrl, idx) => {
           const pageNum = idx + 1;
           const blob = await fetchImageAsBlob(imgUrl, source === 'bacakomik' ? chapter.url : null);
           totalBytes += blob.size;

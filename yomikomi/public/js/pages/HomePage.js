@@ -11,7 +11,9 @@ import {
   getCoverUrl,
   CoverCache,
   MANGADEX_GENRES,
-  MANGADEX_POPULAR_THEMES
+  MANGADEX_POPULAR_THEMES,
+  MANGADEX_FORMATS,
+  MANGADEX_CONTENT_WARNINGS
 } from '../state.js';
 import { renderHeroBanner } from '../components/HeroBanner.js';
 import { fetchKomikuLatest } from '../services/api.js';
@@ -459,11 +461,55 @@ export function initGenreFilter() {
       modalBody.appendChild(tSection);
     }
 
-    if (filteredGenres.length === 0 && filteredThemes.length === 0) {
+    const filteredFormats = MANGADEX_FORMATS.filter(g => !q || g.name.toLowerCase().includes(q));
+    if (filteredFormats.length > 0) {
+      const fSection = document.createElement('div');
+      fSection.innerHTML = `<div class="genre-modal-group-title">Format Komik (${filteredFormats.length})</div>`;
+      const fGrid = document.createElement('div');
+      fGrid.className = 'genre-modal-grid';
+      filteredFormats.forEach(g => {
+        const itemBtn = document.createElement('button');
+        itemBtn.className = `genre-modal-tag-btn ${state.selectedGenre?.id === g.id ? 'active' : ''}`;
+        itemBtn.type = 'button';
+        itemBtn.dataset.genreId = g.id;
+        itemBtn.innerHTML = `<i data-lucide="${g.icon || 'tag'}"></i><span>${g.name}</span>`;
+        itemBtn.addEventListener('click', () => {
+          selectGenre(g.id, g.name);
+          closeGenreModal();
+        });
+        fGrid.appendChild(itemBtn);
+      });
+      fSection.appendChild(fGrid);
+      modalBody.appendChild(fSection);
+    }
+
+    const filteredWarnings = MANGADEX_CONTENT_WARNINGS.filter(g => !q || g.name.toLowerCase().includes(q));
+    if (filteredWarnings.length > 0) {
+      const wSection = document.createElement('div');
+      wSection.innerHTML = `<div class="genre-modal-group-title">Konten Khusus & Peringatan (${filteredWarnings.length})</div>`;
+      const wGrid = document.createElement('div');
+      wGrid.className = 'genre-modal-grid';
+      filteredWarnings.forEach(g => {
+        const itemBtn = document.createElement('button');
+        itemBtn.className = `genre-modal-tag-btn ${state.selectedGenre?.id === g.id ? 'active' : ''}`;
+        itemBtn.type = 'button';
+        itemBtn.dataset.genreId = g.id;
+        itemBtn.innerHTML = `<i data-lucide="${g.icon || 'tag'}"></i><span>${g.name}</span>`;
+        itemBtn.addEventListener('click', () => {
+          selectGenre(g.id, g.name);
+          closeGenreModal();
+        });
+        wGrid.appendChild(itemBtn);
+      });
+      wSection.appendChild(wGrid);
+      modalBody.appendChild(wSection);
+    }
+
+    if (filteredGenres.length === 0 && filteredThemes.length === 0 && filteredFormats.length === 0 && filteredWarnings.length === 0) {
       modalBody.innerHTML = `
         <div style="text-align: center; padding: 2rem; color: var(--text-muted);">
           <i data-lucide="help-circle" style="width: 32px; height: 32px; margin-bottom: 0.5rem;"></i>
-          <p>Genre "<strong>${filterText}</strong>" tidak ditemukan.</p>
+          <p>Filter "<strong>${filterText}</strong>" tidak ditemukan.</p>
         </div>
       `;
     }

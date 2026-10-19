@@ -86,15 +86,13 @@ function customLookup(hostname, options, callback) {
     options = {};
   }
   const h = (hostname || '').toLowerCase();
-  if (h === 'api.mangadex.org' || h === 'uploads.mangadex.org' || h.endsWith('.mangadex.org')) {
-    if (options && options.all) {
-      return callback(null, MANGADEX_IPS);
-    }
-    const ip = MANGADEX_IPS[ipCounter++ % MANGADEX_IPS.length].address;
-    return callback(null, ip, 4);
+
+  // On Vercel / serverless cloud, standard DNS resolution is fast, unpoisoned, and routed to nearest Anycast edge
+  if (process.env.VERCEL) {
+    return dns.lookup(hostname, options, callback);
   }
 
-  // Native system DNS lookup first (instantaneous in cloud/Vercel and local systems)
+  // Native system DNS lookup first
   dns.lookup(hostname, options, (err, address, family) => {
     // Detect Indonesian ISP DNS poisoning (TrustPositif / Internet Positif 158.140.x.x)
     const isHijacked = !err && (
@@ -110,6 +108,14 @@ function customLookup(hostname, options, callback) {
             return callback(null, addresses.map(addr => ({ address: addr, family: 4 })));
           }
           return callback(null, addresses[0], 4);
+        }
+        // Last resort fallback for MangaDex
+        if (h === 'api.mangadex.org' || h === 'uploads.mangadex.org' || h.endsWith('.mangadex.org')) {
+          if (options && options.all) {
+            return callback(null, MANGADEX_IPS);
+          }
+          const ip = MANGADEX_IPS[ipCounter++ % MANGADEX_IPS.length].address;
+          return callback(null, ip, 4);
         }
         callback(err || new Error(`DNS resolution failed for ${hostname}`));
       });
@@ -176,6 +182,7 @@ app.get('/api/popular', async (req, res) => {
   try {
     const cacheKey = 'popular_manga';
     const cached = getCache(cacheKey);
+    res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
     if (cached) return res.json(cached);
 
     const data = await fetchMangaDex('/manga?limit=24&includes[]=cover_art&includes[]=author&includes[]=artist&order[followedCount]=desc&contentRating[]=safe&contentRating[]=suggestive');
@@ -192,6 +199,7 @@ app.get('/api/latest', async (req, res) => {
   try {
     const cacheKey = 'latest_manga';
     const cached = getCache(cacheKey);
+    res.setHeader('Cache-Control', 'public, s-maxage=180, stale-while-revalidate=360');
     if (cached) return res.json(cached);
 
     const data = await fetchMangaDex('/manga?limit=24&includes[]=cover_art&order[latestUploadedChapter]=desc&contentRating[]=safe&contentRating[]=suggestive');
@@ -214,11 +222,24 @@ app.get('/api/search', async (req, res) => {
 
     const cacheKey = `search_${query}_${limit}_${tag}_${lang}_${order}`;
     const cached = getCache(cacheKey);
+    res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
     if (cached) return res.json(cached);
 
-    let endpoint = `/manga?limit=${limit}&includes[]=cover_art&includes[]=author&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica`;
+    let endpoint = `/manga?limit=${limit}&includes[]=cover_art&includes[]=author`;
+    
+    // Explicit tag/content handling for Hentai, Erotica, and full catalog search
+    if (tag === 'hentai' || tag === 'content_rating_pornographic') {
+      endpoint += '&contentRating[]=pornographic';
+    } else if (tag === 'erotica') {
+      endpoint += '&contentRating[]=erotica';
+    } else {
+      endpoint += '&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&contentRating[]=pornographic';
+    }
+
     if (query) endpoint += `&title=${encodeURIComponent(query)}`;
-    if (tag) endpoint += `&includedTags[]=${encodeURIComponent(tag)}`;
+    if (tag && tag !== 'hentai' && tag !== 'content_rating_pornographic' && tag !== 'erotica') {
+      endpoint += `&includedTags[]=${encodeURIComponent(tag)}`;
+    }
 
     if (order === 'followedCount') {
       endpoint += '&order[followedCount]=desc';
@@ -252,6 +273,7 @@ app.get('/api/search', async (req, res) => {
 app.get('/api/tags', async (req, res) => {
   const cacheKey = 'mangadex_all_tags_v2';
   const cached = getCache(cacheKey);
+  res.setHeader('Cache-Control', 'public, s-maxage=86400, stale-while-revalidate=604800');
   if (cached) return res.json(cached);
 
   try {
@@ -268,6 +290,7 @@ app.get('/api/tags', async (req, res) => {
 app.get('/api/explore', async (req, res) => {
   const cacheKey = 'mangadex_explore_sections_v2';
   const cached = getCache(cacheKey);
+  res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
   if (cached) return res.json(cached);
 
   try {
@@ -304,6 +327,7 @@ app.get('/api/manga/:id', async (req, res) => {
     const { id } = req.params;
     const cacheKey = `manga_${id}`;
     const cached = getCache(cacheKey);
+    res.setHeader('Cache-Control', 'public, s-maxage=600, stale-while-revalidate=1200');
     if (cached) return res.json(cached);
 
     const data = await fetchMangaDex(`/manga/${id}?includes[]=cover_art&includes[]=author&includes[]=artist`);
@@ -324,6 +348,7 @@ app.get('/api/manga/:id/chapters', async (req, res) => {
 
     const cacheKey = `chapters_v3_${id}_${lang}_${order}`;
     const cached = getCache(cacheKey);
+    res.setHeader('Cache-Control', 'public, s-maxage=120, stale-while-revalidate=300');
     if (cached) return res.json(cached);
 
     let langParams = '';
@@ -339,7 +364,7 @@ app.get('/api/manga/:id/chapters', async (req, res) => {
     let totalChapters = 0;
 
     do {
-      const endpoint = `/manga/${id}/feed?limit=${batchLimit}&offset=${offset}&includes[]=scanlation_group&order[chapter]=${order}&order[volume]=${order}&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica${langParams}`;
+      const endpoint = `/manga/${id}/feed?limit=${batchLimit}&offset=${offset}&includes[]=scanlation_group&order[chapter]=${order}&order[volume]=${order}&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&contentRating[]=pornographic${langParams}`;
       const data = await fetchMangaDex(endpoint);
       totalChapters = data.total || 0;
       const batch = data.data || [];

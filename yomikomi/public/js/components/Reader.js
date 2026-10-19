@@ -575,14 +575,15 @@ export function detectOptimalReaderMode(manga, pages) {
     const attrs = manga.attributes;
     const lang = (attrs.originalLanguage || '').toLowerCase();
 
+    // Korean and Chinese comics are almost universally Webtoon / Long-Strip
     if (lang === 'ko' || lang === 'zh' || lang === 'zh-hk' || lang === 'zh-ro') {
       return 'long-strip';
     }
 
     if (Array.isArray(attrs.tags)) {
       const hasLongStripTag = attrs.tags.some(t => {
-        const name = (t.attributes?.name?.en || '').toLowerCase();
-        return name.includes('long strip') || name.includes('web comic');
+        const name = (t.attributes?.name?.en || t.name || '').toLowerCase();
+        return name.includes('long strip') || name.includes('web comic') || name.includes('webtoon');
       });
       if (hasLongStripTag) return 'long-strip';
     }
@@ -592,9 +593,19 @@ export function detectOptimalReaderMode(manga, pages) {
     }
   }
 
+  // Check external manga indicators (e.g., Komiku, Bacakomik, or English mirrors)
+  const extType = (state.currentExternalManga?.type || manga?.type || '').toLowerCase();
+  if (extType.includes('manhwa') || extType.includes('manhua') || extType.includes('webtoon')) {
+    return 'long-strip';
+  }
+  if (extType.includes('manga')) {
+    return 'single';
+  }
+
   const titleString = [
     manga?.title,
     manga?.type,
+    state.currentExternalManga?.title,
     manga?.attributes?.title?.en,
     manga?.attributes?.title?.ja,
     manga?.attributes?.title?.['ja-ro'],
@@ -608,7 +619,7 @@ export function detectOptimalReaderMode(manga, pages) {
     return 'single';
   }
 
-  return 'long-strip';
+  return 'single';
 }
 
 export function renderReaderPages(data) {
@@ -632,7 +643,10 @@ export function renderReaderPages(data) {
     : (data.pages || data.dataSaverPages || []);
   const total = pages.length;
 
-  if (state.readerModePreference === 'auto') {
+  const pref = state.readerModePreference || localStorage.getItem('yomikomi_reader_mode_pref') || 'auto';
+  state.readerModePreference = pref;
+
+  if (pref === 'auto') {
     state.readerMode = detectOptimalReaderMode(state.currentManga, pages);
 
     const autoStatusEl = document.getElementById('mode-auto-status');
@@ -648,22 +662,33 @@ export function renderReaderPages(data) {
       const verifyRatio = () => {
         if (probeImg.naturalWidth > 0 && probeImg.naturalHeight > 0) {
           const ratio = probeImg.naturalHeight / probeImg.naturalWidth;
-          const probedMode = ratio > 1.65 ? 'long-strip' : 'single';
+          const probedMode = ratio > 1.48 ? 'long-strip' : 'single';
           if (state.readerModePreference === 'auto' && probedMode !== state.readerMode) {
             state.readerMode = probedMode;
+            if (autoStatusEl) {
+              autoStatusEl.textContent = probedMode === 'long-strip' 
+                ? 'Auto: Webtoon (Aktif)' 
+                : 'Auto: Single (Aktif)';
+            }
             renderReaderPages(data);
           }
         }
       };
       if (probeImg.complete && probeImg.naturalWidth > 0) {
         const ratio = probeImg.naturalHeight / probeImg.naturalWidth;
-        state.readerMode = ratio > 1.65 ? 'long-strip' : 'single';
+        const probedMode = ratio > 1.48 ? 'long-strip' : 'single';
+        state.readerMode = probedMode;
+        if (autoStatusEl) {
+          autoStatusEl.textContent = probedMode === 'long-strip' 
+            ? 'Auto: Webtoon (Aktif)' 
+            : 'Auto: Single (Aktif)';
+        }
       } else {
         probeImg.onload = verifyRatio;
       }
     }
   } else {
-    state.readerMode = state.readerModePreference;
+    state.readerMode = pref;
   }
 
   const pageCounter = document.getElementById('page-counter-text');
@@ -1450,13 +1475,21 @@ export function initReaderControls() {
   const moreBtn = document.getElementById('reader-more-btn');
   const moreMenu = document.getElementById('reader-more-menu');
 
+  const initialPref = state.readerModePreference || localStorage.getItem('yomikomi_reader_mode_pref') || 'auto';
+  state.readerModePreference = initialPref;
+  document.querySelectorAll('.reader-mode-opt').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === initialPref);
+  });
+
   moreBtn?.addEventListener('click', (e) => {
     e.stopPropagation();
+    const currentPref = state.readerModePreference || localStorage.getItem('yomikomi_reader_mode_pref') || 'auto';
+    state.readerModePreference = currentPref;
     document.querySelectorAll('.reader-mode-opt').forEach(b => {
-      b.classList.toggle('active', b.dataset.mode === state.readerModePreference);
+      b.classList.toggle('active', b.dataset.mode === currentPref);
     });
     const autoStatusEl = document.getElementById('mode-auto-status');
-    if (autoStatusEl && state.readerModePreference === 'auto') {
+    if (autoStatusEl && currentPref === 'auto') {
       autoStatusEl.textContent = state.readerMode === 'long-strip' 
         ? 'Auto: Webtoon (Aktif)' 
         : 'Auto: Single (Aktif)';

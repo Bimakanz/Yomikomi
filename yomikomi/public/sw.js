@@ -3,7 +3,7 @@
  * Provides instantaneous offline loading and smooth App Shell fallback
  */
 
-const CACHE_NAME = 'yomikomi-app-shell-v20';
+const CACHE_NAME = 'yomikomi-app-shell-v21';
 
 // Static App Shell assets required to render the application offline
 const PRECACHE_ASSETS = [
@@ -116,7 +116,49 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 2. Internal API requests (/api/...): Network-First, return graceful offline JSON if offline
+  // 2. Catalog & Feed API requests (/api/popular, /api/latest, /api/explore, /api/tags, /api/search):
+  // Stale-While-Revalidate for instant 0ms rendering with background sync
+  const isCatalogApi = url.pathname === '/api/popular' ||
+                       url.pathname === '/api/latest' ||
+                       url.pathname === '/api/explore' ||
+                       url.pathname === '/api/tags' ||
+                       url.pathname.startsWith('/api/search');
+
+  if (isCatalogApi) {
+    event.respondWith(
+      caches.open(CACHE_NAME).then(async (cache) => {
+        const cachedRes = await cache.match(req);
+        const fetchPromise = fetch(req).then((networkRes) => {
+          if (networkRes && networkRes.status === 200) {
+            cache.put(req, networkRes.clone());
+          }
+          return networkRes;
+        }).catch(() => null);
+
+        if (cachedRes) {
+          event.waitUntil(fetchPromise);
+          return cachedRes;
+        }
+
+        const networkRes = await fetchPromise;
+        if (networkRes) return networkRes;
+
+        return new Response(
+          JSON.stringify({
+            error: 'offline',
+            message: 'Koneksi internet terputus. Mode offline aktif.'
+          }),
+          {
+            status: 503,
+            headers: { 'Content-Type': 'application/json' }
+          }
+        );
+      })
+    );
+    return;
+  }
+
+  // 3. Other Internal API requests (/api/...): Network-First, return graceful offline JSON if offline
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(
       fetch(req).catch(async () => {

@@ -141,7 +141,7 @@ export function renderMangaGrid(mangaList) {
     card.tabIndex = 0;
     card.innerHTML = `
       <div class="card-poster">
-        <img src="${coverUrl}" alt="${title}" loading="lazy" onerror="this.src='https://placehold.co/300x420/1e2025/ffffff?text=Cover';">
+        <img src="${coverUrl}" alt="${title}" loading="lazy" decoding="async" onerror="this.src='https://placehold.co/300x420/1e2025/ffffff?text=Cover';">
         <div class="card-overlay-gradient"></div>
         <div class="card-badges-top">
           <span class="card-source-badge ${sourceClass}">${sourceName}</span>
@@ -175,24 +175,57 @@ export function renderMangaGrid(mangaList) {
 export async function loadPopularManga() {
   const sectionTitle = document.getElementById('grid-section-title');
   if (sectionTitle) sectionTitle.textContent = 'Komik Paling Populer (Trending)';
-  showGridSkeleton();
+
+  // Instant 0ms render from memory or sessionStorage cache
+  if (!state.popularManga || state.popularManga.length === 0) {
+    try {
+      const cached = sessionStorage.getItem('yomikomi_popular_cache');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          state.popularManga = parsed;
+          state.mangaList = parsed;
+          renderMangaGrid(parsed);
+          if (parsed.length >= 3 && state.heroManga.length === 0) {
+            state.heroManga = parsed.slice(0, 5);
+            renderHeroBanner(state.heroManga);
+          }
+        }
+      }
+    } catch (e) {}
+  } else {
+    renderMangaGrid(state.popularManga);
+  }
+
+  // Only show skeleton if zero data is cached
+  if (!state.mangaList || state.mangaList.length === 0) {
+    showGridSkeleton();
+  }
 
   try {
     const res = await fetch('/api/popular');
     const data = await res.json();
-    state.mangaList = (data.data || []).map(m => ({ ...m, source: 'mangadex' }));
-    state.mangaList.forEach(m => {
+    const freshList = (data.data || []).map(m => ({ ...m, source: 'mangadex' }));
+    state.popularManga = freshList;
+    state.mangaList = freshList;
+    try {
+      sessionStorage.setItem('yomikomi_popular_cache', JSON.stringify(freshList));
+    } catch (e) {}
+
+    freshList.forEach(m => {
       CoverCache.set(m.id, getMangaTitle(m.attributes), getCoverUrl(m));
     });
-    renderMangaGrid(state.mangaList);
+    renderMangaGrid(freshList);
 
-    if (state.mangaList.length >= 3 && state.heroManga.length === 0) {
-      state.heroManga = state.mangaList.slice(0, 5);
+    if (freshList.length >= 3 && state.heroManga.length === 0) {
+      state.heroManga = freshList.slice(0, 5);
       renderHeroBanner(state.heroManga);
     }
   } catch (error) {
     console.error('Failed to load popular manga:', error);
-    showToast('Gagal memuat manga populer');
+    if (!state.mangaList || state.mangaList.length === 0) {
+      showToast('Gagal memuat manga populer');
+    }
   }
 }
 window.loadPopularManga = loadPopularManga;

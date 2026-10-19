@@ -31,6 +31,19 @@ export async function loadExploreFeed() {
   const container = document.getElementById('explore-feed');
   if (!container) return;
 
+  // Instant 0ms render from memory or sessionStorage cache
+  if (!state.exploreData) {
+    try {
+      const cached = sessionStorage.getItem('yomikomi_explore_cache');
+      if (cached) {
+        state.exploreData = JSON.parse(cached);
+        renderExploreFeed(state.exploreData);
+      }
+    } catch (e) {}
+  } else {
+    renderExploreFeed(state.exploreData);
+  }
+
   if (!state.exploreData) {
     container.innerHTML = `
       <div class="explore-loading-state">
@@ -43,6 +56,9 @@ export async function loadExploreFeed() {
     const res = await fetch('/api/explore');
     const data = await res.json();
     state.exploreData = data;
+    try {
+      sessionStorage.setItem('yomikomi_explore_cache', JSON.stringify(data));
+    } catch (e) {}
     renderExploreFeed(data);
   } catch (err) {
     console.error('Failed to load explore feed:', err);

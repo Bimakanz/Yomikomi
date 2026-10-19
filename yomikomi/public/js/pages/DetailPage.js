@@ -292,6 +292,9 @@ export async function openMangaDetail(mangaId, maybeMangaData = null) {
     chaptersList.innerHTML = `<div class="spinner" style="margin: 2rem auto;"></div>`;
   }
 
+  // Parallel fetch: immediately trigger chapter feed loading simultaneously with manga detail
+  loadChaptersFeed(mangaId);
+
   try {
     const res = await fetch(`/api/manga/${mangaId}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -299,9 +302,7 @@ export async function openMangaDetail(mangaId, maybeMangaData = null) {
     state.currentManga = data.data;
 
     CoverCache.set(data.data.id, getMangaTitle(data.data.attributes), getCoverUrl(data.data));
-
     renderMangaDetailHero(state.currentManga);
-    loadChaptersFeed(mangaId);
   } catch (error) {
     console.error('Failed to load manga detail:', error);
     if (typeof OfflineManager !== 'undefined' && OfflineManager.db?.manga) {

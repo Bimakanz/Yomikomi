@@ -3,7 +3,7 @@
  * Provides instantaneous offline loading and smooth App Shell fallback
  */
 
-const CACHE_NAME = 'yomikomi-app-shell-v21';
+const CACHE_NAME = 'yomikomi-app-shell-v22';
 
 // Static App Shell assets required to render the application offline
 const PRECACHE_ASSETS = [
@@ -34,8 +34,8 @@ const PRECACHE_ASSETS = [
   '/icons/icon-512.png',
   '/icons/apple-touch-icon.png',
   '/icons/favicon.png',
-  'https://unpkg.com/lucide@latest',
-  'https://unpkg.com/dexie@latest/dist/dexie.js'
+  '/libs/lucide.min.js',
+  '/libs/dexie.min.js'
 ];
 
 // Install: Cache App Shell assets

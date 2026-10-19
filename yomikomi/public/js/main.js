@@ -467,6 +467,23 @@ function initApp() {
     initOfflinePageEvents();
 
     initPWA();
+
+    // Idle background pre-fetching for instant Explore tab navigation (0ms switch)
+    if ('requestIdleCallback' in window) {
+      requestIdleCallback(() => {
+        fetch('/api/explore').then(r => r.json()).then(data => {
+          state.exploreData = data;
+          try { sessionStorage.setItem('yomikomi_explore_cache', JSON.stringify(data)); } catch (e) {}
+        }).catch(() => {});
+      });
+    } else {
+      setTimeout(() => {
+        fetch('/api/explore').then(r => r.json()).then(data => {
+          state.exploreData = data;
+          try { sessionStorage.setItem('yomikomi_explore_cache', JSON.stringify(data)); } catch (e) {}
+        }).catch(() => {});
+      }, 1500);
+    }
   } catch (err) {
     console.error('[Yomikomi] App initialization error:', err);
   }

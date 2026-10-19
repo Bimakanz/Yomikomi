@@ -552,7 +552,9 @@ export function getCoverUrl(manga) {
   if (manga.coverUrl) return manga.coverUrl;
   const coverRel = manga.relationships?.find(r => r.type === 'cover_art');
   if (coverRel?.attributes?.fileName) {
-    return `/api/cover/${manga.id}/${coverRel.attributes.fileName}`;
+    const fn = coverRel.attributes.fileName;
+    const thumbFn = (fn.endsWith('.256.jpg') || fn.endsWith('.512.jpg')) ? fn : `${fn}.512.jpg`;
+    return `/api/cover/${manga.id}/${thumbFn}`;
   }
   const cached = CoverCache.get(manga.id);
   if (cached?.coverUrl) return cached.coverUrl;

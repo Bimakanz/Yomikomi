@@ -185,7 +185,7 @@ app.get('/api/popular', async (req, res) => {
     res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
     if (cached) return res.json(cached);
 
-    const data = await fetchMangaDex('/manga?limit=24&includes[]=cover_art&includes[]=author&includes[]=artist&order[followedCount]=desc&contentRating[]=safe&contentRating[]=suggestive');
+    const data = await fetchMangaDex('/manga?limit=24&includes[]=cover_art&includes[]=author&order[followedCount]=desc&contentRating[]=safe&contentRating[]=suggestive');
     setCache(cacheKey, data, CACHE_TTL.popular);
     res.json(data);
   } catch (error) {
@@ -330,7 +330,7 @@ app.get('/api/manga/:id', async (req, res) => {
     res.setHeader('Cache-Control', 'public, s-maxage=600, stale-while-revalidate=1200');
     if (cached) return res.json(cached);
 
-    const data = await fetchMangaDex(`/manga/${id}?includes[]=cover_art&includes[]=author&includes[]=artist`);
+    const data = await fetchMangaDex(`/manga/${id}?includes[]=cover_art&includes[]=author`);
     setCache(cacheKey, data, CACHE_TTL.manga);
     res.json(data);
   } catch (error) {
@@ -483,7 +483,7 @@ app.get('/api/cover/:mangaId/:filename', (req, res) => {
   // If already on disk, serve immediately!
   if (fs.existsSync(diskPath)) {
     res.setHeader('Content-Type', 'image/jpeg');
-    res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
+    res.setHeader('Cache-Control', 'public, max-age=2592000, s-maxage=2592000, stale-while-revalidate=86400, immutable');
     return fs.createReadStream(diskPath).pipe(res);
   }
 
@@ -503,16 +503,22 @@ app.get('/api/cover/:mangaId/:filename', (req, res) => {
 
   const proxyReq = https.request(options, (proxyRes) => {
     if (proxyRes.statusCode !== 200) {
+      if (filename.endsWith('.512.jpg') || filename.endsWith('.256.jpg')) {
+        const rawFilename = filename.replace(/\.(512|256)\.jpg$/, '');
+        return res.redirect(302, `/api/cover/${mangaId}/${rawFilename}`);
+      }
       return res.status(proxyRes.statusCode).end();
     }
 
     res.writeHead(200, {
       'Content-Type': proxyRes.headers['content-type'] || 'image/jpeg',
-      'Cache-Control': 'public, max-age=604800, immutable'
+      'Cache-Control': 'public, max-age=2592000, s-maxage=2592000, stale-while-revalidate=86400, immutable'
     });
 
-    const fileStream = fs.createWriteStream(diskPath);
-    proxyRes.pipe(fileStream);
+    try {
+      const fileStream = fs.createWriteStream(diskPath);
+      proxyRes.pipe(fileStream);
+    } catch (e) {}
     proxyRes.pipe(res);
   });
 

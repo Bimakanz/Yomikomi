@@ -20,27 +20,29 @@
   <link rel="icon" type="image/png" sizes="64x64" href="/icons/favicon.png">
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   
+  <!-- Preconnect to MangaDex CDN for faster image loads -->
+  <link rel="preconnect" href="https://uploads.mangadex.org" crossorigin>
+  <link rel="dns-prefetch" href="https://uploads.mangadex.org">
+
   <!-- Google Fonts: Inter & Outfit -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
   
-  <!-- Lucide Icons -->
-  <script src="https://unpkg.com/lucide@latest"></script>
-  
-  <!-- Dexie.js (IndexedDB for Client-Side Offline Storage) -->
-  <script src="https://unpkg.com/dexie@latest/dist/dexie.js"></script>
+  <!-- High-Performance Local Vendor Bundles (Zero unpkg network latency) -->
+  <script src="/libs/lucide.min.js"></script>
+  <script src="/libs/dexie.min.js"></script>
   
   <!-- CSS Stylesheet -->
-  <link rel="stylesheet" href="/css/style.css?v=20261019-21">
+  <link rel="stylesheet" href="/css/style.css?v=20261019-22">
 </head>
 <body class="dark-theme">
   <!-- Application Root Container -->
   <div id="app"></div>
 
   <!-- Client-Side Offline Storage & Queue Engine -->
-  <script src="/js/offline-manager.js?v=20261019-21"></script>
+  <script src="/js/offline-manager.js?v=20261019-22"></script>
   <!-- Modular ES Module Entry Point -->
-  <script type="module" src="/js/main.js?v=20261019-21"></script>
+  <script type="module" src="/js/main.js?v=20261019-22"></script>
 </body>
 </html>

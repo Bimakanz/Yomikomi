@@ -15,7 +15,7 @@ import {
   getStoredList,
   STORAGE_KEY_HISTORY
 } from '../state.js';
-import { openReader, openExternalReader, openEnglishReader } from './Reader.js';
+import { openReader, openExternalReader, openEnglishReader, prefetchChapter } from './Reader.js';
 import { fetchKomikuSearch, fetchKomikuManga } from '../services/api.js';
 
 /**
@@ -541,26 +541,33 @@ export async function renderUnifiedChaptersList() {
   container.innerHTML = html;
   initIcons();
 
-  // Attach click events
+  // Instant Warm-up (Native MangaDex style): Pre-warm the first 2 chapters immediately in the background
+  if (chapters[0]) prefetchChapter(chapters[0]);
+  if (chapters[1]) prefetchChapter(chapters[1]);
+
+  // Attach click & hover events
   container.querySelectorAll('.chapter-item').forEach(item => {
+    const idx = parseInt(item.dataset.chIdx, 10);
+    const ch = chapters[idx];
+
+    // Predictive Pre-warming: As soon as user hovers or touches a chapter item, warm up images & metadata
+    if (ch) {
+      item.addEventListener('mouseenter', () => prefetchChapter(ch), { passive: true });
+      item.addEventListener('touchstart', () => prefetchChapter(ch), { passive: true });
+    }
+
     item.addEventListener('click', (e) => {
       if (e.target.closest('.btn-ch-download') || e.target.closest('.btn-delete-download')) return;
-      const idx = parseInt(item.dataset.chIdx, 10);
-      const ch = chapters[idx];
       openUnifiedChapter(ch, idx);
     });
 
     item.querySelector('.btn-ch-download')?.addEventListener('click', (e) => {
       e.stopPropagation();
-      const idx = parseInt(item.dataset.chIdx, 10);
-      const ch = chapters[idx];
       downloadSingleChapter(ch);
     });
 
     item.querySelector('.btn-delete-download')?.addEventListener('click', async (e) => {
       e.stopPropagation();
-      const idx = parseInt(item.dataset.chIdx, 10);
-      const ch = chapters[idx];
       if (window.OfflineManager) {
         await OfflineManager.deleteChapter(ch.id || ch.url);
         renderUnifiedChaptersList();
@@ -666,6 +673,11 @@ export function updateCustomChapterDropdown(items, currentVal, onSelect) {
         </div>
         ${langTag}
       `;
+      el.addEventListener('mouseenter', () => {
+        const pool = state.activeChapters || state.currentChapters || [];
+        const ch = pool.find(c => (c.id === it.value || c.url === it.value));
+        if (ch) prefetchChapter(ch);
+      }, { passive: true });
       el.addEventListener('click', (e) => {
         e.stopPropagation();
         panel?.classList.add('hidden');

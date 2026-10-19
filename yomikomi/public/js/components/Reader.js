@@ -192,7 +192,63 @@ export function handlePageImageError(imgEl) {
   initIcons();
 }
 
-window.handlePageImageError = handlePageImageError;
+// Global In-Memory Chapter Pages Cache for 0ms Instant Loading (Like Native MangaDex)
+window.prefetchedChaptersCache = window.prefetchedChaptersCache || new Map();
+const inFlightPrefetches = new Map();
+
+export async function prefetchChapter(ch) {
+  if (!ch) return null;
+  const key = ch.id || ch.url;
+  if (!key) return null;
+
+  if (window.prefetchedChaptersCache.has(key)) {
+    return window.prefetchedChaptersCache.get(key);
+  }
+  if (inFlightPrefetches.has(key)) {
+    return inFlightPrefetches.get(key);
+  }
+
+  const p = (async () => {
+    try {
+      let data = null;
+      if (ch.source === 'mangadex' || (!ch.source && ch.id && !String(ch.id).startsWith('http') && !ch.url?.startsWith('http'))) {
+        const res = await fetch(`/api/chapter/${ch.id}`);
+        data = await res.json();
+      } else if (ch.source === 'komiku' || ch.source === 'bacakomik' || String(ch.url || ch.id).includes('komiku')) {
+        const targetUrl = ch.url || (String(ch.id).startsWith('http') ? ch.id : `https://komiku.org/${ch.id}/`);
+        const res = await fetch(`/api/komiku/chapter-pages?url=${encodeURIComponent(targetUrl)}`);
+        data = await res.json();
+      } else {
+        const targetUrl = ch.url || ch.id;
+        const res = await fetch(`/api/external/en/chapter-pages?url=${encodeURIComponent(targetUrl)}`);
+        data = await res.json();
+      }
+
+      if (data && (data.pages || data.dataSaverPages)) {
+        window.prefetchedChaptersCache.set(key, data);
+        if (ch.id) window.prefetchedChaptersCache.set(ch.id, data);
+        if (ch.url) window.prefetchedChaptersCache.set(ch.url, data);
+
+        // Warm first 4 images into browser cache so initial screen paints in 0ms
+        const pages = (data.dataSaverPages && data.dataSaverPages.length > 0) ? data.dataSaverPages : (data.pages || []);
+        pages.slice(0, 4).forEach(pageUrl => {
+          const preImg = new Image();
+          preImg.src = getReaderStageUrl(pageUrl, 0);
+        });
+        return data;
+      }
+    } catch (e) {
+      // Background prefetch error silently ignored
+    } finally {
+      inFlightPrefetches.delete(key);
+    }
+    return null;
+  })();
+
+  inFlightPrefetches.set(key, p);
+  return p;
+}
+window.prefetchChapter = prefetchChapter;
 
 export async function openReader(chapterId, chapterIndex) {
   state.isExternal = false;
@@ -215,24 +271,6 @@ export async function openReader(chapterId, chapterIndex) {
   const chNum = chObj?.title || (chObj?.attributes?.chapter ? `Chapter ${chObj.attributes.chapter}` : 'Special Chapter');
   if (chObj?.language || chObj?.attributes?.translatedLanguage) {
     state.currentReadingLang = chObj.language || chObj.attributes.translatedLanguage;
-  }
-
-  const viewport = document.getElementById('reader-viewport');
-  if (viewport) {
-    viewport.className = 'reader-viewport long-strip-mode';
-    viewport.innerHTML = `
-      <div class="chapter-transition-loader">
-        <div class="transition-spinner-box">
-          <div class="spinner"></div>
-          <p class="transition-title">Memuat ${chNum}...</p>
-          <span class="transition-sub">Menyiapkan halaman komik</span>
-        </div>
-        <div class="reader-skeleton-stream">
-          <div class="page-skeleton-loader preview-stream"><div class="page-skeleton-shimmer"></div></div>
-          <div class="page-skeleton-loader preview-stream"><div class="page-skeleton-shimmer"></div></div>
-        </div>
-      </div>
-    `;
   }
 
   const rMangaTitle = document.getElementById('reader-manga-title');
@@ -275,6 +313,33 @@ export async function openReader(chapterId, chapterIndex) {
       openReader(val, newIdx);
     }
   });
+
+  // 100% Instant 0ms Load: Check if already pre-cached in memory!
+  const cachedData = window.prefetchedChaptersCache?.get(chapterId);
+  if (cachedData) {
+    state.currentChapterData = cachedData;
+    renderReaderPages(cachedData);
+    saveReadingHistory(state.currentManga, chObj);
+    return;
+  }
+
+  const viewport = document.getElementById('reader-viewport');
+  if (viewport) {
+    viewport.className = 'reader-viewport long-strip-mode';
+    viewport.innerHTML = `
+      <div class="chapter-transition-loader">
+        <div class="transition-spinner-box">
+          <div class="spinner"></div>
+          <p class="transition-title">Memuat ${chNum}...</p>
+          <span class="transition-sub">Menyiapkan halaman komik</span>
+        </div>
+        <div class="reader-skeleton-stream">
+          <div class="page-skeleton-loader preview-stream"><div class="page-skeleton-shimmer"></div></div>
+          <div class="page-skeleton-loader preview-stream"><div class="page-skeleton-shimmer"></div></div>
+        </div>
+      </div>
+    `;
+  }
 
   if (window.OfflineManager) {
     const isDown = await OfflineManager.isChapterDownloaded(chapterId);
@@ -357,25 +422,8 @@ export async function openExternalReader(chapterUrl, chapterTitle, allChapters, 
   const readerContainer = document.getElementById('view-reader');
   if (readerContainer) readerContainer.scrollTop = 0;
 
-  const viewport = document.getElementById('reader-viewport');
-  if (viewport) {
-    viewport.className = 'reader-viewport long-strip-mode';
-    viewport.innerHTML = `
-      <div class="chapter-transition-loader">
-        <div class="transition-spinner-box">
-          <div class="spinner"></div>
-          <p class="transition-title">Memuat ${chapterTitle}...</p>
-          <span class="transition-sub">Menyiapkan halaman komik Indo Mirror</span>
-        </div>
-        <div class="reader-skeleton-stream">
-          <div class="page-skeleton-loader preview-stream"><div class="page-skeleton-shimmer"></div></div>
-          <div class="page-skeleton-loader preview-stream"><div class="page-skeleton-shimmer"></div></div>
-        </div>
-      </div>
-    `;
-  }
+  const mangaTitle = getMangaTitle(state.currentManga?.attributes) || state.currentManga?.title || 'Manga';
 
-  const mangaTitle = getMangaTitle(state.currentManga?.attributes);
   const rMangaTitle = document.getElementById('reader-manga-title');
   const rChTitle = document.getElementById('reader-chapter-title');
   const footerPill = document.getElementById('footer-chapter-pill');
@@ -398,6 +446,40 @@ export async function openExternalReader(chapterUrl, chapterTitle, allChapters, 
       openExternalReader(targetCh.url, targetCh.title, allChapters, newIdx);
     }
   });
+
+  // 100% Instant 0ms Load: Check if already pre-cached in memory!
+  const cachedData = window.prefetchedChaptersCache?.get(chapterUrl);
+  if (cachedData) {
+    state.currentChapterData = {
+      pages: cachedData.pages || [],
+      dataSaverPages: cachedData.pages || [],
+      totalPages: (cachedData.pages || []).length
+    };
+    renderReaderPages(state.currentChapterData);
+    saveReadingHistory(state.currentManga || { id: chapterUrl, attributes: { title: { en: mangaTitle } } }, {
+      id: chapterUrl,
+      attributes: { chapter: chapterTitle }
+    });
+    return;
+  }
+
+  const viewport = document.getElementById('reader-viewport');
+  if (viewport) {
+    viewport.className = 'reader-viewport long-strip-mode';
+    viewport.innerHTML = `
+      <div class="chapter-transition-loader">
+        <div class="transition-spinner-box">
+          <div class="spinner"></div>
+          <p class="transition-title">Memuat ${chapterTitle}...</p>
+          <span class="transition-sub">Menyiapkan halaman komik Indo Mirror</span>
+        </div>
+        <div class="reader-skeleton-stream">
+          <div class="page-skeleton-loader preview-stream"><div class="page-skeleton-shimmer"></div></div>
+          <div class="page-skeleton-loader preview-stream"><div class="page-skeleton-shimmer"></div></div>
+        </div>
+      </div>
+    `;
+  }
 
   if (window.OfflineManager) {
     const isDown = await OfflineManager.isChapterDownloaded(chapterUrl);
@@ -483,25 +565,8 @@ export async function openEnglishReader(chapterUrl, chapterTitle, allChapters, c
   const readerContainer = document.getElementById('view-reader');
   if (readerContainer) readerContainer.scrollTop = 0;
 
-  const viewport = document.getElementById('reader-viewport');
-  if (viewport) {
-    viewport.className = 'reader-viewport long-strip-mode';
-    viewport.innerHTML = `
-      <div class="chapter-transition-loader">
-        <div class="transition-spinner-box">
-          <div class="spinner"></div>
-          <p class="transition-title">Memuat ${chapterTitle}...</p>
-          <span class="transition-sub">Menyiapkan halaman komik English Mirror</span>
-        </div>
-        <div class="reader-skeleton-stream">
-          <div class="page-skeleton-loader preview-stream"><div class="page-skeleton-shimmer"></div></div>
-          <div class="page-skeleton-loader preview-stream"><div class="page-skeleton-shimmer"></div></div>
-        </div>
-      </div>
-    `;
-  }
-
   const mangaTitle = getMangaTitle(state.currentManga?.attributes);
+
   const rMangaTitle = document.getElementById('reader-manga-title');
   const rChTitle = document.getElementById('reader-chapter-title');
   const footerPill = document.getElementById('footer-chapter-pill');
@@ -524,6 +589,40 @@ export async function openEnglishReader(chapterUrl, chapterTitle, allChapters, c
       openEnglishReader(targetCh.url, targetCh.title, allChapters, newIdx);
     }
   });
+
+  // 100% Instant 0ms Load: Check if already pre-cached in memory!
+  const cachedData = window.prefetchedChaptersCache?.get(chapterUrl);
+  if (cachedData) {
+    state.currentChapterData = {
+      pages: cachedData.pages || [],
+      dataSaverPages: cachedData.pages || [],
+      totalPages: (cachedData.pages || []).length
+    };
+    renderReaderPages(state.currentChapterData);
+    saveReadingHistory(state.currentManga || { id: chapterUrl, attributes: { title: { en: mangaTitle } } }, {
+      id: chapterUrl,
+      attributes: { chapter: chapterTitle }
+    });
+    return;
+  }
+
+  const viewport = document.getElementById('reader-viewport');
+  if (viewport) {
+    viewport.className = 'reader-viewport long-strip-mode';
+    viewport.innerHTML = `
+      <div class="chapter-transition-loader">
+        <div class="transition-spinner-box">
+          <div class="spinner"></div>
+          <p class="transition-title">Memuat ${chapterTitle}...</p>
+          <span class="transition-sub">Menyiapkan halaman komik English Mirror</span>
+        </div>
+        <div class="reader-skeleton-stream">
+          <div class="page-skeleton-loader preview-stream"><div class="page-skeleton-shimmer"></div></div>
+          <div class="page-skeleton-loader preview-stream"><div class="page-skeleton-shimmer"></div></div>
+        </div>
+      </div>
+    `;
+  }
 
   if (window.OfflineManager) {
     const isDown = await OfflineManager.isChapterDownloaded(chapterUrl);
@@ -721,19 +820,30 @@ export function renderReaderPages(data) {
       window.readerPageObserver = null;
     }
 
+    state.hasPrefetchedNextChapter = false;
     window.readerPageObserver = new IntersectionObserver((entries, observer) => {
       entries.forEach(entry => {
         if (entry.isIntersecting) {
           const wrap = entry.target;
+          const pageNum = parseInt(wrap.dataset.page || '0', 10);
           const img = wrap.querySelector('.reader-page-img');
           if (img && img.dataset.startedLoading !== 'true') {
             loadReaderPageImage(img);
           }
           observer.unobserve(wrap);
+
+          // Predictive Next Chapter Pre-fetch (Zero delay when advancing!)
+          if (pageNum >= Math.floor(total * 0.45) && !state.hasPrefetchedNextChapter) {
+            state.hasPrefetchedNextChapter = true;
+            const nextCandidate = findSmartNextChapter();
+            if (nextCandidate && nextCandidate.chapter) {
+              prefetchChapter(nextCandidate.chapter);
+            }
+          }
         }
       });
     }, {
-      rootMargin: '1500px 0px 1500px 0px'
+      rootMargin: '2000px 0px 2000px 0px'
     });
 
     pages.forEach((pageUrl, idx) => {
@@ -763,7 +873,7 @@ export function renderReaderPages(data) {
       viewport.appendChild(pageWrap);
 
       const img = pageWrap.querySelector('img');
-      if (idx < 4) {
+      if (idx < 6) {
         loadReaderPageImage(img);
       } else {
         window.readerPageObserver.observe(pageWrap);

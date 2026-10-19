@@ -23,6 +23,7 @@ import {
   openUnifiedChapter
 } from '../components/ChapterList.js';
 import { fetchKomikuManga } from '../services/api.js';
+import { prefetchChapter } from '../components/Reader.js';
 
 export function renderDetailPageMarkup() {
   return `
@@ -172,7 +173,24 @@ export function renderMangaDetailHero(manga) {
     initIcons();
   });
 
-  document.getElementById('btn-read-first-chapter')?.addEventListener('click', () => {
+  const readBtn = document.getElementById('btn-read-first-chapter');
+  const triggerPrefetchHeroChapter = () => {
+    const hList = getStoredList(STORAGE_KEY_HISTORY);
+    const last = hList.find(item => item.mangaId === manga.id);
+    if (last && last.chapterId) {
+      prefetchChapter({ id: last.chapterId, source: 'mangadex', number: last.chapterNum });
+      return;
+    }
+    const currentList = state.unifiedChapters?.[state.activeDetailLang] || state.currentChapters || [];
+    if (currentList.length > 0) {
+      prefetchChapter(currentList[0]);
+    }
+  };
+
+  readBtn?.addEventListener('mouseenter', triggerPrefetchHeroChapter, { passive: true });
+  readBtn?.addEventListener('touchstart', triggerPrefetchHeroChapter, { passive: true });
+
+  readBtn?.addEventListener('click', () => {
     const hList = getStoredList(STORAGE_KEY_HISTORY);
     const last = hList.find(item => item.mangaId === manga.id);
     if (last && last.chapterId && window.resumeReadingChapter) {

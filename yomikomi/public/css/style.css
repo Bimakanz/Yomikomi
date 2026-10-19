@@ -1433,19 +1433,7 @@ img {
 }
 
 .card-rating-badge {
-  font-size: 0.68rem;
-  font-weight: 800;
-  padding: 0.2rem 0.45rem;
-  border-radius: var(--radius-sm);
-  background: rgba(18, 19, 24, 0.9);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  color: #facc15;
-  border: 1px solid rgba(234, 179, 8, 0.45);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
-  display: inline-flex;
-  align-items: center;
-  gap: 0.2rem;
+  display: none !important;
 }
 
 .card-source-badge {

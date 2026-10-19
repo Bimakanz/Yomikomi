@@ -14,7 +14,7 @@ import {
   MANGADEX_POPULAR_THEMES
 } from '../state.js';
 import { renderHeroBanner } from '../components/HeroBanner.js';
-import { fetchAniList, fetchKomikuLatest } from '../services/api.js';
+import { fetchKomikuLatest } from '../services/api.js';
 
 export function renderHomePageMarkup() {
   return `
@@ -134,9 +134,6 @@ export function renderMangaGrid(mangaList) {
     const lastChapter = isKomiku
       ? (manga.latestChapter || manga.lastChapter || 'Update')
       : (manga.attributes?.lastChapter ? `Ch. ${manga.attributes.lastChapter}` : 'Update');
-    const rating = manga.rating || manga.attributes?.rating || null;
-    const cardId = `card-manga-${idx}`;
-
     const card = document.createElement('article');
     card.className = 'manga-card';
     card.tabIndex = 0;
@@ -145,9 +142,6 @@ export function renderMangaGrid(mangaList) {
         <img src="${coverUrl}" alt="${title}" loading="lazy" onerror="this.src='https://placehold.co/300x420/1e2025/ffffff?text=Cover';">
         <div class="card-overlay-gradient"></div>
         <div class="card-badges-top">
-          <span class="card-rating-badge ${rating ? '' : 'hidden'}" id="${cardId}-rating">
-            ${rating ? `⭐ ${rating.toFixed(1)}` : ''}
-          </span>
           <span class="card-source-badge ${sourceClass}">${sourceName}</span>
         </div>
         <span class="card-status-badge">${status}</span>
@@ -164,19 +158,6 @@ export function renderMangaGrid(mangaList) {
         </div>
       </div>
     `;
-
-    // Dynamic AniList rating badge enrichment
-    if (!rating && title) {
-      fetchAniList(title).then(meta => {
-        if (meta && meta.ratingFormatted) {
-          const badge = card.querySelector(`#${cardId}-rating`);
-          if (badge) {
-            badge.textContent = meta.ratingFormatted;
-            badge.classList.remove('hidden');
-          }
-        }
-      });
-    }
 
     card.addEventListener('click', () => {
       if (typeof window.openMangaDetail === 'function') {

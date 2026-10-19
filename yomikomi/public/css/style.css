@@ -1153,6 +1153,42 @@ img {
   scrollbar-width: thin;
 }
 
+.genre-modal-active-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  background: rgba(255, 103, 64, 0.12);
+  border: 1px solid rgba(255, 103, 64, 0.3);
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  color: var(--text-main);
+}
+
+.genre-modal-active-banner strong {
+  color: var(--accent);
+}
+
+.btn-clear-active-genre {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-clear-active-genre:hover {
+  background: #ff4500;
+  border-color: #ff4500;
+}
+
 .genre-modal-group-title {
   font-size: 0.78rem;
   text-transform: uppercase;

@@ -38,16 +38,6 @@ export function renderHomePageMarkup() {
           </button>
         </div>
 
-        <!-- Secondary Genre Chips Bar (Smooth Horizontal Scroll) -->
-        <div class="genre-chips-container" id="genre-chips-container">
-          <div class="genre-chips-scroll" id="genre-chips-scroll">
-            <button class="genre-chip active" data-genre-id="all" type="button">
-              <i data-lucide="layout-grid"></i>
-              <span>Semua Genre</span>
-            </button>
-          </div>
-        </div>
-
         <!-- Genre Full Grid Modal / Dropdown Panel -->
         <div class="genre-modal-backdrop hidden" id="genre-modal-backdrop"></div>
         <div class="genre-modal-panel hidden" id="genre-modal-panel">
@@ -303,7 +293,6 @@ export function initFilters() {
 }
 
 export function initGenreFilter() {
-  const chipsScroll = document.getElementById('genre-chips-scroll');
   const modalBody = document.getElementById('genre-modal-body');
   const toggleBtn = document.getElementById('btn-genre-toggle');
   const toggleText = document.getElementById('genre-toggle-text');
@@ -313,32 +302,29 @@ export function initGenreFilter() {
   const searchInput = document.getElementById('genre-modal-search-input');
   const clearSearchBtn = document.getElementById('btn-clear-genre-search');
 
-  if (!chipsScroll || !modalBody) return;
-
-  const allChips = [...MANGADEX_GENRES, ...MANGADEX_POPULAR_THEMES];
-  allChips.forEach(g => {
-    const btn = document.createElement('button');
-    btn.className = 'genre-chip';
-    btn.type = 'button';
-    btn.dataset.genreId = g.id;
-    btn.dataset.genreName = g.name;
-    btn.innerHTML = `<i data-lucide="${g.icon || 'tag'}"></i><span>${g.name}</span>`;
-    btn.addEventListener('click', () => {
-      selectGenre(g.id, g.name);
-    });
-    chipsScroll.appendChild(btn);
-  });
-
-  const allChip = chipsScroll.querySelector('[data-genre-id="all"]');
-  allChip?.addEventListener('click', () => {
-    if (typeof window.resetGenreSelection === 'function') {
-      window.resetGenreSelection(true);
-    }
-  });
+  if (!modalBody) return;
 
   function renderModalContent(filterText = '') {
     modalBody.innerHTML = '';
     const q = filterText.toLowerCase().trim();
+
+    if (state.selectedGenre) {
+      const resetBanner = document.createElement('div');
+      resetBanner.className = 'genre-modal-active-banner';
+      resetBanner.innerHTML = `
+        <span>Filter aktif: <strong>${state.selectedGenre.name}</strong></span>
+        <button type="button" class="btn-clear-active-genre" id="btn-clear-active-genre">
+          <i data-lucide="x"></i> Hapus Filter
+        </button>
+      `;
+      resetBanner.querySelector('#btn-clear-active-genre')?.addEventListener('click', () => {
+        closeGenreModal();
+        if (typeof window.resetGenreSelection === 'function') {
+          window.resetGenreSelection(true);
+        }
+      });
+      modalBody.appendChild(resetBanner);
+    }
 
     const filteredGenres = MANGADEX_GENRES.filter(g => !q || g.name.toLowerCase().includes(q));
     if (filteredGenres.length > 0) {
@@ -459,21 +445,19 @@ export function initGenreFilter() {
   });
 
   function selectGenre(id, name) {
-    state.selectedGenre = { id, name };
-
-    chipsScroll.querySelectorAll('.genre-chip').forEach(c => {
-      if (c.dataset.genreId === id) {
-        c.classList.add('active');
-        c.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-      } else {
-        c.classList.remove('active');
+    if (state.selectedGenre?.id === id) {
+      if (typeof window.resetGenreSelection === 'function') {
+        window.resetGenreSelection(true);
       }
-    });
+      return;
+    }
+
+    state.selectedGenre = { id, name };
 
     document.querySelectorAll('.filter-tab:not(.genre-dropdown-toggle)').forEach(t => t.classList.remove('active'));
 
     if (toggleBtn) {
-      toggleBtn.classList.add('has-selection');
+      toggleBtn.classList.add('has-selection', 'active');
       toggleText.innerHTML = `Genre: ${name} <i data-lucide="x" style="width:12px;height:12px;margin-left:4px;vertical-align:middle;"></i>`;
       initIcons();
     }
@@ -485,16 +469,8 @@ export function initGenreFilter() {
   window.resetGenreSelection = function (reloadDefault = true) {
     state.selectedGenre = null;
 
-    chipsScroll.querySelectorAll('.genre-chip').forEach(c => {
-      if (c.dataset.genreId === 'all') {
-        c.classList.add('active');
-      } else {
-        c.classList.remove('active');
-      }
-    });
-
     if (toggleBtn) {
-      toggleBtn.classList.remove('has-selection');
+      toggleBtn.classList.remove('has-selection', 'active');
       toggleText.textContent = 'Filter Genre';
       initIcons();
     }

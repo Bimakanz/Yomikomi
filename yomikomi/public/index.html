@@ -32,7 +32,7 @@
   <script src="https://unpkg.com/dexie@latest/dist/dexie.js"></script>
   
   <!-- CSS -->
-  <link rel="stylesheet" href="/css/style.css?v=20261019-3">
+  <link rel="stylesheet" href="/css/style.css?v=20261019-4">
 </head>
 <body class="dark-theme">
   <!-- Navbar -->
@@ -239,6 +239,46 @@
           <button class="filter-tab" data-filter="latest">Baru Diupdate</button>
           <button class="filter-tab" data-filter="indo">🇮🇩 Indo Scan</button>
           <button class="filter-tab" data-filter="english">🇬🇧 English</button>
+          <button class="filter-tab genre-dropdown-toggle" id="btn-genre-toggle" type="button" aria-expanded="false" title="Pilih Genre Komik">
+            <i data-lucide="tag"></i>
+            <span id="genre-toggle-text">Filter Genre</span>
+            <i data-lucide="chevron-down" class="dropdown-chevron" id="genre-toggle-chevron"></i>
+          </button>
+        </div>
+
+        <!-- Secondary Genre Chips Bar (Smooth Horizontal Scroll) -->
+        <div class="genre-chips-container" id="genre-chips-container">
+          <div class="genre-chips-scroll" id="genre-chips-scroll">
+            <button class="genre-chip active" data-genre-id="all" type="button">
+              <i data-lucide="layout-grid"></i>
+              <span>Semua Genre</span>
+            </button>
+            <!-- All genres rendered dynamically via JS -->
+          </div>
+        </div>
+
+        <!-- Genre Full Grid Modal / Dropdown Panel -->
+        <div class="genre-modal-backdrop hidden" id="genre-modal-backdrop"></div>
+        <div class="genre-modal-panel hidden" id="genre-modal-panel">
+          <div class="genre-modal-header">
+            <div class="genre-modal-title">
+              <i data-lucide="tag"></i>
+              <span>Katalog Semua Genre Komik</span>
+            </div>
+            <button class="genre-modal-close" id="btn-close-genre-modal" aria-label="Tutup" type="button">
+              <i data-lucide="x"></i>
+            </button>
+          </div>
+          <div class="genre-modal-search-wrap">
+            <i data-lucide="search"></i>
+            <input type="text" id="genre-modal-search-input" placeholder="Cari genre... (misal: Romance, Action, Isekai)" autocomplete="off">
+            <button class="genre-modal-clear-search hidden" id="btn-clear-genre-search" type="button" aria-label="Hapus Pencarian">
+              <i data-lucide="x"></i>
+            </button>
+          </div>
+          <div class="genre-modal-body" id="genre-modal-body">
+            <!-- Rendered by JS -->
+          </div>
         </div>
       </div>
 
@@ -617,8 +657,8 @@
   </footer>
 
   <!-- Client-Side Offline Storage & Queue Engine -->
-  <script src="/js/offline-manager.js?v=20261019-3"></script>
+  <script src="/js/offline-manager.js?v=20261019-4"></script>
   <!-- Main JavaScript Application -->
-  <script src="/js/app.js?v=20261019-3"></script>
+  <script src="/js/app.js?v=20261019-4"></script>
 </body>
 </html>

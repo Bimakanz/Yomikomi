@@ -31,6 +31,7 @@ const state = {
   englishOrder: 'asc',
   currentSource: 'mangadex', // 'mangadex', 'bacakomik', or 'english'
   activeObjectUrls: [],
+  selectedGenre: null, // { id, name }
 };
 
 // ==========================================
@@ -43,6 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initMobileDrawer();
   initSearch();
   initFilters();
+  initGenreFilter();
   initLanguagePills();
   initReaderControls();
   initHistoryControls();
@@ -198,16 +200,72 @@ function initNavigation() {
 }
 
 // ==========================================
-// FILTER TABS
+// FILTER TABS & GENRE CATALOG
 // ==========================================
 
+const MANGADEX_GENRES = [
+  { id: '391b0423-d847-456f-aff0-8b0cfc03066b', name: 'Action', icon: 'zap' },
+  { id: '87cc87cd-a395-47af-b27a-93258283bbc6', name: 'Adventure', icon: 'compass' },
+  { id: '4d32cc48-9f00-4cca-9b5a-a839f0764984', name: 'Comedy', icon: 'smile' },
+  { id: 'b9af3a63-f058-46de-a9a0-e0c13906197a', name: 'Drama', icon: 'film' },
+  { id: 'cdc58593-87dd-415e-bbc0-2ec27bf404cc', name: 'Fantasy', icon: 'sparkles' },
+  { id: 'ace04997-f6bd-436e-b261-779182193d3d', name: 'Isekai', icon: 'globe' },
+  { id: '423e2eae-a7a2-4a8b-ac03-a8351462d71d', name: 'Romance', icon: 'heart' },
+  { id: '256c8bd9-4904-4360-bf4f-508a76d67183', name: 'Sci-Fi', icon: 'cpu' },
+  { id: 'e5301a23-ebd9-49dd-a0cb-2add944c7fe9', name: 'Slice of Life', icon: 'coffee' },
+  { id: '69964a64-2f90-4d33-beeb-f3ed2875eb4c', name: 'Sports', icon: 'award' },
+  { id: 'cdad7e68-1419-41dd-bdce-27753074a640', name: 'Horror', icon: 'skull' },
+  { id: 'ee968100-4191-4968-93d3-f82d72be7e46', name: 'Mystery', icon: 'help-circle' },
+  { id: '33771934-028e-4cb3-8744-691e866a923e', name: 'Historical', icon: 'hourglass' },
+  { id: '3b60b75c-a2d7-4860-ab56-05f391bb889c', name: 'Psychological', icon: 'eye' },
+  { id: '07251805-a27e-4d59-b488-f0bfbec15168', name: 'Thriller', icon: 'alert-triangle' },
+  { id: 'f8f62932-27da-4fe4-8ee1-6779a8c5edba', name: 'Tragedy', icon: 'cloud-rain' },
+  { id: '50880a9d-5440-4732-9afb-8f457127e836', name: 'Mecha', icon: 'bot' },
+  { id: '5ca48985-9a9d-4bd8-be29-80dc0303db72', name: 'Crime', icon: 'shield-alert' },
+  { id: '7064a261-a137-4d3a-8848-2d385de3a99c', name: 'Superhero', icon: 'shield' },
+  { id: 'acc803a4-c95a-4c22-86fc-eb6b582d82a2', name: 'Wuxia', icon: 'feather' },
+  { id: '5920b825-4181-4a17-beeb-9918b0ff7a30', name: "Boys' Love", icon: 'heart' },
+  { id: 'a3c67850-4684-404e-9b7f-c69850ee5da6', name: "Girls' Love", icon: 'heart' },
+  { id: '81c836c9-914a-4eca-981a-560dad663e73', name: 'Magical Girls', icon: 'wand' },
+  { id: 'c8cbe35b-1b2b-4a3f-9c37-db84c4514856', name: 'Medical', icon: 'activity' },
+  { id: 'b1e97889-25b4-4258-b28b-cd7f4d28ea9b', name: 'Philosophical', icon: 'book' }
+];
+
+const MANGADEX_POPULAR_THEMES = [
+  { id: 'eabc5b4c-6aff-42f3-b657-3e90cbd00b75', name: 'Supernatural', icon: 'flame' },
+  { id: '799c202e-7daa-44eb-9cf7-8a3c0441531e', name: 'Martial Arts', icon: 'swords' },
+  { id: 'caaa44eb-cd40-4177-b930-79d3ef2afe87', name: 'School Life', icon: 'graduation-cap' },
+  { id: '0bc90acb-ccc1-44ca-a34a-b9f3a73259d0', name: 'Reincarnation', icon: 'refresh-ccw' },
+  { id: 'aafb99c1-7f60-43fa-b75f-fc9502ce29c7', name: 'Harem', icon: 'users' },
+  { id: '5fff9cde-849c-4d78-aab0-0d52b2ee1d25', name: 'Survival', icon: 'life-buoy' },
+  { id: '292e862b-2d17-4062-90a2-0356caa4ae27', name: 'Time Travel', icon: 'clock' },
+  { id: '36fd93ea-e8b8-445e-b836-358f02b3d33d', name: 'Monsters', icon: 'target' },
+  { id: '39730448-9a5f-48a2-85b0-a70db87b1233', name: 'Demons', icon: 'skull' },
+  { id: '9438db5a-7e2a-4ac0-b39e-e0d95a34b8a8', name: 'Video Games', icon: 'gamepad-2' },
+  { id: '9467335a-1b83-4497-9231-765337a00b96', name: 'Post-Apocalyptic', icon: 'radioactive' },
+  { id: 'a1f53773-c69a-4ce5-8cab-fffcd90b1565', name: 'Magic', icon: 'sparkles' },
+  { id: 'ac72833b-c4e9-4878-b9db-6c8a4a99444a', name: 'Military', icon: 'crosshair' },
+  { id: 'd14322ac-4d6f-4e9b-afd9-629d5f4d8a41', name: 'Villainess', icon: 'crown' },
+  { id: 'd7d1730f-6eb0-4ba6-9437-602cac38664c', name: 'Vampires', icon: 'moon' },
+  { id: 'e64f6742-c834-471d-8d72-dd51fc02b835', name: 'Aliens', icon: 'radar' },
+  { id: 'ea2bc92d-1c26-4930-9b7c-d5c0dc1b6869', name: 'Cooking', icon: 'utensils' },
+  { id: 'f42fbf9e-188a-447b-9fdc-f19dc1e4d685', name: 'Music', icon: 'music' },
+  { id: 'da2d50ca-3018-4cc0-ac7a-6b7d472a29ea', name: 'Delinquents', icon: 'frown' },
+  { id: '631ef465-9aba-4afb-b0fc-ea10efe274a8', name: 'Zombies', icon: 'biohazard' }
+];
+
 function initFilters() {
-  const tabs = document.querySelectorAll('.filter-tab');
+  const tabs = document.querySelectorAll('.filter-tab:not(.genre-dropdown-toggle)');
   tabs.forEach(tab => {
     tab.addEventListener('click', () => {
       tabs.forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
       const filter = tab.dataset.filter;
+
+      // Reset genre selection when switching between primary tabs
+      if (typeof window.resetGenreSelection === 'function') {
+        window.resetGenreSelection(false);
+      }
 
       if (filter === 'all' || filter === 'popular') {
         loadPopularManga();
@@ -230,6 +288,225 @@ function updateActiveFilterTab(filterName) {
       tab.classList.remove('active');
     }
   });
+}
+
+function initGenreFilter() {
+  const chipsScroll = document.getElementById('genre-chips-scroll');
+  const modalBody = document.getElementById('genre-modal-body');
+  const toggleBtn = document.getElementById('btn-genre-toggle');
+  const toggleText = document.getElementById('genre-toggle-text');
+  const modalBackdrop = document.getElementById('genre-modal-backdrop');
+  const modalPanel = document.getElementById('genre-modal-panel');
+  const closeBtn = document.getElementById('btn-close-genre-modal');
+  const searchInput = document.getElementById('genre-modal-search-input');
+  const clearSearchBtn = document.getElementById('btn-clear-genre-search');
+
+  if (!chipsScroll || !modalBody) return;
+
+  // 1. Populate Horizontal Scrollable Chips
+  const allChips = [...MANGADEX_GENRES, ...MANGADEX_POPULAR_THEMES];
+  allChips.forEach(g => {
+    const btn = document.createElement('button');
+    btn.className = 'genre-chip';
+    btn.type = 'button';
+    btn.dataset.genreId = g.id;
+    btn.dataset.genreName = g.name;
+    btn.innerHTML = `<i data-lucide="${g.icon || 'tag'}"></i><span>${g.name}</span>`;
+    btn.addEventListener('click', () => {
+      selectGenre(g.id, g.name);
+    });
+    chipsScroll.appendChild(btn);
+  });
+
+  // Handler for 'Semua Genre' chip
+  const allChip = chipsScroll.querySelector('[data-genre-id="all"]');
+  allChip?.addEventListener('click', () => {
+    window.resetGenreSelection(true);
+  });
+
+  // 2. Populate Modal Grid
+  function renderModalContent(filterText = '') {
+    modalBody.innerHTML = '';
+    const q = filterText.toLowerCase().trim();
+
+    // Section 1: Main Genres
+    const filteredGenres = MANGADEX_GENRES.filter(g => !q || g.name.toLowerCase().includes(q));
+    if (filteredGenres.length > 0) {
+      const gSection = document.createElement('div');
+      gSection.innerHTML = `<div class="genre-modal-group-title">Kategori Genre Utama (${filteredGenres.length})</div>`;
+      const gGrid = document.createElement('div');
+      gGrid.className = 'genre-modal-grid';
+      filteredGenres.forEach(g => {
+        const itemBtn = document.createElement('button');
+        itemBtn.className = `genre-modal-tag-btn ${state.selectedGenre?.id === g.id ? 'active' : ''}`;
+        itemBtn.type = 'button';
+        itemBtn.dataset.genreId = g.id;
+        itemBtn.innerHTML = `<i data-lucide="${g.icon || 'tag'}"></i><span>${g.name}</span>`;
+        itemBtn.addEventListener('click', () => {
+          selectGenre(g.id, g.name);
+          closeGenreModal();
+        });
+        gGrid.appendChild(itemBtn);
+      });
+      gSection.appendChild(gGrid);
+      modalBody.appendChild(gSection);
+    }
+
+    // Section 2: Popular Themes
+    const filteredThemes = MANGADEX_POPULAR_THEMES.filter(g => !q || g.name.toLowerCase().includes(q));
+    if (filteredThemes.length > 0) {
+      const tSection = document.createElement('div');
+      tSection.innerHTML = `<div class="genre-modal-group-title">Tema & Sub-Genre Populer (${filteredThemes.length})</div>`;
+      const tGrid = document.createElement('div');
+      tGrid.className = 'genre-modal-grid';
+      filteredThemes.forEach(g => {
+        const itemBtn = document.createElement('button');
+        itemBtn.className = `genre-modal-tag-btn ${state.selectedGenre?.id === g.id ? 'active' : ''}`;
+        itemBtn.type = 'button';
+        itemBtn.dataset.genreId = g.id;
+        itemBtn.innerHTML = `<i data-lucide="${g.icon || 'tag'}"></i><span>${g.name}</span>`;
+        itemBtn.addEventListener('click', () => {
+          selectGenre(g.id, g.name);
+          closeGenreModal();
+        });
+        tGrid.appendChild(itemBtn);
+      });
+      tSection.appendChild(tGrid);
+      modalBody.appendChild(tSection);
+    }
+
+    if (filteredGenres.length === 0 && filteredThemes.length === 0) {
+      modalBody.innerHTML = `
+        <div style="text-align: center; padding: 2rem; color: var(--text-muted);">
+          <i data-lucide="help-circle" style="width: 32px; height: 32px; margin-bottom: 0.5rem;"></i>
+          <p>Genre "<strong>${filterText}</strong>" tidak ditemukan.</p>
+        </div>
+      `;
+    }
+
+    if (window.lucide) window.lucide.createIcons({ root: modalBody });
+  }
+
+  renderModalContent();
+  if (window.lucide) window.lucide.createIcons({ root: chipsScroll });
+
+  // 3. Modal Controls
+  function openGenreModal() {
+    modalBackdrop.classList.remove('hidden');
+    modalPanel.classList.remove('hidden');
+    toggleBtn?.classList.add('open');
+    if (searchInput) {
+      searchInput.value = '';
+      clearSearchBtn?.classList.add('hidden');
+      renderModalContent();
+      setTimeout(() => searchInput.focus(), 150);
+    }
+  }
+
+  function closeGenreModal() {
+    modalBackdrop.classList.add('hidden');
+    modalPanel.classList.add('hidden');
+    toggleBtn?.classList.remove('open');
+  }
+
+  toggleBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    // If active selection and user clicks toggle, reset selection
+    if (state.selectedGenre) {
+      window.resetGenreSelection(true);
+      return;
+    }
+    if (modalPanel.classList.contains('hidden')) {
+      openGenreModal();
+    } else {
+      closeGenreModal();
+    }
+  });
+
+  closeBtn?.addEventListener('click', closeGenreModal);
+  modalBackdrop?.addEventListener('click', closeGenreModal);
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !modalPanel.classList.contains('hidden')) {
+      closeGenreModal();
+    }
+  });
+
+  // 4. Modal Search Handling
+  searchInput?.addEventListener('input', (e) => {
+    const val = e.target.value;
+    if (val) {
+      clearSearchBtn?.classList.remove('hidden');
+    } else {
+      clearSearchBtn?.classList.add('hidden');
+    }
+    renderModalContent(val);
+  });
+
+  clearSearchBtn?.addEventListener('click', () => {
+    if (searchInput) searchInput.value = '';
+    clearSearchBtn?.classList.add('hidden');
+    renderModalContent();
+    searchInput?.focus();
+  });
+
+  // 5. Select a Genre
+  function selectGenre(id, name) {
+    state.selectedGenre = { id, name };
+
+    // Update chips state
+    chipsScroll.querySelectorAll('.genre-chip').forEach(c => {
+      if (c.dataset.genreId === id) {
+        c.classList.add('active');
+        c.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      } else {
+        c.classList.remove('active');
+      }
+    });
+
+    // Deselect main tabs to highlight active genre filtering
+    document.querySelectorAll('.filter-tab:not(.genre-dropdown-toggle)').forEach(t => t.classList.remove('active'));
+
+    // Update toggle button
+    if (toggleBtn) {
+      toggleBtn.classList.add('has-selection');
+      toggleText.innerHTML = `Genre: ${name} <i data-lucide="x" style="width:12px;height:12px;margin-left:4px;vertical-align:middle;"></i>`;
+      if (window.lucide) window.lucide.createIcons({ root: toggleBtn });
+    }
+
+    renderModalContent();
+    loadMangaByGenre(id, name);
+  }
+
+  // 6. Reset Genre Selection
+  window.resetGenreSelection = function (reloadDefault = true) {
+    state.selectedGenre = null;
+
+    chipsScroll.querySelectorAll('.genre-chip').forEach(c => {
+      if (c.dataset.genreId === 'all') {
+        c.classList.add('active');
+      } else {
+        c.classList.remove('active');
+      }
+    });
+
+    if (toggleBtn) {
+      toggleBtn.classList.remove('has-selection');
+      toggleText.textContent = 'Filter Genre';
+      if (window.lucide) window.lucide.createIcons({ root: toggleBtn });
+    }
+
+    renderModalContent();
+
+    if (reloadDefault) {
+      // Re-activate 'Semua Komik' tab
+      document.querySelectorAll('.filter-tab').forEach(t => {
+        if (t.dataset.filter === 'all') t.classList.add('active');
+        else if (!t.classList.contains('genre-dropdown-toggle')) t.classList.remove('active');
+      });
+      loadPopularManga();
+    }
+  };
 }
 
 // ==========================================
@@ -423,6 +700,44 @@ async function loadEnglishManga() {
     renderMangaGrid(state.mangaList);
   } catch (error) {
     console.error('Failed to load English manga:', error);
+  }
+}
+
+// 5. Load Manga by Genre
+async function loadMangaByGenre(tagId, tagName) {
+  const sectionTitle = document.getElementById('grid-section-title');
+  if (sectionTitle) {
+    sectionTitle.textContent = `Komik Genre: ${tagName}`;
+  }
+  const countBadge = document.getElementById('grid-count-badge');
+  if (countBadge) {
+    countBadge.textContent = 'Memuat...';
+  }
+  showGridSkeleton();
+
+  try {
+    let url = `/api/search?tag=${encodeURIComponent(tagId)}&limit=24&order=followedCount`;
+    if (state.currentLang === 'id') {
+      url += '&lang=id';
+    } else if (state.currentLang === 'en') {
+      url += '&lang=en';
+    }
+    const res = await fetch(url);
+    const data = await res.json();
+    state.mangaList = data.data || [];
+    state.mangaList.forEach(m => {
+      CoverCache.set(m.id, getMangaTitle(m.attributes), getCoverUrl(m));
+    });
+    renderMangaGrid(state.mangaList);
+    if (countBadge) {
+      countBadge.textContent = `${state.mangaList.length} Judul`;
+    }
+  } catch (error) {
+    console.error(`Failed to load genre ${tagName}:`, error);
+    showToast(`Gagal memuat komik genre ${tagName}`);
+    if (countBadge) {
+      countBadge.textContent = '0 Judul';
+    }
   }
 }
 

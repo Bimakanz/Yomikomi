@@ -178,14 +178,23 @@ app.get('/api/search', async (req, res) => {
     const limit = parseInt(req.query.limit) || 20;
     const tag = req.query.tag || '';
     const lang = req.query.lang || '';
+    const order = req.query.order || (tag ? 'followedCount' : '');
 
-    const cacheKey = `search_${query}_${limit}_${tag}_${lang}`;
+    const cacheKey = `search_${query}_${limit}_${tag}_${lang}_${order}`;
     const cached = getCache(cacheKey);
     if (cached) return res.json(cached);
 
     let endpoint = `/manga?limit=${limit}&includes[]=cover_art&includes[]=author&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica`;
     if (query) endpoint += `&title=${encodeURIComponent(query)}`;
     if (tag) endpoint += `&includedTags[]=${encodeURIComponent(tag)}`;
+
+    if (order === 'followedCount') {
+      endpoint += '&order[followedCount]=desc';
+    } else if (order === 'latest') {
+      endpoint += '&order[latestUploadedChapter]=desc';
+    } else if (order === 'rating') {
+      endpoint += '&order[rating]=desc';
+    }
 
     // Do NOT restrict to 'id' only so comics with English chapters remain discoverable
     if (lang && lang !== 'all') {
@@ -201,6 +210,22 @@ app.get('/api/search', async (req, res) => {
     res.json(data);
   } catch (error) {
     console.error('Error searching manga:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 3.1 Get All Manga Tags / Genres from MangaDex API
+app.get('/api/tags', async (req, res) => {
+  const cacheKey = 'mangadex_all_tags_v2';
+  const cached = getCache(cacheKey);
+  if (cached) return res.json(cached);
+
+  try {
+    const data = await fetchMangaDex('/manga/tag');
+    setCache(cacheKey, data, CACHE_TTL.popular);
+    res.json(data);
+  } catch (error) {
+    console.error('Error fetching tags:', error.message);
     res.status(500).json({ error: error.message });
   }
 });

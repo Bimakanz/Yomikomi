@@ -12,7 +12,7 @@ export function renderExplorePageMarkup() {
     <section class="view-section hidden" id="view-explore">
       <div class="explore-hero-bar">
         <div class="explore-hero-left">
-          <h1 class="explore-hero-title">Jelajah Manga & Manhwa</h1>
+          <h1 class="explore-hero-title">Explore Manga & Manhwa</h1>
           <p class="explore-hero-desc">Temukan ribuan karya pilihan dari rekomendasi teratas, rilis chapter terbaru, hingga rilisan self-published orisinal.</p>
         </div>
       </div>
@@ -50,7 +50,7 @@ export async function loadExploreFeed() {
       container.innerHTML = `
         <div class="empty-state">
           <i data-lucide="alert-circle"></i>
-          <h4>Gagal Memuat Katalog Jelajah</h4>
+          <h4>Gagal Memuat Katalog Explore</h4>
           <p>Terjadi kendala saat menghubungkan ke server katalog. Silakan coba lagi.</p>
           <button class="btn-primary" id="btn-retry-explore" style="margin-top: 1rem;">
             <i data-lucide="refresh-cw"></i> Coba Lagi
@@ -129,7 +129,6 @@ export function renderExploreFeed(data) {
     secEl.innerHTML = `
       <div class="explore-section-header">
         <div class="explore-section-title-wrap">
-          <div class="explore-section-icon"><i data-lucide="${sec.icon}"></i></div>
           <h2 class="explore-section-title">${sec.title}</h2>
           <span class="explore-section-count">${sec.items.length} Judul</span>
         </div>
@@ -193,11 +192,8 @@ export function renderExploreFeed(data) {
         window.switchView('home');
       }
       if (sec.tagId && sec.tagName) {
-        if (typeof window.resetGenreSelection === 'function') {
-          const allChips = document.querySelectorAll('.genre-chip');
-          allChips.forEach(c => {
-            if (c.dataset.genreId === sec.tagId) c.click();
-          });
+        if (typeof window.loadMangaByGenre === 'function') {
+          window.loadMangaByGenre(sec.tagId, sec.tagName);
         }
       } else {
         const filterTab = document.querySelector(`.filter-tab[data-filter="${sec.seeAllFilter}"]`);

@@ -23,7 +23,7 @@ export function renderNavbarMarkup() {
         <nav class="nav-links">
           <button class="nav-link" id="nav-btn-explore">
             <i data-lucide="compass"></i>
-            <span>Jelajah</span>
+            <span>Explore</span>
           </button>
           <button class="nav-link" id="nav-btn-bookmarks">
             <i data-lucide="bookmark"></i>

@@ -266,6 +266,7 @@ export async function loadMangaByGenre(tagId, tagName) {
     }
   }
 }
+window.loadMangaByGenre = loadMangaByGenre;
 
 export function initFilters() {
   const tabs = document.querySelectorAll('.filter-tab:not(.genre-dropdown-toggle)');

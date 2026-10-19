@@ -32,7 +32,7 @@ export function renderMobileDrawerMarkup() {
       <nav class="drawer-nav-list">
         <button class="drawer-nav-item" id="drawer-nav-explore">
           <i data-lucide="compass"></i>
-          <span>Jelajah Manga</span>
+          <span>Explore</span>
         </button>
         <button class="drawer-nav-item" id="drawer-nav-bookmarks">
           <i data-lucide="bookmark"></i>

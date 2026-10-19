@@ -2160,16 +2160,7 @@ img {
 }
 
 .reader-page-number {
-  position: absolute;
-  bottom: 0.5rem;
-  right: 0.5rem;
-  background: rgba(0, 0, 0, 0.75);
-  padding: 0.15rem 0.55rem;
-  border-radius: 4px;
-  font-size: 0.7rem;
-  color: rgba(255, 255, 255, 0.7);
-  pointer-events: none;
-  z-index: 5;
+  display: none !important;
 }
 
 /* Single Page Mode */
@@ -5153,12 +5144,22 @@ img {
   overflow-y: hidden;
   padding: 0.5rem 0.25rem 1.25rem 0.25rem;
   scrollbar-width: none;
+  -ms-overflow-style: none;
   -webkit-overflow-scrolling: touch;
   scroll-behavior: smooth;
 }
 
 .explore-carousel-track::-webkit-scrollbar {
-  display: none;
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  background: transparent !important;
+}
+
+.explore-carousel-track::-webkit-scrollbar-thumb,
+.explore-carousel-track::-webkit-scrollbar-track {
+  display: none !important;
+  background: transparent !important;
 }
 
 /* Explore Card */
@@ -5175,7 +5176,7 @@ img {
 }
 
 .explore-card:hover {
-  transform: translateY(-5px);
+  transform: none;
 }
 
 .explore-card-poster-wrap {
@@ -5187,11 +5188,12 @@ img {
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   box-shadow: var(--shadow-sm);
-  transition: box-shadow var(--transition-normal);
+  transition: box-shadow var(--transition-normal), border-color var(--transition-fast);
 }
 
 .explore-card:hover .explore-card-poster-wrap {
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.55);
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
 }
 
 .explore-card-poster {
@@ -5203,7 +5205,7 @@ img {
 }
 
 .explore-card:hover .explore-card-poster {
-  transform: scale(1.06);
+  transform: none;
 }
 
 .explore-card-flag {
@@ -5276,13 +5278,20 @@ img {
   line-height: 1.45;
   color: var(--text-main);
   flex: 1;
-  overflow-y: auto;
-  margin-bottom: 0.6rem;
-  scrollbar-width: thin;
-  padding-right: 0.2rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
   display: -webkit-box;
-  -webkit-line-clamp: 7;
+  -webkit-line-clamp: 6;
   -webkit-box-orient: vertical;
+  margin-bottom: 0.6rem;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.explore-overlay-synopsis::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
 
 .explore-overlay-actions {

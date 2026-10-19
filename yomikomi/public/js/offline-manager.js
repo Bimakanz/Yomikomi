@@ -78,20 +78,45 @@
       // 2. MangaDex: ALWAYS download via internal hardened server proxy!
       // Direct browser requests are intercepted by MangaDex CDN to return the placeholder banner.
       if (isMangaDex) {
-        const proxyUrl = `/api/proxy/image?url=${encodeURIComponent(url)}`;
-        const proxyRes = await fetch(proxyUrl, { signal: controller.signal });
-        if (proxyRes.ok) {
-          const blob = await proxyRes.blob();
-          if (isValidImageBlob(blob)) return blob;
+        // Attempt 1: Direct proxy request
+        try {
+          const proxyUrl = `/api/proxy/image?url=${encodeURIComponent(url)}`;
+          const proxyRes = await fetch(proxyUrl, { signal: controller.signal });
+          if (proxyRes.ok) {
+            const blob = await proxyRes.blob();
+            if (isValidImageBlob(blob)) return blob;
+          }
+        } catch (e) {}
+
+        // Attempt 2: If volunteer node or original data, fallback to uploads.mangadex.org data-saver
+        let altUrl = null;
+        if (url.includes('/data/')) {
+          altUrl = url.replace('/data/', '/data-saver/');
+        } else if (!url.includes('uploads.mangadex.org') && url.includes('/data-saver/')) {
+          const pathPart = url.substring(url.indexOf('/data-saver/'));
+          altUrl = `https://uploads.mangadex.org${pathPart}`;
         }
 
-        // Retry with cache-bust
-        const retryProxyUrl = `/api/proxy/image?url=${encodeURIComponent(url)}&t=${Date.now()}`;
-        const retryRes = await fetch(retryProxyUrl, { signal: controller.signal });
-        if (retryRes.ok) {
-          const blob = await retryRes.blob();
-          if (isValidImageBlob(blob)) return blob;
+        if (altUrl && altUrl !== url) {
+          try {
+            const altProxyUrl = `/api/proxy/image?url=${encodeURIComponent(altUrl)}`;
+            const altRes = await fetch(altProxyUrl, { signal: controller.signal });
+            if (altRes.ok) {
+              const blob = await altRes.blob();
+              if (isValidImageBlob(blob)) return blob;
+            }
+          } catch (e) {}
         }
+
+        // Attempt 3: Retry with cache-bust timestamp
+        try {
+          const retryProxyUrl = `/api/proxy/image?url=${encodeURIComponent(altUrl || url)}&t=${Date.now()}`;
+          const retryRes = await fetch(retryProxyUrl, { signal: controller.signal });
+          if (retryRes.ok) {
+            const blob = await retryRes.blob();
+            if (isValidImageBlob(blob)) return blob;
+          }
+        } catch (e) {}
 
         throw new Error('Gagal mengunduh panel MangaDex dari server proxy');
       }

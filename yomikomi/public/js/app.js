@@ -3027,7 +3027,6 @@ function renderReaderPages(data) {
           onload="handlePageImageLoad(this)"
           onerror="handlePageImageError(this)"
         >
-        <span class="reader-page-number">${pageNum} / ${total}</span>
       `;
       viewport.appendChild(pageWrap);
 

@@ -185,6 +185,7 @@ export function renderBookmarksList() {
 
   initIcons();
 }
+window.renderBookmarksList = renderBookmarksList;
 
 export async function resumeReadingChapter(mangaId, chapterId, chapterNum) {
   showToast(`Melanjutkan ${chapterNum || 'chapter'}...`);
@@ -437,6 +438,7 @@ export async function renderHistoryList() {
 
   initIcons();
 }
+window.renderHistoryList = renderHistoryList;
 
 export async function resolveMissingHistoryCover(imgElement, mangaTitle, mangaId) {
   if (!imgElement) return;

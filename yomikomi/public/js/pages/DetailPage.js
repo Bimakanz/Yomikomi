@@ -261,6 +261,7 @@ export async function openMangaDetail(mangaId) {
     showToast('Gagal memuat detail manga');
   }
 }
+window.openMangaDetail = openMangaDetail;
 
 export function initDetailPageEvents() {
   document.getElementById('btn-back-home')?.addEventListener('click', () => {

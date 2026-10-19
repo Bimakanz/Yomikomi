@@ -4,6 +4,7 @@
  */
 
 import { state, initIcons } from '../state.js';
+import { openSearchModal } from './SearchModal.js';
 
 export function renderMobileDrawerMarkup() {
   return `
@@ -89,7 +90,16 @@ export function closeMobileDrawer() {
   document.body.style.overflow = '';
 }
 
-export function initMobileDrawerEvents({ onNavigate, onOpenSearch }) {
+export function initMobileDrawerEvents({ onNavigate, onOpenSearch } = {}) {
+  const navigate = onNavigate || ((view, sub) => {
+    if (typeof window.switchView === 'function') window.switchView(view);
+    if (view === 'history' && sub && typeof window.switchCollectionTab === 'function') {
+      window.switchCollectionTab(sub);
+    }
+  });
+
+  const openSearch = onOpenSearch || openSearchModal;
+
   const btnClose = document.getElementById('btn-close-drawer');
   const backdrop = document.getElementById('mobile-drawer-backdrop');
 
@@ -98,63 +108,59 @@ export function initMobileDrawerEvents({ onNavigate, onOpenSearch }) {
 
   document.querySelector('.drawer-brand')?.addEventListener('click', () => {
     closeMobileDrawer();
-    onNavigate('home');
+    navigate('home');
   });
 
   document.getElementById('drawer-search-trigger')?.addEventListener('click', () => {
     closeMobileDrawer();
-    onOpenSearch();
+    openSearch();
   });
 
   document.getElementById('drawer-nav-explore')?.addEventListener('click', () => {
     closeMobileDrawer();
-    onNavigate('explore');
+    navigate('explore');
   });
 
   document.getElementById('drawer-nav-bookmarks')?.addEventListener('click', () => {
     closeMobileDrawer();
-    onNavigate('history', 'bookmarks');
+    navigate('history', 'bookmarks');
   });
 
   document.getElementById('drawer-nav-history')?.addEventListener('click', () => {
     closeMobileDrawer();
-    onNavigate('history', 'history');
+    navigate('history', 'history');
   });
 
   document.getElementById('drawer-nav-offline')?.addEventListener('click', () => {
     closeMobileDrawer();
-    onNavigate('offline');
+    navigate('offline');
   });
 
-  // Swipe Gesture Support
+  // Swipe edge gesture to open/close drawer on mobile touch screens
   let touchStartX = 0;
   let touchStartY = 0;
 
-  window.addEventListener('touchstart', (e) => {
-    if (e.touches.length !== 1) return;
+  document.addEventListener('touchstart', (e) => {
+    if (!e.touches || e.touches.length !== 1) return;
     touchStartX = e.touches[0].clientX;
     touchStartY = e.touches[0].clientY;
   }, { passive: true });
 
-  window.addEventListener('touchend', (e) => {
+  document.addEventListener('touchend', (e) => {
     if (!e.changedTouches || e.changedTouches.length === 0) return;
-    const touchEndX = e.changedTouches[0].clientX;
-    const touchEndY = e.changedTouches[0].clientY;
-
-    const deltaX = touchEndX - touchStartX;
-    const deltaY = touchEndY - touchStartY;
-
-    if (window.innerWidth > 768) return;
     if (state.currentView === 'reader') return;
 
-    const drawer = document.getElementById('mobile-drawer');
-    const isOpen = drawer?.classList.contains('open');
+    const diffX = e.changedTouches[0].clientX - touchStartX;
+    const diffY = e.changedTouches[0].clientY - touchStartY;
 
-    // Horizontal swipe threshold: 75px, vertical max: 60px
-    if (Math.abs(deltaX) > 75 && Math.abs(deltaY) < 60) {
-      if (!isOpen && deltaX < -75 && touchStartX > window.innerWidth - 60) {
+    if (Math.abs(diffX) > 60 && Math.abs(diffX) > Math.abs(diffY) * 1.5) {
+      const windowWidth = window.innerWidth;
+      const drawer = document.getElementById('mobile-drawer');
+      const isOpen = drawer?.classList.contains('open');
+
+      if (!isOpen && touchStartX > windowWidth - 40 && diffX < -50) {
         openMobileDrawer();
-      } else if (isOpen && deltaX > 75) {
+      } else if (isOpen && diffX > 50) {
         closeMobileDrawer();
       }
     }

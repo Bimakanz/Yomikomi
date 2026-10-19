@@ -320,6 +320,7 @@ export async function openReader(chapterId, chapterIndex) {
     }
   }
 }
+window.openReader = openReader;
 
 export async function openExternalReader(chapterUrl, chapterTitle, allChapters, chapterIndex) {
   state.currentPageIndex = 0;
@@ -441,6 +442,7 @@ export async function openExternalReader(chapterUrl, chapterTitle, allChapters, 
     }
   }
 }
+window.openExternalReader = openExternalReader;
 
 export async function openEnglishReader(chapterUrl, chapterTitle, allChapters, chapterIndex) {
   state.currentPageIndex = 0;
@@ -562,6 +564,7 @@ export async function openEnglishReader(chapterUrl, chapterTitle, allChapters, c
     }
   }
 }
+window.openEnglishReader = openEnglishReader;
 
 export function detectOptimalReaderMode(manga, pages) {
   if (manga && manga.attributes) {

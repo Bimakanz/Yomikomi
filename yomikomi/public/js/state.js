@@ -18,6 +18,8 @@ export const state = {
   readerQuality: localStorage.getItem('yomikomi_reader_quality') || 'data-saver', // 'data-saver' or 'original'
   popularManga: [],
   filteredManga: [],
+  mangaList: [],
+  heroManga: [],
   exploreData: null,
   currentFilter: 'all',
   currentGenre: 'all',
@@ -25,6 +27,8 @@ export const state = {
   heroIndex: 0,
   heroTimer: null,
   heroSlides: [],
+  activeHeroIndex: 0,
+  heroSlideInterval: null,
   isExternal: false,
   externalSource: null, // 'bacakomik' or 'english'
   externalChapters: [],
@@ -62,6 +66,30 @@ export const MANGADEX_GENRES = [
   { id: 'ace04997-f6bd-436e-b261-779182193d3d', name: 'Isekai', desc: 'Terlempar dan terlahir kembali di dunia lain', icon: 'sparkles' },
   { id: '891cf039-b895-47f0-9229-bef4c96eccd4', name: 'Self-Published', desc: 'Komik web dan rilisan independen', icon: 'feather' }
 ];
+
+export const MANGADEX_POPULAR_THEMES = [
+  { id: 'eabc5b4c-6aff-42f3-b657-3e90cbd00b75', name: 'Supernatural', icon: 'flame' },
+  { id: '799c202e-7daa-44eb-9cf7-8a3c0441531e', name: 'Martial Arts', icon: 'swords' },
+  { id: 'caaa44eb-cd40-4177-b930-79d3ef2afe87', name: 'School Life', icon: 'graduation-cap' },
+  { id: '0bc90acb-ccc1-44ca-a34a-b9f3a73259d0', name: 'Reincarnation', icon: 'refresh-ccw' },
+  { id: 'aafb99c1-7f60-43fa-b75f-fc9502ce29c7', name: 'Harem', icon: 'users' },
+  { id: '5fff9cde-849c-4d78-aab0-0d52b2ee1d25', name: 'Survival', icon: 'life-buoy' },
+  { id: '292e862b-2d17-4062-90a2-0356caa4ae27', name: 'Time Travel', icon: 'clock' },
+  { id: '36fd93ea-e8b8-445e-b836-358f02b3d33d', name: 'Monsters', icon: 'target' },
+  { id: '39730448-9a5f-48a2-85b0-a70db87b1233', name: 'Demons', icon: 'skull' },
+  { id: '9438db5a-7e2a-4ac0-b39e-e0d95a34b8a8', name: 'Video Games', icon: 'gamepad-2' },
+  { id: '9467335a-1b83-4497-9231-765337a00b96', name: 'Post-Apocalyptic', icon: 'radioactive' },
+  { id: 'a1f53773-c69a-4ce5-8cab-fffcd90b1565', name: 'Magic', icon: 'sparkles' },
+  { id: 'ac72833b-c4e9-4878-b9db-6c8a4a99444a', name: 'Military', icon: 'crosshair' },
+  { id: 'd14322ac-4d6f-4e9b-afd9-629d5f4d8a41', name: 'Villainess', icon: 'crown' },
+  { id: 'd7d1730f-6eb0-4ba6-9437-602cac38664c', name: 'Vampires', icon: 'moon' },
+  { id: 'e64f6742-c834-471d-8d72-dd51fc02b835', name: 'Aliens', icon: 'radar' },
+  { id: 'ea2bc92d-1c26-4930-9b7c-d5c0dc1b6869', name: 'Cooking', icon: 'utensils' },
+  { id: 'f42fbf9e-188a-447b-9fdc-f19dc1e4d685', name: 'Music', icon: 'music' },
+  { id: 'da2d50ca-3018-4cc0-ac7a-6b7d472a29ea', name: 'Delinquents', icon: 'frown' },
+  { id: '631ef465-9aba-4afb-b0fc-ea10efe274a8', name: 'Zombies', icon: 'biohazard' }
+];
+
 
 // Persistent Cover Cache
 export const CoverCache = {

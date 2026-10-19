@@ -192,6 +192,7 @@ export async function loadPopularManga() {
     showToast('Gagal memuat manga populer');
   }
 }
+window.loadPopularManga = loadPopularManga;
 
 export async function loadLatestManga() {
   const sectionTitle = document.getElementById('grid-section-title');

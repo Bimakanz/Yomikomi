@@ -237,6 +237,7 @@ export async function renderOfflineLibraryView() {
 
   initIcons();
 }
+window.renderOfflineLibraryView = renderOfflineLibraryView;
 
 export function initOfflinePageEvents() {
   document.getElementById('btn-clean-read-chapters')?.addEventListener('click', async () => {

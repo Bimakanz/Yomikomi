@@ -5,16 +5,17 @@
 
 import { state, initIcons, showToast, revokeActiveObjectUrls } from './state.js';
 import { renderNavbarMarkup, initNavbarEvents } from './components/Navbar.js';
-import { renderMobileDrawerMarkup, initMobileDrawerEvents, closeMobileDrawer } from './components/MobileDrawer.js';
-import { renderSearchModalMarkup, initSearchModalEvents } from './components/SearchModal.js';
+import { renderMobileDrawerMarkup, initMobileDrawerEvents, openMobileDrawer, closeMobileDrawer } from './components/MobileDrawer.js';
+import { renderSearchModalMarkup, initSearchModalEvents, openSearchModal, closeSearchModal } from './components/SearchModal.js';
 import { renderDownloadQueueMarkup, initDownloadQueueEvents } from './components/DownloadQueue.js';
-import { renderHomePageMarkup, initHomePage } from './pages/HomePage.js';
+import { renderHomePageMarkup, initHomePage, loadPopularManga } from './pages/HomePage.js';
 import { renderExplorePageMarkup, loadExploreFeed } from './pages/ExplorePage.js';
 import { renderDetailPageMarkup, initDetailPageEvents, openMangaDetail } from './pages/DetailPage.js';
-import { renderBookmarkPageMarkup, initBookmarkPageEvents, switchCollectionTab, resumeReadingChapter } from './pages/BookmarkPage.js';
+import { renderBookmarkPageMarkup, initBookmarkPageEvents, switchCollectionTab, resumeReadingChapter, renderBookmarksList, renderHistoryList } from './pages/BookmarkPage.js';
 import { renderOfflinePageMarkup, initOfflinePageEvents, renderOfflineLibraryView } from './pages/OfflinePage.js';
 import { openReader, initReaderControls, openExternalReader, openEnglishReader } from './components/Reader.js';
 import { toggleBookmark, refreshBookmarkSet, updateAllCollectionBadges } from './services/storage.js';
+
 
 let deferredPWAInstallPrompt = null;
 
@@ -436,22 +437,44 @@ window.openEnglishReader = openEnglishReader;
 window.resumeReadingChapter = resumeReadingChapter;
 window.toggleBookmark = toggleBookmark;
 window.showToast = showToast;
+window.openSearchModal = openSearchModal;
+window.closeSearchModal = closeSearchModal;
+window.openMobileDrawer = openMobileDrawer;
+window.closeMobileDrawer = closeMobileDrawer;
+window.switchCollectionTab = switchCollectionTab;
+window.loadPopularManga = loadPopularManga;
+window.loadExploreFeed = loadExploreFeed;
+window.renderBookmarksList = renderBookmarksList;
+window.renderHistoryList = renderHistoryList;
+window.renderOfflineLibraryView = renderOfflineLibraryView;
 
-document.addEventListener('DOMContentLoaded', () => {
-  renderAppShell();
-  refreshBookmarkSet();
-  initIcons();
 
-  initNavbarEvents();
-  initMobileDrawerEvents();
-  initSearchModalEvents();
-  initDownloadQueueEvents();
+function initApp() {
+  try {
+    renderAppShell();
+    refreshBookmarkSet();
+    initIcons();
 
-  initHomePage();
-  initDetailPageEvents();
-  initReaderControls();
-  initBookmarkPageEvents();
-  initOfflinePageEvents();
+    initNavbarEvents();
+    initMobileDrawerEvents();
+    initSearchModalEvents();
+    initDownloadQueueEvents();
 
-  initPWA();
-});
+    initHomePage();
+    initDetailPageEvents();
+    initReaderControls();
+    initBookmarkPageEvents();
+    initOfflinePageEvents();
+
+    initPWA();
+  } catch (err) {
+    console.error('[Yomikomi] App initialization error:', err);
+  }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initApp);
+} else {
+  // DOM is already parsed / interactive / complete
+  initApp();
+}

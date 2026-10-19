@@ -55,7 +55,13 @@ export function closeSearchModal() {
   document.body.style.overflow = '';
 }
 
-export function initSearchModalEvents({ onSelectManga }) {
+export function initSearchModalEvents({ onSelectManga } = {}) {
+  const selectManga = onSelectManga || ((id) => {
+    if (typeof window.openMangaDetail === 'function') {
+      window.openMangaDetail(id);
+    }
+  });
+
   const modal = document.getElementById('search-modal');
   const input = document.getElementById('modal-search-input');
   const clearBtn = document.getElementById('modal-search-clear');
@@ -95,41 +101,40 @@ export function initSearchModalEvents({ onSelectManga }) {
 
     clearTimeout(searchDebounceTimeout);
     searchDebounceTimeout = setTimeout(() => {
-      performSearch(q, onSelectManga);
+      performSearch(q, selectManga);
     }, 350);
   });
 
-  // Quick Tags
-  document.querySelectorAll('.quick-tag-chip').forEach(chip => {
+  document.querySelectorAll('#search-quick-tags .quick-tag-chip').forEach(chip => {
     chip.addEventListener('click', () => {
       const tag = chip.dataset.tag;
-      if (input && tag) {
+      if (input) {
         input.value = tag;
         clearBtn?.classList.remove('hidden');
-        performSearch(tag, onSelectManga);
+        performSearch(tag, selectManga);
       }
     });
   });
 
-  // Global Ctrl + K / Esc shortcuts
   window.addEventListener('keydown', (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
       e.preventDefault();
-      const isHidden = modal?.classList.contains('hidden');
-      if (isHidden) openSearchModal();
-      else closeSearchModal();
-    } else if (e.key === 'Escape' && !modal?.classList.contains('hidden')) {
+      openSearchModal();
+    }
+    if (e.key === 'Escape') {
       closeSearchModal();
     }
   });
+
+  initIcons();
 }
 
 async function performSearch(query, onSelectManga) {
-  const resultsContainer = document.getElementById('search-results');
-  if (!resultsContainer) return;
+  const container = document.getElementById('search-results');
+  if (!container) return;
 
   if (!query) {
-    resultsContainer.innerHTML = `
+    container.innerHTML = `
       <div class="search-placeholder-state">
         <i data-lucide="sparkles"></i>
         <p>Ketik judul komik favorit Anda untuk mencari dari katalog komik</p>
@@ -139,43 +144,44 @@ async function performSearch(query, onSelectManga) {
     return;
   }
 
-  resultsContainer.innerHTML = `
+  container.innerHTML = `
     <div class="search-loading-state">
-      <div class="spinner"></div>
-      <p>Mencari komik "${query}"...</p>
+      <div class="spinner-small"></div>
+      <span>Mencari komik "${query}"...</span>
     </div>
   `;
 
   try {
-    const results = await searchManga(query);
-    if (!results || results.length === 0) {
-      resultsContainer.innerHTML = `
-        <div class="search-empty-state">
-          <i data-lucide="frown"></i>
-          <h4>Komik Tidak Ditemukan</h4>
-          <p>Tidak ada hasil untuk kata kunci "${query}". Coba cari dengan judul lain.</p>
+    const res = await searchManga(query);
+    const results = res.data || [];
+
+    if (results.length === 0) {
+      container.innerHTML = `
+        <div class="search-placeholder-state">
+          <i data-lucide="alert-circle"></i>
+          <p>Tidak ada hasil untuk "<strong>${query}</strong>"</p>
         </div>
       `;
       initIcons();
       return;
     }
 
-    resultsContainer.innerHTML = '';
+    container.innerHTML = '';
     results.forEach(manga => {
       const title = getMangaTitle(manga.attributes);
-      const cover = getCoverUrl(manga);
-      const status = manga.attributes.status ? manga.attributes.status.toUpperCase() : 'ONGOING';
+      const coverUrl = getCoverUrl(manga);
       const year = manga.attributes.year || '';
+      const status = manga.attributes.status ? manga.attributes.status.toUpperCase() : 'ONGOING';
 
       const item = document.createElement('div');
       item.className = 'search-result-item';
       item.innerHTML = `
-        <img class="search-result-cover" src="${cover}" alt="${title}" loading="lazy" onerror="this.src='https://placehold.co/100x140/1e2025/ffffff?text=Cover';">
-        <div class="search-result-meta">
-          <h4 class="search-result-title">${title}</h4>
-          <div class="search-result-tags">
-            <span class="search-tag-status">${status}</span>
-            ${year ? `<span class="search-tag-year">${year}</span>` : ''}
+        <img class="search-result-thumb" src="${coverUrl}" alt="${title}" loading="lazy" onerror="this.src='https://placehold.co/300x420/1e2025/ffffff?text=Cover';">
+        <div class="search-result-info">
+          <div class="search-result-title" title="${title}">${title}</div>
+          <div class="search-result-meta">
+            <span class="search-badge">${status}</span>
+            ${year ? `<span class="search-badge">${year}</span>` : ''}
           </div>
         </div>
         <i data-lucide="chevron-right" class="search-result-arrow"></i>
@@ -185,21 +191,19 @@ async function performSearch(query, onSelectManga) {
         closeSearchModal();
         if (typeof onSelectManga === 'function') {
           onSelectManga(manga.id);
-        } else if (typeof window.openMangaDetail === 'function') {
-          window.openMangaDetail(manga.id);
         }
       });
 
-      resultsContainer.appendChild(item);
+      container.appendChild(item);
     });
 
     initIcons();
   } catch (err) {
-    resultsContainer.innerHTML = `
-      <div class="search-empty-state">
-        <i data-lucide="alert-circle"></i>
-        <h4>Terjadi Kesalahan</h4>
-        <p>Gagal menghubungi server pencarian: ${err.message}</p>
+    console.error('Search error:', err);
+    container.innerHTML = `
+      <div class="search-placeholder-state">
+        <i data-lucide="alert-triangle"></i>
+        <p>Gagal melakukan pencarian. Silakan coba lagi.</p>
       </div>
     `;
     initIcons();

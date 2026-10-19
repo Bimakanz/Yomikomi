@@ -62,6 +62,7 @@ export async function loadExploreFeed() {
     }
   }
 }
+window.loadExploreFeed = loadExploreFeed;
 
 export function renderExploreFeed(data) {
   const container = document.getElementById('explore-feed');

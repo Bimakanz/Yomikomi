@@ -170,9 +170,9 @@ export function handlePageImageError(imgEl) {
   const retryCard = document.createElement('div');
   retryCard.className = 'page-error-retry';
   retryCard.innerHTML = `
-    <i data-lucide="refresh-cw"></i>
-    <span>Gagal memuat Halaman ${pageNum}</span>
-    <button class="btn-retry-page" type="button">Muat Ulang</button>
+    <button class="btn-retry-page" type="button" title="Coba lagi" aria-label="Coba lagi">
+      <i data-lucide="rotate-cw"></i>
+    </button>
   `;
 
   retryCard.querySelector('.btn-retry-page')?.addEventListener('click', (e) => {
@@ -330,8 +330,6 @@ export async function openReader(chapterId, chapterIndex) {
       <div class="chapter-transition-loader">
         <div class="transition-spinner-box">
           <div class="spinner"></div>
-          <p class="transition-title">Memuat ${chNum}...</p>
-          <span class="transition-sub">Menyiapkan halaman komik</span>
         </div>
         <div class="reader-skeleton-stream">
           <div class="page-skeleton-loader preview-stream"><div class="page-skeleton-shimmer"></div></div>
@@ -390,11 +388,10 @@ export async function openReader(chapterId, chapterIndex) {
     console.error('Failed to load chapter pages:', err);
     if (viewport) {
       viewport.innerHTML = `
-        <div class="empty-state">
-          <i data-lucide="alert-triangle"></i>
-          <h3>Gagal Memuat Halaman Chapter</h3>
-          <p>Server sedang sibuk atau sesi telah berakhir. Silakan coba lagi.</p>
-          <button class="btn-primary" id="btn-retry-reader-chapter">Coba Lagi</button>
+        <div class="empty-state" style="padding: 4rem 1rem; text-align: center;">
+          <button class="btn-primary btn-retry-circle" id="btn-retry-reader-chapter" title="Coba Lagi" aria-label="Coba Lagi" style="width: 48px; height: 48px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; padding: 0; margin: 0 auto;">
+            <i data-lucide="rotate-cw"></i>
+          </button>
         </div>
       `;
       document.getElementById('btn-retry-reader-chapter')?.addEventListener('click', () => {
@@ -470,8 +467,6 @@ export async function openExternalReader(chapterUrl, chapterTitle, allChapters, 
       <div class="chapter-transition-loader">
         <div class="transition-spinner-box">
           <div class="spinner"></div>
-          <p class="transition-title">Memuat ${chapterTitle}...</p>
-          <span class="transition-sub">Menyiapkan halaman komik Indo Mirror</span>
         </div>
         <div class="reader-skeleton-stream">
           <div class="page-skeleton-loader preview-stream"><div class="page-skeleton-shimmer"></div></div>
@@ -537,12 +532,15 @@ export async function openExternalReader(chapterUrl, chapterTitle, allChapters, 
     console.error('Failed to load mirror chapter pages:', err);
     if (viewport) {
       viewport.innerHTML = `
-        <div class="empty-state">
-          <i data-lucide="alert-triangle"></i>
-          <h3>Gagal Memuat Halaman Mirror</h3>
-          <p>Halaman tidak dapat diakses atau diblokir. Coba chapter lain atau kembali ke beranda.</p>
+        <div class="empty-state" style="padding: 4rem 1rem; text-align: center;">
+          <button class="btn-primary btn-retry-circle" id="btn-retry-external-chapter" title="Coba Lagi" aria-label="Coba Lagi" style="width: 48px; height: 48px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; padding: 0; margin: 0 auto;">
+            <i data-lucide="rotate-cw"></i>
+          </button>
         </div>
       `;
+      document.getElementById('btn-retry-external-chapter')?.addEventListener('click', () => {
+        openExternalReader(chapterUrl, chapterTitle, allChapters, chapterIndex);
+      });
       initIcons();
     }
   }
@@ -613,8 +611,6 @@ export async function openEnglishReader(chapterUrl, chapterTitle, allChapters, c
       <div class="chapter-transition-loader">
         <div class="transition-spinner-box">
           <div class="spinner"></div>
-          <p class="transition-title">Memuat ${chapterTitle}...</p>
-          <span class="transition-sub">Menyiapkan halaman komik English Mirror</span>
         </div>
         <div class="reader-skeleton-stream">
           <div class="page-skeleton-loader preview-stream"><div class="page-skeleton-shimmer"></div></div>
@@ -676,12 +672,15 @@ export async function openEnglishReader(chapterUrl, chapterTitle, allChapters, c
     console.error('Failed to load English mirror chapter pages:', err);
     if (viewport) {
       viewport.innerHTML = `
-        <div class="empty-state">
-          <i data-lucide="alert-triangle"></i>
-          <h3>Gagal Memuat Halaman English Mirror</h3>
-          <p>Halaman tidak dapat diakses atau diblokir. Coba chapter lain atau kembali ke beranda.</p>
+        <div class="empty-state" style="padding: 4rem 1rem; text-align: center;">
+          <button class="btn-primary btn-retry-circle" id="btn-retry-en-chapter" title="Coba Lagi" aria-label="Coba Lagi" style="width: 48px; height: 48px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; padding: 0; margin: 0 auto;">
+            <i data-lucide="rotate-cw"></i>
+          </button>
         </div>
       `;
+      document.getElementById('btn-retry-en-chapter')?.addEventListener('click', () => {
+        openEnglishReader(chapterUrl, chapterTitle, allChapters, chapterIndex);
+      });
       initIcons();
     }
   }
@@ -856,7 +855,6 @@ export function renderReaderPages(data) {
           <div class="page-skeleton-shimmer"></div>
           <div class="page-skeleton-label">
             <div class="spinner-small"></div>
-            <span>Memuat Hal. ${pageNum}...</span>
           </div>
         </div>
         <img 
@@ -1105,7 +1103,6 @@ export function renderSinglePage(pages, index, sliceIndex = 0) {
         <div class="page-skeleton-shimmer"></div>
         <div class="page-skeleton-label">
           <div class="spinner-small"></div>
-          <span>Memuat Halaman ${state.currentPageIndex + 1}...</span>
         </div>
       </div>
       <div class="nav-click-zone left" title="Halaman Sebelumnya (↑ / W / A / ←)"></div>

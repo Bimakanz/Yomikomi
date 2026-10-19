@@ -437,12 +437,11 @@ export async function loadUnifiedChapters(mangaId, mangaData = null, prefetchedK
   if (chaptersContainer) {
     chaptersContainer.innerHTML = `
       <div class="chapters-loader-box" style="padding: 3rem 1rem; text-align: center;">
-        <div class="spinner" style="margin: 0 auto 1rem auto;"></div>
-        <p style="color: var(--text-muted); font-size: 0.9rem;">Menghubungkan MangaDex & Komiku...</p>
+        <div class="spinner" style="margin: 0 auto;"></div>
       </div>
     `;
   }
-  if (countBadge) countBadge.textContent = 'Memuat chapter...';
+  if (countBadge) countBadge.textContent = '';
   if (countIdEl) countIdEl.textContent = '...';
   if (countEnEl) countEnEl.textContent = '...';
 

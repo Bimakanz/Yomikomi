@@ -501,20 +501,10 @@ export function initIcons() {
   }
 }
 
-// Global Toast Notification
+// Global Toast Notification (Disabled per user request)
 export function showToast(message, duration = 3000) {
-  const container = document.getElementById('toast-container');
-  if (!container) return;
-
-  const toast = document.createElement('div');
-  toast.className = 'toast';
-  toast.textContent = message;
-  container.appendChild(toast);
-
-  setTimeout(() => {
-    toast.classList.add('fade-out');
-    setTimeout(() => toast.remove(), 300);
-  }, duration);
+  // All toast popup notifications disabled per user preference
+  return;
 }
 
 // Memory Cleanup for Object URLs

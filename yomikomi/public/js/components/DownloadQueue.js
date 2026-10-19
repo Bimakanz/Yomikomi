@@ -6,25 +6,30 @@
 import { initIcons } from '../state.js';
 
 let isQueuePausedLocal = false;
+let isQueueMinimizedLocal = false;
+let lastQueueState = null;
 
 export function renderDownloadQueueMarkup() {
   return `
     <div class="download-queue-widget hidden" id="download-queue-widget">
-      <div class="queue-widget-header">
-        <div class="queue-widget-title">
+      <div class="queue-widget-header" id="queue-widget-header">
+        <div class="queue-widget-title" id="queue-widget-title-area">
           <div class="spinner-small" id="queue-status-spinner"></div>
           <span id="queue-header-title">Mengunduh Chapter...</span>
         </div>
         <div class="queue-widget-actions">
-          <button class="queue-action-btn" id="btn-queue-pause" title="Jeda / Lanjutkan Unduhan" type="button">
+          <button class="queue-action-btn" id="btn-queue-pause" title="Jeda / Lanjutkan Unduhan" aria-label="Jeda atau Lanjutkan" type="button">
             <i data-lucide="pause" id="queue-pause-icon"></i>
           </button>
-          <button class="queue-action-btn" id="btn-queue-cancel" title="Batalkan Semua Unduhan" type="button">
+          <button class="queue-action-btn" id="btn-queue-minimize" title="Perkecil / Sembunyikan" aria-label="Perkecil Antrean" type="button">
+            <i data-lucide="minus" id="queue-minimize-icon"></i>
+          </button>
+          <button class="queue-action-btn" id="btn-queue-cancel" title="Batalkan Semua Unduhan" aria-label="Batalkan Semua" type="button">
             <i data-lucide="x"></i>
           </button>
         </div>
       </div>
-      <div class="queue-widget-body">
+      <div class="queue-widget-body" id="queue-widget-body">
         <div class="queue-info-row">
           <span class="queue-chapter-label" id="queue-chapter-label">Chapter ...</span>
           <span class="queue-pages-label" id="queue-pages-label">0/0 Hal</span>
@@ -44,8 +49,41 @@ export function renderDownloadQueueMarkup() {
 export function initDownloadQueueEvents() {
   const btnPause = document.getElementById('btn-queue-pause');
   const btnCancel = document.getElementById('btn-queue-cancel');
+  const btnMinimize = document.getElementById('btn-queue-minimize');
+  const titleArea = document.getElementById('queue-widget-title-area');
+  const widget = document.getElementById('download-queue-widget');
 
-  btnPause?.addEventListener('click', () => {
+  const toggleMinimize = () => {
+    isQueueMinimizedLocal = !isQueueMinimizedLocal;
+    if (widget) {
+      widget.classList.toggle('minimized', isQueueMinimizedLocal);
+    }
+    const icon = document.getElementById('queue-minimize-icon');
+    if (icon) {
+      icon.setAttribute('data-lucide', isQueueMinimizedLocal ? 'chevron-up' : 'minus');
+      btnMinimize?.setAttribute('title', isQueueMinimizedLocal ? 'Perbesar Antrean' : 'Perkecil Antrean');
+      btnMinimize?.setAttribute('aria-label', isQueueMinimizedLocal ? 'Perbesar Antrean' : 'Perkecil Antrean');
+      initIcons();
+    }
+    if (lastQueueState) {
+      updateDownloadQueueUI(lastQueueState);
+    }
+  };
+
+  btnMinimize?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleMinimize();
+  });
+
+  // Clicking on title area when minimized will expand it back
+  titleArea?.addEventListener('click', () => {
+    if (isQueueMinimizedLocal) {
+      toggleMinimize();
+    }
+  });
+
+  btnPause?.addEventListener('click', (e) => {
+    e.stopPropagation();
     if (typeof OfflineManager !== 'undefined') {
       isQueuePausedLocal = !isQueuePausedLocal;
       OfflineManager.setPaused(isQueuePausedLocal);
@@ -57,7 +95,8 @@ export function initDownloadQueueEvents() {
     }
   });
 
-  btnCancel?.addEventListener('click', () => {
+  btnCancel?.addEventListener('click', (e) => {
+    e.stopPropagation();
     if (typeof OfflineManager !== 'undefined') {
       if (confirm('Batalkan seluruh antrean download yang sedang berjalan?')) {
         OfflineManager.cancelAll();
@@ -69,6 +108,7 @@ export function initDownloadQueueEvents() {
   // Subscribe to OfflineManager queue updates
   if (typeof OfflineManager !== 'undefined' && OfflineManager.subscribe) {
     OfflineManager.subscribe((queueState) => {
+      lastQueueState = queueState;
       updateDownloadQueueUI(queueState);
     });
   }
@@ -79,7 +119,8 @@ export function updateDownloadQueueUI(queueState) {
   if (!widget) return;
 
   const isWorking = queueState.isProcessing && queueState.activeItem;
-  const hasQueue = queueState.items && queueState.items.length > 0;
+  const queueItems = queueState.queue || queueState.items || [];
+  const hasQueue = queueItems.length > 0;
 
   if (!isWorking && !hasQueue) {
     widget.classList.add('hidden');
@@ -88,7 +129,7 @@ export function updateDownloadQueueUI(queueState) {
 
   widget.classList.remove('hidden');
 
-  const p = queueState.activeProgress || {};
+  const p = queueState.progress || queueState.activeProgress || {};
   const chapterLabel = document.getElementById('queue-chapter-label');
   const pagesLabel = document.getElementById('queue-pages-label');
   const fill = document.getElementById('queue-progress-fill');
@@ -101,13 +142,18 @@ export function updateDownloadQueueUI(queueState) {
   if (fill) fill.style.width = `${p.percent || 0}%`;
   if (percentLabel) percentLabel.textContent = `${p.percent || 0}%`;
 
-  const remaining = queueState.items.length;
+  const remaining = queueItems.length;
   if (remainingLabel) {
     remainingLabel.textContent = remaining > 0 ? `${remaining} chapter lagi di antrean` : 'Menyelesaikan unduhan...';
   }
 
   if (headerTitle) {
-    headerTitle.textContent = queueState.isPaused ? 'Unduhan Dijeda' : 'Mengunduh Chapter...';
+    if (widget.classList.contains('minimized')) {
+      const statusText = queueState.isPaused ? 'Dijeda' : 'Unduh';
+      headerTitle.textContent = `${statusText} Ch.${p.chapterNum || ''} (${p.percent || 0}%)`;
+    } else {
+      headerTitle.textContent = queueState.isPaused ? 'Unduhan Dijeda' : 'Mengunduh Chapter...';
+    }
   }
 }
 

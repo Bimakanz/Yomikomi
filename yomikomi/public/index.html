@@ -32,7 +32,7 @@
   <script src="https://unpkg.com/dexie@latest/dist/dexie.js"></script>
   
   <!-- CSS -->
-  <link rel="stylesheet" href="/css/style.css?v=20261019-5">
+  <link rel="stylesheet" href="/css/style.css?v=20261019-6">
 </head>
 <body class="dark-theme">
   <!-- Navbar -->
@@ -48,7 +48,7 @@
       </div>
 
       <nav class="nav-links">
-        <button class="nav-link active" id="nav-btn-home">
+        <button class="nav-link" id="nav-btn-explore">
           <i data-lucide="compass"></i>
           <span>Jelajah</span>
         </button>
@@ -112,9 +112,9 @@
 
     <!-- Drawer Navigation Links -->
     <nav class="drawer-nav-list">
-      <button class="drawer-nav-item active" id="drawer-nav-home">
+      <button class="drawer-nav-item" id="drawer-nav-explore">
         <i data-lucide="compass"></i>
-        <span>Jelajah Katalog</span>
+        <span>Jelajah Manga</span>
       </button>
       <button class="drawer-nav-item" id="drawer-nav-bookmarks">
         <i data-lucide="bookmark"></i>
@@ -299,6 +299,27 @@
           <div class="card-skeleton skeleton-pulse"></div>
           <div class="card-skeleton skeleton-pulse"></div>
           <div class="card-skeleton skeleton-pulse"></div>
+        </div>
+      </div>
+    </section>
+ 
+    <!-- VIEW: JELAJAH (EXPLORE / TITLES BROWSE) -->
+    <section class="view-section hidden" id="view-explore">
+      <div class="explore-hero-bar">
+        <div class="explore-hero-left">
+          <div class="explore-hero-badge">
+            <i data-lucide="compass"></i>
+            <span>Katalog Eksplorasi Manga</span>
+          </div>
+          <h1 class="explore-hero-title">Jelajah Manga & Manhwa</h1>
+          <p class="explore-hero-desc">Temukan ribuan karya pilihan dari rekomendasi teratas, rilis chapter terbaru, hingga rilisan self-published orisinal.</p>
+        </div>
+      </div>
+
+      <!-- Explore Feeds Container -->
+      <div class="explore-feed" id="explore-feed">
+        <div class="explore-loading-state" id="explore-loading-state">
+          <div class="spinner" style="margin: 3.5rem auto;"></div>
         </div>
       </div>
     </section>
@@ -657,8 +678,8 @@
   </footer>
 
   <!-- Client-Side Offline Storage & Queue Engine -->
-  <script src="/js/offline-manager.js?v=20261019-5"></script>
+  <script src="/js/offline-manager.js?v=20261019-6"></script>
   <!-- Main JavaScript Application -->
-  <script src="/js/app.js?v=20261019-5"></script>
+  <script src="/js/app.js?v=20261019-6"></script>
 </body>
 </html>

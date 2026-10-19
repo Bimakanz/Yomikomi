@@ -194,6 +194,8 @@ app.get('/api/search', async (req, res) => {
       endpoint += '&order[latestUploadedChapter]=desc';
     } else if (order === 'rating') {
       endpoint += '&order[rating]=desc';
+    } else if (order === 'newest' || order === 'createdAt') {
+      endpoint += '&order[createdAt]=desc';
     }
 
     // Do NOT restrict to 'id' only so comics with English chapters remain discoverable
@@ -226,6 +228,40 @@ app.get('/api/tags', async (req, res) => {
     res.json(data);
   } catch (error) {
     console.error('Error fetching tags:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 3.2 Curated Explore Feeds for MangaDex Browse Page
+app.get('/api/explore', async (req, res) => {
+  const cacheKey = 'mangadex_explore_sections_v2';
+  const cached = getCache(cacheKey);
+  if (cached) return res.json(cached);
+
+  try {
+    const baseParams = 'limit=18&includes[]=cover_art&includes[]=author&contentRating[]=safe&contentRating[]=suggestive';
+    const [recRes, recentRes, updateRes, selfRes, romRes, actRes] = await Promise.allSettled([
+      fetchMangaDex(`/manga?${baseParams}&order[followedCount]=desc`),
+      fetchMangaDex(`/manga?${baseParams}&order[createdAt]=desc`),
+      fetchMangaDex(`/manga?${baseParams}&order[latestUploadedChapter]=desc`),
+      fetchMangaDex(`/manga?${baseParams}&includedTags[]=891cf039-b895-47f0-9229-bef4c96eccd4&order[followedCount]=desc`),
+      fetchMangaDex(`/manga?${baseParams}&includedTags[]=423e2eae-a7a2-4a8b-ac03-a8351462d71d&order[followedCount]=desc`),
+      fetchMangaDex(`/manga?${baseParams}&includedTags[]=391b0423-d847-456f-aff0-8b0cfc03066b&order[followedCount]=desc`)
+    ]);
+
+    const result = {
+      recommended: recRes.status === 'fulfilled' ? (recRes.value.data || []) : [],
+      recentlyAdded: recentRes.status === 'fulfilled' ? (recentRes.value.data || []) : [],
+      latestUpdates: updateRes.status === 'fulfilled' ? (updateRes.value.data || []) : [],
+      selfPublished: selfRes.status === 'fulfilled' ? (selfRes.value.data || []) : [],
+      romance: romRes.status === 'fulfilled' ? (romRes.value.data || []) : [],
+      action: actRes.status === 'fulfilled' ? (actRes.value.data || []) : []
+    };
+
+    setCache(cacheKey, result, CACHE_TTL.popular);
+    res.json(result);
+  } catch (error) {
+    console.error('Error fetching explore feeds:', error.message);
     res.status(500).json({ error: error.message });
   }
 });

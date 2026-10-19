@@ -38,6 +38,8 @@ const state = {
   currentSource: 'mangadex', // 'mangadex', 'bacakomik', or 'english'
   activeObjectUrls: [],
   selectedGenre: null, // { id, name }
+  exploreData: null,
+  previousView: 'home'
 };
 
 // ==========================================
@@ -101,13 +103,16 @@ function revokeActiveObjectUrls() {
 }
 
 function switchView(viewName) {
+  if (state.currentView !== viewName && state.currentView !== 'reader') {
+    state.previousView = state.currentView;
+  }
   state.currentView = viewName;
 
   if (viewName !== 'reader') {
     revokeActiveObjectUrls();
   }
 
-  const views = ['home', 'detail', 'reader', 'history', 'offline'];
+  const views = ['home', 'explore', 'detail', 'reader', 'history', 'offline'];
   views.forEach(v => {
     const el = document.getElementById(`view-${v}`);
     if (el) {
@@ -137,9 +142,10 @@ function switchView(viewName) {
   document.querySelectorAll('.nav-link').forEach(btn => btn.classList.remove('active'));
   document.querySelectorAll('.drawer-nav-item').forEach(btn => btn.classList.remove('active'));
 
-  if (viewName === 'home') {
-    document.getElementById('nav-btn-home')?.classList.add('active');
-    document.getElementById('drawer-nav-home')?.classList.add('active');
+  if (viewName === 'explore') {
+    document.getElementById('nav-btn-explore')?.classList.add('active');
+    document.getElementById('drawer-nav-explore')?.classList.add('active');
+    loadExploreFeed();
   }
   if (viewName === 'history') {
     if (state.currentCollectionTab === 'history') {
@@ -169,9 +175,13 @@ function initNavigation() {
     switchView('home');
   });
 
-  document.getElementById('nav-btn-home')?.addEventListener('click', () => {
-    switchView('home');
-    loadPopularManga();
+  document.getElementById('nav-btn-explore')?.addEventListener('click', () => {
+    switchView('explore');
+  });
+
+  document.getElementById('drawer-nav-explore')?.addEventListener('click', () => {
+    switchView('explore');
+    if (typeof closeMobileDrawer === 'function') closeMobileDrawer();
   });
 
   document.getElementById('nav-btn-bookmarks')?.addEventListener('click', () => {
@@ -197,12 +207,251 @@ function initNavigation() {
   });
 
   document.getElementById('btn-back-home')?.addEventListener('click', () => {
-    switchView('home');
+    switchView(state.previousView || 'home');
   });
 
   document.getElementById('history-btn-explore')?.addEventListener('click', () => {
-    switchView('home');
+    switchView('explore');
   });
+}
+
+// Language Flag Helper
+function getLanguageFlag(langCode) {
+  if (!langCode) return '🇯🇵';
+  const flags = {
+    ja: '🇯🇵',
+    ko: '🇰🇷',
+    zh: '🇨🇳',
+    'zh-hk': '🇭🇰',
+    en: '🇬🇧',
+    id: '🇮🇩',
+    fr: '🇫🇷',
+    es: '🇪🇸'
+  };
+  return flags[langCode.toLowerCase()] || '🌐';
+}
+
+// ==========================================
+// JELAJAH (EXPLORE / TITLES FEED) CONTROLLER
+// ==========================================
+
+async function loadExploreFeed() {
+  const container = document.getElementById('explore-feed');
+  if (!container) return;
+
+  if (!state.exploreData) {
+    container.innerHTML = `
+      <div class="explore-loading-state">
+        <div class="spinner" style="margin: 3.5rem auto;"></div>
+      </div>
+    `;
+  }
+
+  try {
+    const res = await fetch('/api/explore');
+    const data = await res.json();
+    state.exploreData = data;
+    renderExploreFeed(data);
+  } catch (err) {
+    console.error('Failed to load explore feed:', err);
+    if (!state.exploreData) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <i data-lucide="alert-circle"></i>
+          <h4>Gagal Memuat Katalog Jelajah</h4>
+          <p>Terjadi kendala saat menghubungkan ke server katalog. Silakan coba lagi.</p>
+          <button class="btn-primary" onclick="loadExploreFeed()" style="margin-top: 1rem;">
+            <i data-lucide="refresh-cw"></i> Coba Lagi
+          </button>
+        </div>
+      `;
+      initIcons();
+    }
+  }
+}
+
+function renderExploreFeed(data) {
+  const container = document.getElementById('explore-feed');
+  if (!container) return;
+  container.innerHTML = '';
+
+  const sections = [
+    {
+      id: 'recommended',
+      title: 'Recommended',
+      icon: 'sparkles',
+      items: data.recommended || [],
+      seeAllFilter: 'popular'
+    },
+    {
+      id: 'recentlyAdded',
+      title: 'Recently Added',
+      icon: 'compass',
+      items: data.recentlyAdded || [],
+      seeAllFilter: 'latest'
+    },
+    {
+      id: 'latestUpdates',
+      title: 'Latest Updates',
+      icon: 'clock',
+      items: data.latestUpdates || [],
+      seeAllFilter: 'latest'
+    },
+    {
+      id: 'selfPublished',
+      title: 'Self-Published & Web Comic',
+      icon: 'feather',
+      items: data.selfPublished || [],
+      tagId: '891cf039-b895-47f0-9229-bef4c96eccd4',
+      tagName: 'Self-Published'
+    },
+    {
+      id: 'romance',
+      title: 'Romance & Drama',
+      icon: 'heart',
+      items: data.romance || [],
+      tagId: '423e2eae-a7a2-4a8b-ac03-a8351462d71d',
+      tagName: 'Romance'
+    },
+    {
+      id: 'action',
+      title: 'Action & Adventure',
+      icon: 'zap',
+      items: data.action || [],
+      tagId: '391b0423-d847-456f-aff0-8b0cfc03066b',
+      tagName: 'Action'
+    }
+  ];
+
+  sections.forEach(sec => {
+    if (!sec.items || sec.items.length === 0) return;
+
+    // Cache covers in CoverCache
+    sec.items.forEach(m => {
+      CoverCache.set(m.id, getMangaTitle(m.attributes), getCoverUrl(m));
+    });
+
+    const secEl = document.createElement('section');
+    secEl.className = 'explore-section';
+    secEl.innerHTML = `
+      <div class="explore-section-header">
+        <div class="explore-section-title-wrap">
+          <div class="explore-section-icon"><i data-lucide="${sec.icon}"></i></div>
+          <h2 class="explore-section-title">${sec.title}</h2>
+          <span class="explore-section-count">${sec.items.length} Judul</span>
+        </div>
+        <div class="explore-section-nav">
+          <button class="explore-nav-btn prev" type="button" aria-label="Sebelumnya" title="Geser ke kiri">
+            <i data-lucide="chevron-left"></i>
+          </button>
+          <button class="explore-nav-btn next" type="button" aria-label="Berikutnya" title="Geser ke kanan">
+            <i data-lucide="chevron-right"></i>
+          </button>
+          <button class="explore-see-all-btn" type="button" title="Lihat Selengkapnya">
+            <span>Lihat Semua</span>
+            <i data-lucide="arrow-right"></i>
+          </button>
+        </div>
+      </div>
+      <div class="explore-carousel-wrap">
+        <div class="explore-carousel-track" id="track-${sec.id}"></div>
+      </div>
+    `;
+
+    const track = secEl.querySelector(`#track-${sec.id}`);
+
+    // Render cards
+    sec.items.forEach(manga => {
+      const title = getMangaTitle(manga.attributes);
+      const coverUrl = getCoverUrl(manga);
+      const status = manga.attributes.status ? manga.attributes.status.toUpperCase() : 'ONGOING';
+      const year = manga.attributes.year || '';
+      const origLang = manga.attributes.originalLanguage || 'ja';
+      const flag = getLanguageFlag(origLang);
+      const synopsis = manga.attributes.description?.id || manga.attributes.description?.en || 'Sinopsis belum tersedia untuk seri manga ini.';
+
+      const card = document.createElement('article');
+      card.className = 'explore-card';
+      card.tabIndex = 0;
+      card.dataset.mangaId = manga.id;
+      card.innerHTML = `
+        <div class="explore-card-poster-wrap">
+          <img class="explore-card-poster" src="${coverUrl}" alt="${title}" loading="lazy" onerror="this.src='https://placehold.co/300x420/1e2025/ffffff?text=Cover';">
+          <span class="explore-card-flag" title="Bahasa Asli: ${origLang}">${flag}</span>
+          <div class="explore-card-overlay">
+            <div class="explore-overlay-header">
+              <span class="explore-overlay-badge">${status}</span>
+              ${year ? `<span class="explore-overlay-year">${year}</span>` : ''}
+            </div>
+            <p class="explore-overlay-synopsis">${synopsis}</p>
+            <div class="explore-overlay-actions">
+              <button class="btn-explore-card-read" type="button">
+                <i data-lucide="book-open"></i>
+                <span>Baca</span>
+              </button>
+              <button class="btn-explore-card-arrow" type="button" title="Detail Komik">
+                <i data-lucide="arrow-right"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+        <h4 class="explore-card-title" title="${title}">${title}</h4>
+      `;
+
+      card.addEventListener('click', () => {
+        openMangaDetail(manga.id);
+      });
+
+      track.appendChild(card);
+    });
+
+    // MOUSE WHEEL SCROLL LISTENER (Scroll up/down moves left/right)
+    track.addEventListener('wheel', (e) => {
+      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+        e.preventDefault();
+        track.scrollBy({
+          left: e.deltaY * 1.8,
+          behavior: 'auto'
+        });
+      }
+    }, { passive: false });
+
+    // Prev / Next button actions
+    const prevBtn = secEl.querySelector('.explore-nav-btn.prev');
+    const nextBtn = secEl.querySelector('.explore-nav-btn.next');
+    prevBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      track.scrollBy({ left: -track.clientWidth * 0.75, behavior: 'smooth' });
+    });
+    nextBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      track.scrollBy({ left: track.clientWidth * 0.75, behavior: 'smooth' });
+    });
+
+    // "Lihat Semua" button action
+    const seeAllBtn = secEl.querySelector('.explore-see-all-btn');
+    seeAllBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (sec.tagId && sec.tagName) {
+        switchView('home');
+        if (typeof window.resetGenreSelection === 'function') {
+          // Select genre in home
+          const allChips = document.querySelectorAll('.genre-chip');
+          allChips.forEach(c => {
+            if (c.dataset.genreId === sec.tagId) c.click();
+          });
+        }
+      } else {
+        switchView('home');
+        const filterTab = document.querySelector(`.filter-tab[data-filter="${sec.seeAllFilter}"]`);
+        filterTab?.click();
+      }
+    });
+
+    container.appendChild(secEl);
+  });
+
+  initIcons();
 }
 
 // ==========================================
@@ -4398,11 +4647,16 @@ function initMobileDrawer() {
   btnClose?.addEventListener('click', closeMobileDrawer);
   backdrop?.addEventListener('click', closeMobileDrawer);
 
-  // Drawer Navigation Items
-  document.getElementById('drawer-nav-home')?.addEventListener('click', () => {
+  // Drawer Brand (Back to Home)
+  document.querySelector('.drawer-brand')?.addEventListener('click', () => {
     closeMobileDrawer();
     switchView('home');
-    loadPopularManga();
+  });
+
+  // Drawer Navigation Items
+  document.getElementById('drawer-nav-explore')?.addEventListener('click', () => {
+    closeMobileDrawer();
+    switchView('explore');
   });
 
   document.getElementById('drawer-nav-bookmarks')?.addEventListener('click', () => {

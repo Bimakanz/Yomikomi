@@ -17,6 +17,7 @@ import {
 } from '../state.js';
 import { openReader, openExternalReader, openEnglishReader, prefetchChapter } from './Reader.js';
 import { fetchKomikuSearch, fetchKomikuManga } from '../services/api.js';
+import { getUnifiedChaptersCached, setUnifiedChaptersCached } from '../services/mangaCache.js';
 
 /**
  * Update sort button visual state and label
@@ -162,26 +163,12 @@ function extractTitleCandidates(manga) {
  * Parallel fetches from MangaDex, Komiku, and mirrors, deduplicates by chapter number,
  * and partitions cleanly into { id: [...], en: [...] }
  */
-export async function loadUnifiedChapters(mangaId, mangaData = null, prefetchedKomikuChapters = null) {
-  const chaptersContainer = document.getElementById('chapters-list');
-  const countBadge = document.getElementById('chapters-total-badge');
-  const countIdEl = document.getElementById('lang-count-id');
-  const countEnEl = document.getElementById('lang-count-en');
-
-  if (chaptersContainer) {
-    chaptersContainer.innerHTML = `
-      <div class="chapters-loader-box" style="padding: 3rem 1rem; text-align: center;">
-        <div class="spinner" style="margin: 0 auto 1rem auto;"></div>
-        <p style="color: var(--text-muted); font-size: 0.9rem;">Menghubungkan MangaDex & Komiku...</p>
-      </div>
-    `;
-  }
-  if (countBadge) countBadge.textContent = 'Memuat chapter...';
-  if (countIdEl) countIdEl.textContent = '...';
-  if (countEnEl) countEnEl.textContent = '...';
-
-  updateSortButtonLabel(state.activeDetailSort || 'asc');
-
+/**
+ * SMART CHAPTER MERGER
+ * Parallel fetches from MangaDex, Komiku, and mirrors, deduplicates by chapter number,
+ * and partitions cleanly into { id: [...], en: [...] }
+ */
+export async function fetchAndMergeUnifiedChapters(mangaId, mangaData = null, prefetchedKomikuChapters = null) {
   const currentManga = mangaData || state.currentManga;
   const isKomikuManga = (typeof mangaId === 'string' && mangaId.startsWith('komiku-')) || currentManga?.source === 'komiku';
   const cleanSlug = isKomikuManga ? (currentManga?.slug || mangaId).replace(/^komiku-/, '') : null;
@@ -189,9 +176,7 @@ export async function loadUnifiedChapters(mangaId, mangaData = null, prefetchedK
   const titleCandidates = extractTitleCandidates(currentManga);
   const primaryTitle = titleCandidates[0] || '';
 
-  // -------------------------------------------------------------
   // Task 1: Fetch MangaDex Chapters
-  // -------------------------------------------------------------
   const fetchMangaDexTask = async () => {
     if (!isKomikuManga) {
       try {
@@ -203,7 +188,6 @@ export async function loadUnifiedChapters(mangaId, mangaData = null, prefetchedK
         return [];
       }
     } else {
-      // Manga is currently opened from Komiku -> Search MangaDex to find matching MangaDex manga!
       for (const query of titleCandidates.slice(0, 3)) {
         try {
           const sRes = await fetch(`/api/search?q=${encodeURIComponent(query)}&limit=5`);
@@ -232,9 +216,7 @@ export async function loadUnifiedChapters(mangaId, mangaData = null, prefetchedK
     }
   };
 
-  // -------------------------------------------------------------
   // Task 2: Fetch Komiku Chapters
-  // -------------------------------------------------------------
   const fetchKomikuTask = async () => {
     if (prefetchedKomikuChapters && prefetchedKomikuChapters.length > 0) {
       return prefetchedKomikuChapters;
@@ -249,7 +231,6 @@ export async function loadUnifiedChapters(mangaId, mangaData = null, prefetchedK
         return [];
       }
     } else {
-      // Manga is from MangaDex -> Search Komiku to find Indo chapters!
       for (const query of titleCandidates.slice(0, 4)) {
         try {
           const kResults = await fetchKomikuSearch(query);
@@ -266,7 +247,6 @@ export async function loadUnifiedChapters(mangaId, mangaData = null, prefetchedK
         } catch (e) { }
       }
 
-      // Secondary fallback: Indo mirror (Bacakomik / Komikindo)
       for (const query of titleCandidates.slice(0, 2)) {
         try {
           const bRes = await fetch(`/api/external/search?q=${encodeURIComponent(query)}`);
@@ -292,7 +272,6 @@ export async function loadUnifiedChapters(mangaId, mangaData = null, prefetchedK
     }
   };
 
-  // Run primary tasks in parallel
   const [mdResult, komikuResult] = await Promise.allSettled([
     fetchMangaDexTask(),
     fetchKomikuTask()
@@ -301,9 +280,6 @@ export async function loadUnifiedChapters(mangaId, mangaData = null, prefetchedK
   const mdChapters = mdResult.status === 'fulfilled' ? mdResult.value : [];
   const komikuChapters = komikuResult.status === 'fulfilled' ? komikuResult.value : [];
 
-  // -------------------------------------------------------------
-  // Task 3: English Mirror Fallback (if MangaDex returned 0 English chapters)
-  // -------------------------------------------------------------
   let englishMirrorChapters = [];
   const mdHasEn = mdChapters.some(c => c.attributes?.translatedLanguage === 'en');
   if (!mdHasEn) {
@@ -326,13 +302,9 @@ export async function loadUnifiedChapters(mangaId, mangaData = null, prefetchedK
     }
   }
 
-  // -------------------------------------------------------------
-  // Normalization to UnifiedChapter Schema
-  // -------------------------------------------------------------
   const rawIdList = [];
   const rawEnList = [];
 
-  // Normalize MangaDex chapters
   mdChapters.forEach((ch, idx) => {
     const rawNum = ch.attributes?.chapter;
     const num = rawNum ? parseFloat(rawNum) : (idx + 1);
@@ -356,7 +328,6 @@ export async function loadUnifiedChapters(mangaId, mangaData = null, prefetchedK
     else if (lang === 'en') rawEnList.push(item);
   });
 
-  // Normalize Komiku chapters
   komikuChapters.forEach((kc, idx) => {
     const numMatch = (kc.title || '').match(/chapter\s*([\d.]+)/i) ||
       (kc.url || '').match(/chapter-([\d.]+)/i) ||
@@ -379,7 +350,6 @@ export async function loadUnifiedChapters(mangaId, mangaData = null, prefetchedK
     });
   });
 
-  // Normalize English Mirror chapters
   englishMirrorChapters.forEach((ec, idx) => {
     const numMatch = (ec.title || '').match(/chapter\s*([\d.]+)/i) || (ec.url || '').match(/chapter-([\d.]+)/i);
     const num = numMatch ? parseFloat(numMatch[1]) : (englishMirrorChapters.length - idx);
@@ -399,11 +369,6 @@ export async function loadUnifiedChapters(mangaId, mangaData = null, prefetchedK
     });
   });
 
-  // -------------------------------------------------------------
-  // Deduplikasi Cerdas (Smart Chapter Deduplication)
-  // Rule: If identical chapter number exists across providers,
-  // prioritize MangaDex for image stability and CDN speed!
-  // -------------------------------------------------------------
   function deduplicateChapters(chapters) {
     const map = new Map();
     for (const ch of chapters) {
@@ -423,28 +388,76 @@ export async function loadUnifiedChapters(mangaId, mangaData = null, prefetchedK
   const dedupedId = deduplicateChapters(rawIdList);
   const dedupedEn = deduplicateChapters(rawEnList);
 
-  // Sorting
   const order = state.activeDetailSort || 'asc';
   dedupedId.sort((a, b) => order === 'asc' ? a.number - b.number : b.number - a.number);
   dedupedEn.sort((a, b) => order === 'asc' ? a.number - b.number : b.number - a.number);
 
-  // Store into unified state
-  state.unifiedChapters = {
+  const unified = {
     id: dedupedId,
     en: dedupedEn
   };
-  state.allMangaDexChapters = mdChapters;
 
-  // Update language counter badges
-  if (countIdEl) countIdEl.textContent = dedupedId.length;
-  if (countEnEl) countEnEl.textContent = dedupedEn.length;
+  setUnifiedChaptersCached(mangaId, unified, mdChapters);
+  return { unifiedChapters: unified, allMangaDexChapters: mdChapters };
+}
+window.fetchAndMergeUnifiedChapters = fetchAndMergeUnifiedChapters;
 
-  // -------------------------------------------------------------
-  // Seamless Auto-Fallback: Never show "0 Chapter" if the other provider has data!
-  // -------------------------------------------------------------
-  if (dedupedId.length === 0 && dedupedEn.length > 0) {
+export async function loadUnifiedChapters(mangaId, mangaData = null, prefetchedKomikuChapters = null) {
+  const chaptersContainer = document.getElementById('chapters-list');
+  const countBadge = document.getElementById('chapters-total-badge');
+  const countIdEl = document.getElementById('lang-count-id');
+  const countEnEl = document.getElementById('lang-count-en');
+
+  updateSortButtonLabel(state.activeDetailSort || 'asc');
+
+  // 15-Minute SWR Cache Check: Zero-loading render if already cached in memory
+  const cached = getUnifiedChaptersCached(mangaId);
+  if (cached) {
+    state.unifiedChapters = cached.data;
+    state.allMangaDexChapters = cached.allMangaDexChapters || [];
+    if (countIdEl) countIdEl.textContent = state.unifiedChapters.id?.length || 0;
+    if (countEnEl) countEnEl.textContent = state.unifiedChapters.en?.length || 0;
+
+    if (state.unifiedChapters.id.length === 0 && state.unifiedChapters.en.length > 0) {
+      state.activeDetailLang = 'en';
+    } else if (state.unifiedChapters.en.length === 0 && state.unifiedChapters.id.length > 0) {
+      state.activeDetailLang = 'id';
+    } else if (!state.activeDetailLang) {
+      state.activeDetailLang = 'id';
+    }
+
+    document.querySelectorAll('#chapter-lang-tabs .lang-filter-tab').forEach(tab => {
+      tab.classList.toggle('active', tab.dataset.lang === state.activeDetailLang);
+    });
+
+    renderUnifiedChaptersList();
+    return;
+  }
+
+  if (chaptersContainer) {
+    chaptersContainer.innerHTML = `
+      <div class="chapters-loader-box" style="padding: 3rem 1rem; text-align: center;">
+        <div class="spinner" style="margin: 0 auto 1rem auto;"></div>
+        <p style="color: var(--text-muted); font-size: 0.9rem;">Menghubungkan MangaDex & Komiku...</p>
+      </div>
+    `;
+  }
+  if (countBadge) countBadge.textContent = 'Memuat chapter...';
+  if (countIdEl) countIdEl.textContent = '...';
+  if (countEnEl) countEnEl.textContent = '...';
+
+  const currentManga = mangaData || state.currentManga;
+  const merged = await fetchAndMergeUnifiedChapters(mangaId, currentManga, prefetchedKomikuChapters);
+
+  state.unifiedChapters = merged.unifiedChapters;
+  state.allMangaDexChapters = merged.allMangaDexChapters;
+
+  if (countIdEl) countIdEl.textContent = state.unifiedChapters.id.length;
+  if (countEnEl) countEnEl.textContent = state.unifiedChapters.en.length;
+
+  if (state.unifiedChapters.id.length === 0 && state.unifiedChapters.en.length > 0) {
     state.activeDetailLang = 'en';
-  } else if (dedupedEn.length === 0 && dedupedId.length > 0) {
+  } else if (state.unifiedChapters.en.length === 0 && state.unifiedChapters.id.length > 0) {
     state.activeDetailLang = 'id';
   } else if (!state.activeDetailLang) {
     state.activeDetailLang = 'id';

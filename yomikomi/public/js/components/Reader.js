@@ -1003,6 +1003,50 @@ export function renderReaderPages(data) {
   initIcons();
 }
 
+// In-memory pre-decoded image cache for GPU texture readiness
+const singleModeDecodedImages = new Map();
+
+/**
+ * Aggressive GPU Pre-decoding Lookahead & Lookbehind
+ * Ensures next 5 pages and previous 2 pages are pre-decoded in GPU memory
+ */
+export function prewarmSinglePages(pages, currentIndex) {
+  if (!pages || pages.length === 0) return;
+  const total = pages.length;
+
+  const lookahead = 5;
+  const lookbehind = 2;
+  const start = Math.max(0, currentIndex - lookbehind);
+  const end = Math.min(total - 1, currentIndex + lookahead);
+
+  for (let i = start; i <= end; i++) {
+    if (i === currentIndex) continue;
+    const rawUrl = pages[i];
+    const stageUrl = getReaderStageUrl(rawUrl, 0);
+    if (!singleModeDecodedImages.has(stageUrl)) {
+      const imgObj = new Image();
+      imgObj.src = stageUrl;
+      if (typeof imgObj.decode === 'function') {
+        imgObj.decode().catch(() => {});
+      }
+      singleModeDecodedImages.set(stageUrl, imgObj);
+      if (singleModeDecodedImages.size > 50) {
+        const oldest = singleModeDecodedImages.keys().next().value;
+        singleModeDecodedImages.delete(oldest);
+      }
+    }
+  }
+
+  // Pre-fetch next chapter when nearing the end (3 pages remaining)
+  if (currentIndex >= total - 3 && !state.hasPrefetchedNextChapter) {
+    state.hasPrefetchedNextChapter = true;
+    const nextCandidate = findSmartNextChapter();
+    if (nextCandidate && nextCandidate.chapter) {
+      prefetchChapter(nextCandidate.chapter);
+    }
+  }
+}
+
 export function renderSinglePage(pages, index, sliceIndex = 0) {
   const viewport = document.getElementById('reader-viewport');
   if (!viewport) return;
@@ -1011,170 +1055,95 @@ export function renderSinglePage(pages, index, sliceIndex = 0) {
   state.currentSingleSlice = sliceIndex || 0;
 
   const currentUrl = pages[state.currentPageIndex];
+  const targetStageUrl = getReaderStageUrl(currentUrl, 0);
 
-  if (state.currentPageIndex < total - 1) {
-    const preloadImg = new Image();
-    preloadImg.src = getReaderStageUrl(pages[state.currentPageIndex + 1], 0);
+  // Trigger aggressive GPU pre-decoding
+  prewarmSinglePages(pages, state.currentPageIndex);
+
+  // Update page counter
+  const pageCounter = document.getElementById('page-counter-text');
+  if (pageCounter) {
+    pageCounter.textContent = `${state.currentPageIndex + 1} / ${total}`;
   }
 
-  const testImg = new Image();
-  testImg.src = getReaderStageUrl(currentUrl, 0);
+  // Check if persistent container already exists (FAST PATH: Zero DOM rebuild, 60/120fps)
+  const container = viewport.querySelector('.single-page-container');
+  const currentImg = viewport.querySelector('.single-page-img');
 
-  const renderContent = () => {
-    if (state.readerModePreference === 'auto' && testImg.naturalWidth > 0 && (testImg.naturalHeight / testImg.naturalWidth) > 1.65) {
-      state.readerMode = 'long-strip';
-      if (state.currentChapterData) {
-        renderReaderPages(state.currentChapterData);
-        return;
-      }
+  if (container && currentImg) {
+    currentImg.dataset.page = state.currentPageIndex + 1;
+    currentImg.dataset.rawUrl = currentUrl;
+    currentImg.dataset.retryStage = '0';
+    currentImg.alt = `Halaman ${state.currentPageIndex + 1}`;
+
+    if (currentImg.src !== targetStageUrl) {
+      currentImg.src = targetStageUrl;
     }
 
-    const isLongStrip = testImg.naturalWidth > 0 && (testImg.naturalHeight / testImg.naturalWidth) > 1.6;
-
-    if (isLongStrip) {
-      const sliceRatio = 1.35;
-      const totalSlices = Math.max(2, Math.round(testImg.naturalHeight / (testImg.naturalWidth * sliceRatio)));
-
-      if (state.currentSingleSlice >= totalSlices) {
-        state.currentSingleSlice = totalSlices - 1;
+    const sk = document.getElementById('single-page-skeleton');
+    if (sk) {
+      if (currentImg.complete && currentImg.naturalWidth > 0) {
+        sk.style.display = 'none';
+        currentImg.classList.add('visible');
+      } else {
+        currentImg.onload = () => {
+          if (sk) sk.style.display = 'none';
+          currentImg.classList.add('visible');
+        };
       }
-      const currSlice = state.currentSingleSlice;
-
-      const pageCounter = document.getElementById('page-counter-text');
-      if (pageCounter) {
-        pageCounter.textContent = `${state.currentPageIndex + 1} (${currSlice + 1}/${totalSlices}) / ${total}`;
-      }
-
-      const offsetPercent = totalSlices > 1 ? (currSlice / totalSlices) * 100 : 0;
-
-      viewport.innerHTML = `
-        <div class="single-page-container">
-          <div class="nav-click-zone left" title="Panel Sebelumnya (↑ / W)"></div>
-          <div class="slice-indicator-badge">Panel ${currSlice + 1} / ${totalSlices}</div>
-          <div class="single-page-slice-window">
-            <img 
-              src="${getReaderStageUrl(currentUrl, 0)}" 
-              class="single-page-slice-img" 
-              style="transform: translateY(-${offsetPercent}%);" 
-              alt="Halaman ${state.currentPageIndex + 1} Panel ${currSlice + 1}"
-              data-page="${state.currentPageIndex + 1}"
-              data-raw-url="${currentUrl}"
-              data-retry-stage="0"
-              onload="window.handlePageImageLoad(this)"
-              onerror="window.handlePageImageError(this)"
-            >
-          </div>
-          <div class="nav-click-zone right" title="Panel Selanjutnya (↓ / S / Spasi)"></div>
-        </div>
-      `;
-
-      viewport.querySelector('.nav-click-zone.left')?.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (state.currentSingleSlice > 0) {
-          state.currentSingleSlice--;
-          renderSinglePage(pages, state.currentPageIndex, state.currentSingleSlice);
-        } else if (state.currentPageIndex > 0) {
-          state.currentPageIndex--;
-          renderSinglePage(pages, state.currentPageIndex, 999);
-        } else {
-          advanceToPrevChapter();
-        }
-      });
-
-      viewport.querySelector('.nav-click-zone.right')?.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (state.currentSingleSlice < totalSlices - 1) {
-          state.currentSingleSlice++;
-          renderSinglePage(pages, state.currentPageIndex, state.currentSingleSlice);
-        } else if (state.currentPageIndex < total - 1) {
-          state.currentPageIndex++;
-          renderSinglePage(pages, state.currentPageIndex, 0);
-        } else {
-          advanceToNextChapter();
-        }
-      });
-
-    } else {
-      const pageCounter = document.getElementById('page-counter-text');
-      if (pageCounter) pageCounter.textContent = `${state.currentPageIndex + 1} / ${total}`;
-
-      viewport.innerHTML = `
-        <div class="single-page-container">
-          <div class="page-skeleton-loader" id="single-page-skeleton" style="${testImg.complete ? 'display: none;' : ''}">
-            <div class="page-skeleton-shimmer"></div>
-            <div class="page-skeleton-label">
-              <div class="spinner-small"></div>
-              <span>Memuat Hal. ${state.currentPageIndex + 1}...</span>
-            </div>
-          </div>
-          <div class="nav-click-zone left" title="Halaman Sebelumnya (↑ / W)"></div>
-          <img 
-            src="${getReaderStageUrl(currentUrl, 0)}" 
-            class="single-page-img" 
-            alt="Halaman ${state.currentPageIndex + 1}"
-            data-page="${state.currentPageIndex + 1}"
-            data-raw-url="${currentUrl}"
-            data-retry-stage="0"
-            onload="window.handlePageImageLoad(this)"
-            onerror="window.handlePageImageError(this)"
-          >
-          <div class="nav-click-zone right" title="Halaman Selanjutnya (↓ / S / Spasi)"></div>
-        </div>
-      `;
-
-      viewport.querySelector('.nav-click-zone.left')?.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (state.currentPageIndex > 0) {
-          state.currentPageIndex--;
-          renderSinglePage(pages, state.currentPageIndex, 0);
-        } else {
-          advanceToPrevChapter();
-        }
-      });
-
-      viewport.querySelector('.nav-click-zone.right')?.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (state.currentPageIndex < total - 1) {
-          state.currentPageIndex++;
-          renderSinglePage(pages, state.currentPageIndex, 0);
-        } else {
-          advanceToNextChapter();
-        }
-      });
     }
 
     updateReaderNavButtons();
-  };
-
-  if (testImg.complete && testImg.naturalWidth > 0) {
-    renderContent();
-  } else {
-    testImg.onload = renderContent;
-    testImg.onerror = renderContent;
-    viewport.innerHTML = `
-      <div class="single-page-container">
-        <div class="page-skeleton-loader" id="single-page-skeleton">
-          <div class="page-skeleton-shimmer"></div>
-          <div class="page-skeleton-label">
-            <div class="spinner-small"></div>
-            <span>Memuat Hal. ${state.currentPageIndex + 1}...</span>
-          </div>
-        </div>
-        <div class="nav-click-zone left"></div>
-        <img 
-          src="${getReaderStageUrl(currentUrl, 0)}" 
-          class="single-page-img" 
-          alt="Halaman ${state.currentPageIndex + 1}"
-          data-page="${state.currentPageIndex + 1}"
-          data-raw-url="${currentUrl}"
-          data-retry-stage="0"
-          onload="const sk = document.getElementById('single-page-skeleton'); if (sk) sk.style.display = 'none'; this.classList.add('visible');"
-          onerror="window.handlePageImageError(this)"
-        >
-        <div class="nav-click-zone right"></div>
-      </div>
-    `;
+    return;
   }
+
+  // FIRST-TIME INITIALIZATION: Build container and click zones once
+  viewport.className = 'reader-viewport single-mode';
+  viewport.innerHTML = `
+    <div class="single-page-container">
+      <div class="page-skeleton-loader" id="single-page-skeleton" style="display: none;">
+        <div class="page-skeleton-shimmer"></div>
+        <div class="page-skeleton-label">
+          <div class="spinner-small"></div>
+          <span>Memuat Halaman ${state.currentPageIndex + 1}...</span>
+        </div>
+      </div>
+      <div class="nav-click-zone left" title="Halaman Sebelumnya (↑ / W / A / ←)"></div>
+      <img 
+        src="${targetStageUrl}" 
+        class="single-page-img visible" 
+        alt="Halaman ${state.currentPageIndex + 1}"
+        data-page="${state.currentPageIndex + 1}"
+        data-raw-url="${currentUrl}"
+        data-retry-stage="0"
+        onload="const sk = document.getElementById('single-page-skeleton'); if (sk) sk.style.display = 'none'; this.classList.add('visible'); window.handlePageImageLoad(this);"
+        onerror="window.handlePageImageError(this)"
+      >
+      <div class="nav-click-zone right" title="Halaman Selanjutnya (↓ / S / D / → / Spasi)"></div>
+    </div>
+  `;
+
+  viewport.querySelector('.nav-click-zone.left')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (state.currentPageIndex > 0) {
+      state.currentPageIndex--;
+      renderSinglePage(pages, state.currentPageIndex, 0);
+    } else {
+      advanceToPrevChapter();
+    }
+  });
+
+  viewport.querySelector('.nav-click-zone.right')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (state.currentPageIndex < total - 1) {
+      state.currentPageIndex++;
+      renderSinglePage(pages, state.currentPageIndex, 0);
+    } else {
+      advanceToNextChapter();
+    }
+  });
+
+  updateReaderNavButtons();
 }
 
 export function renderDoublePage(pages, index) {
@@ -1197,6 +1166,38 @@ export function renderDoublePage(pages, index) {
 
   const page1Url = pages[page1Index];
   const page2Url = page2Index !== null ? pages[page2Index] : null;
+
+  // FAST PATH: Update existing double-page DOM in-place without rebuilding
+  const container = viewport.querySelector('.double-page-container');
+  const img1 = viewport.querySelector('.double-page-item.left img');
+  const img2Wrap = viewport.querySelector('.double-page-item.right');
+
+  if (container && img1) {
+    img1.src = getReaderStageUrl(page1Url, 0);
+    img1.dataset.page = page1Index + 1;
+    img1.dataset.rawUrl = page1Url;
+    img1.alt = `Halaman ${page1Index + 1}`;
+    const tag1 = viewport.querySelector('.double-page-item.left .double-page-tag');
+    if (tag1) tag1.textContent = page1Index + 1;
+
+    if (page2Url && img2Wrap) {
+      img2Wrap.style.display = '';
+      const img2 = img2Wrap.querySelector('img');
+      if (img2) {
+        img2.src = getReaderStageUrl(page2Url, 0);
+        img2.dataset.page = page2Index + 1;
+        img2.dataset.rawUrl = page2Url;
+        img2.alt = `Halaman ${page2Index + 1}`;
+      }
+      const tag2 = img2Wrap.querySelector('.double-page-tag');
+      if (tag2) tag2.textContent = page2Index + 1;
+    } else if (img2Wrap) {
+      img2Wrap.style.display = 'none';
+    }
+
+    updateReaderNavButtons();
+    return;
+  }
 
   viewport.innerHTML = `
     <div class="double-page-container">

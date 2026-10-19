@@ -15,6 +15,7 @@ import { renderBookmarkPageMarkup, initBookmarkPageEvents, switchCollectionTab, 
 import { renderOfflinePageMarkup, initOfflinePageEvents, renderOfflineLibraryView } from './pages/OfflinePage.js';
 import { openReader, initReaderControls, openExternalReader, openEnglishReader } from './components/Reader.js';
 import { toggleBookmark, refreshBookmarkSet, updateAllCollectionBadges } from './services/storage.js';
+import { prefetchManga } from './services/mangaCache.js';
 
 
 let deferredPWAInstallPrompt = null;
@@ -447,6 +448,7 @@ window.loadExploreFeed = loadExploreFeed;
 window.renderBookmarksList = renderBookmarksList;
 window.renderHistoryList = renderHistoryList;
 window.renderOfflineLibraryView = renderOfflineLibraryView;
+window.prefetchManga = prefetchManga;
 
 
 function initApp() {

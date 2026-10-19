@@ -24,6 +24,7 @@ import {
 } from '../components/ChapterList.js';
 import { fetchKomikuManga } from '../services/api.js';
 import { prefetchChapter } from '../components/Reader.js';
+import { getMangaDetailCached, setMangaDetailCached } from '../services/mangaCache.js';
 
 export function renderDetailPageMarkup() {
   return `
@@ -215,6 +216,15 @@ export async function openMangaDetail(mangaId, maybeMangaData = null) {
     window.switchView('detail');
   }
 
+  // 15-Minute SWR Cache Check: Zero-wait instant render from memory
+  const cachedManga = getMangaDetailCached(mangaId);
+  if (cachedManga) {
+    state.currentManga = cachedManga;
+    renderMangaDetailHero(cachedManga);
+    loadUnifiedChapters(mangaId, cachedManga, cachedManga.chapters || null);
+    return;
+  }
+
   const heroContent = document.getElementById('detail-hero-content');
   const chaptersList = document.getElementById('chapters-list');
 
@@ -268,6 +278,7 @@ export async function openMangaDetail(mangaId, maybeMangaData = null) {
           }
         };
         CoverCache.set(`komiku-${slug}`, kData.title, kData.coverUrl);
+        setMangaDetailCached(mangaId, state.currentManga);
         renderMangaDetailHero(state.currentManga);
         // Refresh with detailed Komiku chapters
         loadUnifiedChapters(mangaId, state.currentManga, kData.chapters);
@@ -303,6 +314,7 @@ export async function openMangaDetail(mangaId, maybeMangaData = null) {
     state.currentManga = data.data;
 
     CoverCache.set(data.data.id, getMangaTitle(data.data.attributes), getCoverUrl(data.data));
+    setMangaDetailCached(mangaId, state.currentManga);
     renderMangaDetailHero(state.currentManga);
   } catch (error) {
     console.error('Failed to load manga detail:', error);

@@ -5,6 +5,7 @@
 
 import { state, getMangaTitle, getCoverUrl, initIcons } from '../state.js';
 import { fetchAniList } from '../services/api.js';
+import { attachMangaCardHoverPrefetch } from '../services/mangaCache.js';
 
 export function renderHeroBanner(containerOrItems, maybeItems, onReadClick, onDetailClick) {
   let container, items;
@@ -88,6 +89,8 @@ export function renderHeroBanner(containerOrItems, maybeItems, onReadClick, onDe
         window.openMangaDetail(manga.id);
       }
     });
+
+    attachMangaCardHoverPrefetch(slide, manga.id, manga);
 
     container.appendChild(slide);
   });

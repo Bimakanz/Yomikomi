@@ -17,6 +17,7 @@ import {
 } from '../state.js';
 import { renderHeroBanner } from '../components/HeroBanner.js';
 import { fetchKomikuLatest } from '../services/api.js';
+import { attachMangaCardHoverPrefetch } from '../services/mangaCache.js';
 
 export function renderHomePageMarkup() {
   return `
@@ -160,6 +161,9 @@ export function renderMangaGrid(mangaList) {
         </div>
       </div>
     `;
+
+    // Attach hover and viewport prefetch for instant 0ms detail page opening
+    attachMangaCardHoverPrefetch(card, manga.id, manga);
 
     card.addEventListener('click', () => {
       if (typeof window.openMangaDetail === 'function') {

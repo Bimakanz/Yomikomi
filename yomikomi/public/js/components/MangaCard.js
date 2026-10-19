@@ -4,6 +4,7 @@
  */
 
 import { getMangaTitle, getCoverUrl, getLanguageFlag } from '../state.js';
+import { attachMangaCardHoverPrefetch } from '../services/mangaCache.js';
 
 export function createMangaCard(manga, onCardClick) {
   const title = getMangaTitle(manga.attributes);
@@ -38,11 +39,14 @@ export function createMangaCard(manga, onCardClick) {
     </div>
   `;
 
+  // Attach hover and viewport prefetch
+  attachMangaCardHoverPrefetch(card, manga.id, manga);
+
   card.addEventListener('click', () => {
     if (typeof onCardClick === 'function') {
       onCardClick(manga.id, manga);
     } else if (typeof window.openMangaDetail === 'function') {
-      window.openMangaDetail(manga.id);
+      window.openMangaDetail(manga.id, manga);
     }
   });
 
@@ -87,13 +91,17 @@ export function createExploreCard(manga, onCardClick) {
     <h4 class="explore-card-title" title="${title}">${title}</h4>
   `;
 
+  // Attach hover and viewport prefetch
+  attachMangaCardHoverPrefetch(card, manga.id, manga);
+
   card.addEventListener('click', () => {
     if (typeof onCardClick === 'function') {
       onCardClick(manga.id, manga);
     } else if (typeof window.openMangaDetail === 'function') {
-      window.openMangaDetail(manga.id);
+      window.openMangaDetail(manga.id, manga);
     }
   });
 
   return card;
 }
+

@@ -6,6 +6,7 @@
 import { searchManga } from '../services/mangadex.js';
 import { fetchKomikuSearch } from '../services/api.js';
 import { getMangaTitle, getCoverUrl, getLanguageFlag, initIcons } from '../state.js';
+import { attachMangaCardHoverPrefetch } from '../services/mangaCache.js';
 
 let searchDebounceTimeout = null;
 
@@ -247,6 +248,8 @@ async function performSearch(query, onSelectManga) {
           handleSelect();
         }
       });
+
+      attachMangaCardHoverPrefetch(item, manga.id, manga);
 
       container.appendChild(item);
     });

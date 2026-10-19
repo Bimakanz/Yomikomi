@@ -5715,13 +5715,7 @@ img {
 }
 
 .explore-section-count {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--text-subtle);
-  background: var(--bg-card);
-  padding: 0.2rem 0.55rem;
-  border-radius: var(--radius-full);
-  border: 1px solid var(--border-subtle);
+  display: none !important;
 }
 
 .explore-section-nav {

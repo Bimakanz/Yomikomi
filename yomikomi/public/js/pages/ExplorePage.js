@@ -73,47 +73,50 @@ export function renderExploreFeed(data) {
     {
       id: 'recommended',
       title: 'Recommended',
+      seeAllTitle: 'Rekomendasi Pilihan (Recommended)',
+      fetchUrl: '/api/search?order=followedCount&limit=40',
       icon: 'sparkles',
-      items: data.recommended || [],
-      seeAllFilter: 'popular'
+      items: data.recommended || []
     },
     {
       id: 'recentlyAdded',
       title: 'Recently Added',
+      seeAllTitle: 'Komik Baru Ditambahkan (Recently Added)',
+      fetchUrl: '/api/search?order=createdAt&limit=40',
       icon: 'compass',
-      items: data.recentlyAdded || [],
-      seeAllFilter: 'latest'
+      items: data.recentlyAdded || []
     },
     {
       id: 'latestUpdates',
       title: 'Latest Updates',
+      seeAllTitle: 'Rilis Chapter Terbaru (Latest Updates)',
+      fetchUrl: '/api/search?order=latest&limit=40',
       icon: 'clock',
-      items: data.latestUpdates || [],
-      seeAllFilter: 'latest'
+      items: data.latestUpdates || []
     },
     {
       id: 'selfPublished',
       title: 'Self-Published & Web Comic',
+      seeAllTitle: 'Koleksi: Self-Published & Web Comic',
+      fetchUrl: '/api/search?tag=891cf039-b895-47f0-9229-bef4c96eccd4&order=followedCount&limit=40',
       icon: 'feather',
-      items: data.selfPublished || [],
-      tagId: '891cf039-b895-47f0-9229-bef4c96eccd4',
-      tagName: 'Self-Published'
+      items: data.selfPublished || []
     },
     {
       id: 'romance',
       title: 'Romance & Drama',
+      seeAllTitle: 'Koleksi Genre: Romance & Drama',
+      fetchUrl: '/api/search?tag=423e2eae-a7a2-4a8b-ac03-a8351462d71d&order=followedCount&limit=40',
       icon: 'heart',
-      items: data.romance || [],
-      tagId: '423e2eae-a7a2-4a8b-ac03-a8351462d71d',
-      tagName: 'Romance'
+      items: data.romance || []
     },
     {
       id: 'action',
       title: 'Action & Adventure',
+      seeAllTitle: 'Koleksi Genre: Action & Adventure',
+      fetchUrl: '/api/search?tag=391b0423-d847-456f-aff0-8b0cfc03066b&order=followedCount&limit=40',
       icon: 'zap',
-      items: data.action || [],
-      tagId: '391b0423-d847-456f-aff0-8b0cfc03066b',
-      tagName: 'Action'
+      items: data.action || []
     }
   ];
 
@@ -130,7 +133,6 @@ export function renderExploreFeed(data) {
       <div class="explore-section-header">
         <div class="explore-section-title-wrap">
           <h2 class="explore-section-title">${sec.title}</h2>
-          <span class="explore-section-count">${sec.items.length} Judul</span>
         </div>
         <div class="explore-section-nav">
           <button class="explore-nav-btn prev" type="button" aria-label="Sebelumnya" title="Geser ke kiri">
@@ -191,13 +193,8 @@ export function renderExploreFeed(data) {
       if (typeof window.switchView === 'function') {
         window.switchView('home');
       }
-      if (sec.tagId && sec.tagName) {
-        if (typeof window.loadMangaByGenre === 'function') {
-          window.loadMangaByGenre(sec.tagId, sec.tagName);
-        }
-      } else {
-        const filterTab = document.querySelector(`.filter-tab[data-filter="${sec.seeAllFilter}"]`);
-        filterTab?.click();
+      if (typeof window.loadExploreCategory === 'function') {
+        window.loadExploreCategory(sec.seeAllTitle || sec.title, sec.fetchUrl);
       }
     });
 

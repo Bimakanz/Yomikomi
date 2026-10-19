@@ -308,6 +308,54 @@ export async function loadMangaByGenre(tagId, tagName) {
 }
 window.loadMangaByGenre = loadMangaByGenre;
 
+export async function loadExploreCategory(categoryTitle, fetchUrl) {
+  const sectionTitle = document.getElementById('grid-section-title');
+  if (sectionTitle) {
+    sectionTitle.textContent = categoryTitle;
+  }
+  const countBadge = document.getElementById('grid-count-badge');
+  if (countBadge) {
+    countBadge.textContent = 'Memuat...';
+  }
+
+  // Deactivate filter tabs since this is a specific Explore category
+  document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+
+  if (typeof window.resetGenreSelection === 'function') {
+    window.resetGenreSelection(false);
+  }
+
+  showGridSkeleton();
+
+  try {
+    const res = await fetch(fetchUrl);
+    const data = await res.json();
+    state.mangaList = (data.data || []).map(m => ({ ...m, source: 'mangadex' }));
+    state.mangaList.forEach(m => {
+      CoverCache.set(m.id, getMangaTitle(m.attributes), getCoverUrl(m));
+    });
+    renderMangaGrid(state.mangaList);
+    if (countBadge) {
+      countBadge.textContent = `${state.mangaList.length} Judul`;
+    }
+  } catch (error) {
+    console.error(`Failed to load category ${categoryTitle}:`, error);
+    showToast(`Gagal memuat ${categoryTitle}`);
+    if (countBadge) {
+      countBadge.textContent = '0 Judul';
+    }
+  }
+
+  // Smoothly scroll down to grid header so user immediately sees the category results
+  setTimeout(() => {
+    const gridHeader = document.querySelector('.section-header') || document.getElementById('manga-grid');
+    if (gridHeader) {
+      gridHeader.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, 120);
+}
+window.loadExploreCategory = loadExploreCategory;
+
 export function initFilters() {
   const tabs = document.querySelectorAll('.filter-tab:not(.genre-dropdown-toggle)');
   tabs.forEach(tab => {

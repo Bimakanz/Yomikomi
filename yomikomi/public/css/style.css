@@ -644,18 +644,9 @@ img {
   font-weight: 600;
 }
 
-.search-badge.badge-source-mangadex {
-  background: rgba(99, 102, 241, 0.18);
-  color: #818cf8;
-  border-color: rgba(99, 102, 241, 0.35);
-  font-weight: 700;
-}
-
+.search-badge.badge-source-mangadex,
 .search-badge.badge-source-komiku {
-  background: rgba(16, 185, 129, 0.18);
-  color: #34d399;
-  border-color: rgba(16, 185, 129, 0.35);
-  font-weight: 700;
+  display: none !important;
 }
 
 .search-result-action {
@@ -1423,42 +1414,9 @@ img {
   border: 1px solid var(--border-subtle);
 }
 
-.card-badges-top {
-  position: absolute;
-  top: 0.6rem;
-  right: 0.6rem;
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  z-index: 2;
-}
-
-.card-rating-badge {
-  display: none !important;
-}
-
+.card-badges-top,
 .card-source-badge {
-  font-size: 0.62rem;
-  font-weight: 700;
-  padding: 0.2rem 0.45rem;
-  border-radius: var(--radius-sm);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
-}
-
-.card-source-badge.mangadex {
-  background: rgba(99, 102, 241, 0.9);
-  color: #ffffff;
-  border: 1px solid rgba(129, 140, 248, 0.5);
-}
-
-.card-source-badge.komiku {
-  background: rgba(16, 185, 129, 0.9);
-  color: #ffffff;
-  border: 1px solid rgba(52, 211, 153, 0.5);
+  display: none !important;
 }
 
 .hero-badge-row .rating-badge {

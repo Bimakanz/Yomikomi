@@ -127,8 +127,6 @@ export function renderMangaGrid(mangaList) {
   grid.innerHTML = '';
   mangaList.forEach((manga, idx) => {
     const isKomiku = manga.source === 'komiku' || manga.id?.startsWith('komiku-');
-    const sourceName = isKomiku ? 'Komiku' : 'MangaDex';
-    const sourceClass = isKomiku ? 'komiku' : 'mangadex';
     const title = isKomiku ? manga.title : getMangaTitle(manga.attributes);
     const coverUrl = isKomiku ? manga.coverUrl : getCoverUrl(manga);
     const status = isKomiku 
@@ -144,9 +142,6 @@ export function renderMangaGrid(mangaList) {
       <div class="card-poster">
         <img src="${coverUrl}" alt="${title}" loading="lazy" decoding="async" onerror="this.src='https://placehold.co/300x420/1e2025/ffffff?text=Cover';">
         <div class="card-overlay-gradient"></div>
-        <div class="card-badges-top">
-          <span class="card-source-badge ${sourceClass}">${sourceName}</span>
-        </div>
         <span class="card-status-badge">${status}</span>
       </div>
       <div class="card-content">
@@ -154,7 +149,7 @@ export function renderMangaGrid(mangaList) {
         <div class="card-meta">
           <span>${lastChapter}</span>
           <div class="card-languages">
-            ${isKomiku ? '<span class="lang-flag" title="Tersedia Bahasa Indonesia (Komiku Indo Scan)">🇮🇩 ID</span>' : ''}
+            ${isKomiku ? '<span class="lang-flag" title="Tersedia Bahasa Indonesia">🇮🇩 ID</span>' : ''}
             ${!isKomiku && manga.attributes?.availableTranslatedLanguages?.includes('id') ? '<span class="lang-flag" title="Tersedia Bahasa Indonesia">🇮🇩</span>' : ''}
             ${!isKomiku && manga.attributes?.availableTranslatedLanguages?.includes('en') ? '<span class="lang-flag" title="Tersedia English">🇬🇧</span>' : ''}
           </div>
@@ -252,7 +247,7 @@ export async function loadLatestManga() {
 
 export async function loadIndonesianManga() {
   const sectionTitle = document.getElementById('grid-section-title');
-  if (sectionTitle) sectionTitle.textContent = 'Manga Terjemahan Bahasa Indonesia (MangaDex + Komiku) 🇮🇩';
+  if (sectionTitle) sectionTitle.textContent = 'Manga Terjemahan Bahasa Indonesia 🇮🇩';
   showGridSkeleton();
 
   try {

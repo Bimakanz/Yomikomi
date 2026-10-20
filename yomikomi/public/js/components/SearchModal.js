@@ -206,9 +206,6 @@ async function performSearch(query, onSelectManga) {
       const typeLabel = isKomiku 
         ? (manga.type ? manga.type.toUpperCase() : 'MANGA')
         : (origLang === 'ko' ? 'Manhwa' : (origLang === 'zh' || origLang === 'zh-hk' ? 'Manhua' : 'Manga'));
-      const sourceName = isKomiku ? 'Komiku' : 'MangaDex';
-      const sourceClass = isKomiku ? 'komiku' : 'mangadex';
-
       const item = document.createElement('div');
       item.className = 'search-result-item';
       item.tabIndex = 0;
@@ -221,7 +218,6 @@ async function performSearch(query, onSelectManga) {
         <div class="search-result-info">
           <div class="search-result-title" title="${title}">${title}</div>
           <div class="search-result-meta">
-            <span class="search-badge badge-source-${sourceClass}">${sourceName}</span>
             <span class="search-badge ${statusClass}">${status}</span>
             <span class="search-badge search-badge-type">${flag} ${typeLabel}</span>
             ${year ? `<span class="search-badge search-badge-year">${year}</span>` : ''}

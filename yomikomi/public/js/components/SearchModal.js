@@ -9,6 +9,7 @@ import { getMangaTitle, getCoverUrl, getLanguageFlag, initIcons } from '../state
 import { attachMangaCardHoverPrefetch } from '../services/mangaCache.js';
 
 let searchDebounceTimeout = null;
+let currentSearchMediaType = 'all'; // 'all', 'manga', 'anime'
 
 export function renderSearchModalMarkup() {
   return `
@@ -16,12 +17,20 @@ export function renderSearchModalMarkup() {
       <div class="search-modal-box">
         <div class="search-input-wrapper">
           <i data-lucide="search" class="search-icon"></i>
-          <input type="text" id="modal-search-input" placeholder="Ketik judul manga, manhwa, manhua..." autocomplete="off">
+          <input type="text" id="modal-search-input" placeholder="Cari komik atau anime... (Ctrl+K)" autocomplete="off">
           <button class="search-clear-btn hidden" id="modal-search-clear" type="button" aria-label="Hapus kata kunci">
             <i data-lucide="x"></i>
           </button>
           <kbd class="search-esc-kbd" id="modal-close-esc" title="Tutup pencarian (Esc)">ESC</kbd>
         </div>
+
+        <!-- Unified Media Type Switcher Tabs in Search Modal -->
+        <div class="search-media-tabs" id="search-media-tabs">
+          <button class="search-media-tab active" data-type="all" type="button">Semua</button>
+          <button class="search-media-tab" data-type="manga" type="button">📖 Komik</button>
+          <button class="search-media-tab" data-type="anime" type="button">🎬 Anime</button>
+        </div>
+
         <div class="search-quick-tags" id="search-quick-tags">
           <span class="quick-tag-label">Genre Cepat:</span>
           <button class="quick-tag-chip" type="button" data-tag="Action">Action</button>
@@ -32,7 +41,7 @@ export function renderSearchModalMarkup() {
         </div>
         <div class="search-results-container" id="search-results">
           <div class="search-placeholder-state">
-            <p>Ketik judul komik favorit Anda untuk mencari dari katalog komik</p>
+            <p>Ketik judul komik atau anime favorit Anda untuk mencari...</p>
           </div>
         </div>
       </div>
@@ -105,6 +114,17 @@ export function initSearchModalEvents({ onSelectManga } = {}) {
     }, 350);
   });
 
+  // Media Tab Switcher within Search Modal
+  document.querySelectorAll('#search-media-tabs .search-media-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('#search-media-tabs .search-media-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      currentSearchMediaType = tab.dataset.type || 'all';
+      const q = input ? input.value.trim() : '';
+      if (q) performSearch(q, selectManga);
+    });
+  });
+
   document.querySelectorAll('#search-quick-tags .quick-tag-chip').forEach(chip => {
     chip.addEventListener('click', () => {
       const tag = chip.dataset.tag;
@@ -138,7 +158,7 @@ async function performSearch(query, onSelectManga) {
   if (!query) {
     container.innerHTML = `
       <div class="search-placeholder-state">
-        <p>Ketik judul komik favorit Anda untuk mencari dari katalog komik</p>
+        <p>Ketik judul komik atau anime favorit Anda untuk mencari...</p>
       </div>
     `;
     initIcons();
@@ -148,38 +168,59 @@ async function performSearch(query, onSelectManga) {
   container.innerHTML = `
     <div class="search-loading-state">
       <div class="spinner-small"></div>
-      <span>Mencari komik "${query}"...</span>
+      <span>Mencari "${query}"...</span>
     </div>
   `;
 
   try {
-    const [mangadexSettled, komikuSettled] = await Promise.allSettled([
-      searchManga(query),
-      fetchKomikuSearch(query)
-    ]);
+    const shouldSearchManga = currentSearchMediaType === 'all' || currentSearchMediaType === 'manga';
+    const shouldSearchAnime = currentSearchMediaType === 'all' || currentSearchMediaType === 'anime';
+
+    const promises = [];
+    if (shouldSearchManga) {
+      promises.push(searchManga(query).catch(() => ({ data: [] })));
+      promises.push(fetchKomikuSearch(query).catch(() => []));
+    }
+    if (shouldSearchAnime) {
+      promises.push(
+        fetch(`/api/anime/search?q=${encodeURIComponent(query)}`)
+          .then(r => r.json())
+          .catch(() => ({ data: [] }))
+      );
+    }
+
+    const settled = await Promise.allSettled(promises);
 
     let mangadexResults = [];
-    if (mangadexSettled.status === 'fulfilled' && mangadexSettled.value?.data) {
-      mangadexResults = mangadexSettled.value.data.map(m => ({
-        ...m,
-        source: 'mangadex'
-      }));
-    }
-
     let komikuResults = [];
-    if (komikuSettled.status === 'fulfilled' && Array.isArray(komikuSettled.value)) {
-      komikuResults = komikuSettled.value.map(k => ({
-        ...k,
-        source: 'komiku'
-      }));
+    let animeResults = [];
+
+    let pIdx = 0;
+    if (shouldSearchManga) {
+      const mdRes = settled[pIdx++];
+      if (mdRes.status === 'fulfilled' && mdRes.value?.data) {
+        mangadexResults = mdRes.value.data.map(m => ({ ...m, source: 'mangadex', mediaType: 'manga' }));
+      }
+      const kmRes = settled[pIdx++];
+      if (kmRes.status === 'fulfilled' && Array.isArray(kmRes.value)) {
+        komikuResults = kmRes.value.map(k => ({ ...k, source: 'komiku', mediaType: 'manga' }));
+      }
     }
 
-    // Interleave results so user gets both MangaDex and Komiku matches
+    if (shouldSearchAnime) {
+      const anRes = settled[pIdx++];
+      if (anRes.status === 'fulfilled' && anRes.value?.data) {
+        animeResults = anRes.value.data.map(a => ({ ...a, mediaType: 'anime' }));
+      }
+    }
+
+    // Interleave results so user gets a balanced, fast preview of matches
     const results = [];
-    const maxLen = Math.max(mangadexResults.length, komikuResults.length);
+    const maxLen = Math.max(mangadexResults.length, komikuResults.length, animeResults.length);
     for (let i = 0; i < maxLen; i++) {
-      if (i < mangadexResults.length) results.push(mangadexResults[i]);
-      if (i < komikuResults.length) results.push(komikuResults[i]);
+      if (i < animeResults.length && shouldSearchAnime) results.push(animeResults[i]);
+      if (i < mangadexResults.length && shouldSearchManga) results.push(mangadexResults[i]);
+      if (i < komikuResults.length && shouldSearchManga) results.push(komikuResults[i]);
     }
 
     if (results.length === 0) {
@@ -194,24 +235,25 @@ async function performSearch(query, onSelectManga) {
     }
 
     container.innerHTML = '';
-    results.forEach(manga => {
-      const isKomiku = manga.source === 'komiku' || manga.id?.startsWith('komiku-');
-      const title = isKomiku ? manga.title : getMangaTitle(manga.attributes);
-      const coverUrl = isKomiku ? manga.coverUrl : getCoverUrl(manga);
-      const year = (!isKomiku && manga.attributes?.year) ? manga.attributes.year : '';
-      const status = (!isKomiku && manga.attributes?.status) ? manga.attributes.status.toUpperCase() : 'ONGOING';
+    results.forEach(item => {
+      const isAnime = item.mediaType === 'anime';
+      const isKomiku = item.source === 'komiku' || item.id?.toString().startsWith('komiku-');
+      const title = isAnime ? item.title : (isKomiku ? item.title : getMangaTitle(item.attributes));
+      const coverUrl = isAnime ? item.coverUrl : (isKomiku ? item.coverUrl : getCoverUrl(item));
+      const status = isAnime 
+        ? (item.status || 'RELEASING').toUpperCase() 
+        : (!isKomiku && item.attributes?.status ? item.attributes.status.toUpperCase() : 'ONGOING');
       const statusClass = 'status-' + status.toLowerCase();
-      const origLang = (!isKomiku && manga.attributes?.originalLanguage) ? manga.attributes.originalLanguage : 'id';
-      const flag = isKomiku ? '🇮🇩' : getLanguageFlag(origLang);
-      const typeLabel = isKomiku 
-        ? (manga.type ? manga.type.toUpperCase() : 'MANGA')
-        : (origLang === 'ko' ? 'Manhwa' : (origLang === 'zh' || origLang === 'zh-hk' ? 'Manhua' : 'Manga'));
-      const item = document.createElement('div');
-      item.className = 'search-result-item';
-      item.tabIndex = 0;
-      item.setAttribute('role', 'button');
-      item.setAttribute('aria-label', title);
-      item.innerHTML = `
+      
+      const rating = isAnime ? item.rating : (item.attributes?.rating ? `⭐ ${item.attributes.rating}` : '');
+      const typeLabel = isAnime ? '🎬 Anime' : (isKomiku ? '📖 Komik ID' : '📖 Komik');
+
+      const resultRow = document.createElement('div');
+      resultRow.className = 'search-result-item';
+      resultRow.tabIndex = 0;
+      resultRow.setAttribute('role', 'button');
+      resultRow.setAttribute('aria-label', title);
+      resultRow.innerHTML = `
         <div class="search-result-thumb-wrap">
           <img class="search-result-thumb" src="${coverUrl}" alt="${title}" loading="lazy" onerror="this.src='https://placehold.co/100x140/1e2025/ffffff?text=Cover';">
         </div>
@@ -219,8 +261,9 @@ async function performSearch(query, onSelectManga) {
           <div class="search-result-title" title="${title}">${title}</div>
           <div class="search-result-meta">
             <span class="search-badge ${statusClass}">${status}</span>
-            <span class="search-badge search-badge-type">${flag} ${typeLabel}</span>
-            ${year ? `<span class="search-badge search-badge-year">${year}</span>` : ''}
+            <span class="search-badge search-badge-type">${typeLabel}</span>
+            ${rating ? `<span class="search-badge search-badge-rating">${rating}</span>` : ''}
+            ${isAnime && item.latestEpisode ? `<span class="search-badge">${item.latestEpisode}</span>` : ''}
           </div>
         </div>
         <div class="search-result-action">
@@ -230,24 +273,32 @@ async function performSearch(query, onSelectManga) {
 
       const handleSelect = () => {
         closeSearchModal();
-        if (typeof onSelectManga === 'function') {
-          onSelectManga(manga.id, manga);
-        } else if (typeof window.openMangaDetail === 'function') {
-          window.openMangaDetail(manga.id, manga);
+        if (isAnime) {
+          if (typeof window.openAnimeWatch === 'function') {
+            window.openAnimeWatch(item.id, 1, item);
+          }
+        } else {
+          if (typeof onSelectManga === 'function') {
+            onSelectManga(item.id, item);
+          } else if (typeof window.openMangaDetail === 'function') {
+            window.openMangaDetail(item.id, item);
+          }
         }
       };
 
-      item.addEventListener('click', handleSelect);
-      item.addEventListener('keydown', (e) => {
+      resultRow.addEventListener('click', handleSelect);
+      resultRow.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           handleSelect();
         }
       });
 
-      attachMangaCardHoverPrefetch(item, manga.id, manga);
+      if (!isAnime) {
+        attachMangaCardHoverPrefetch(resultRow, item.id, item);
+      }
 
-      container.appendChild(item);
+      container.appendChild(resultRow);
     });
 
     initIcons();

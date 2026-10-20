@@ -41,7 +41,18 @@ export const state = {
   activeDetailLang: 'id', // 'id' or 'en'
   activeDetailSort: 'asc', // 'asc' or 'desc'
   unifiedChapters: { id: [], en: [] },
-  activeChapters: []
+  activeChapters: [],
+  // Dual-Mode Media State (Manga / Anime)
+  activeMediaMode: localStorage.getItem('yomikomi_active_media_mode') || 'manga', // 'manga' or 'anime'
+  popularAnime: [],
+  seasonalAnime: [],
+  latestAnime: [],
+  movieAnime: [],
+  animeList: [],
+  currentAnime: null,
+  currentAnimeEpisode: 1,
+  currentAnimeServer: 1,
+  animeHistory: []
 };
 
 // Storage Constants
@@ -49,6 +60,8 @@ export const STORAGE_KEY_BOOKMARKS = 'mangadex_reader_bookmarks';
 export const STORAGE_KEY_HISTORY = 'mangadex_reader_history';
 export const STORAGE_KEY_COVER_CACHE = 'yomikomi_cover_cache';
 export const STORAGE_KEY_QUALITY = 'yomikomi_reader_quality';
+export const STORAGE_KEY_ACTIVE_MEDIA_MODE = 'yomikomi_active_media_mode';
+export const STORAGE_KEY_ANIME_HISTORY = 'yomikomi_anime_history';
 
 // Genres Catalog
 export const MANGADEX_GENRES = [
@@ -597,10 +610,73 @@ export function saveStoredList(key, list) {
   } catch (e) {}
 }
 
+// Anime History Storage Helpers
+export function getAnimeHistory() {
+  return getStoredList(STORAGE_KEY_ANIME_HISTORY);
+}
+
+export function saveAnimeHistory(record) {
+  if (!record || !record.animeId) return;
+  const list = getAnimeHistory();
+  const existingIndex = list.findIndex(item => String(item.animeId) === String(record.animeId));
+  const newEntry = {
+    animeId: record.animeId,
+    title: record.title || 'Anime',
+    coverUrl: record.coverUrl || '',
+    episode: record.episode || 1,
+    episodeTitle: record.episodeTitle || `Episode ${record.episode || 1}`,
+    totalEpisodes: record.totalEpisodes || null,
+    progress: record.progress || '100%',
+    timestamp: Date.now()
+  };
+
+  if (existingIndex !== -1) {
+    list.splice(existingIndex, 1);
+  }
+  list.unshift(newEntry);
+  if (list.length > 100) list.pop();
+  saveStoredList(STORAGE_KEY_ANIME_HISTORY, list);
+}
+
+export function clearAnimeHistory() {
+  saveStoredList(STORAGE_KEY_ANIME_HISTORY, []);
+}
+
+// Global Media Mode Setter
+export function setMediaMode(mode) {
+  if (mode !== 'manga' && mode !== 'anime') return;
+  state.activeMediaMode = mode;
+  try {
+    localStorage.setItem(STORAGE_KEY_ACTIVE_MEDIA_MODE, mode);
+  } catch (e) {}
+  if (typeof document !== 'undefined') {
+    document.documentElement.setAttribute('data-theme-mode', mode);
+    if (document.body) document.body.setAttribute('data-theme-mode', mode);
+  }
+
+  // Update all switcher buttons across navbar & drawer
+  document.querySelectorAll('.mode-pill-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mode === mode);
+  });
+
+  // Dispatch global custom event for dynamic components
+  window.dispatchEvent(new CustomEvent('yomikomi:mediamode', { detail: { mode } }));
+}
+
+// Initial theme mode attribute setup
+if (typeof document !== 'undefined') {
+  document.documentElement.setAttribute('data-theme-mode', state.activeMediaMode);
+  if (document.body) document.body.setAttribute('data-theme-mode', state.activeMediaMode);
+}
+
 // Export to window for backward compatibility with templates
 if (typeof window !== 'undefined') {
   window.YomikomiState = state;
   window.showToast = showToast;
   window.initIcons = initIcons;
   window.CoverCache = CoverCache;
+  window.setMediaMode = setMediaMode;
+  window.getAnimeHistory = getAnimeHistory;
+  window.saveAnimeHistory = saveAnimeHistory;
 }
+

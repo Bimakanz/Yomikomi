@@ -9,6 +9,7 @@ import {
   STORAGE_KEY_HISTORY,
   getStoredList,
   saveStoredList,
+  getAnimeHistory,
   CoverCache,
   getMangaTitle,
   getCoverUrl
@@ -164,6 +165,16 @@ export function updateAllCollectionBadges() {
 
   const tabCountHistory = document.getElementById('count-collection-history');
   if (tabCountHistory) tabCountHistory.textContent = hCount;
+
+  const tabCountAnime = document.getElementById('count-collection-anime');
+  if (tabCountAnime) {
+    try {
+      const aCount = (typeof getAnimeHistory === 'function' ? getAnimeHistory() : []).length;
+      tabCountAnime.textContent = aCount;
+    } catch (e) {
+      tabCountAnime.textContent = 0;
+    }
+  }
 }
 
 export async function getStorageUsage() {

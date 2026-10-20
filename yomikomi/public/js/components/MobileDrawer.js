@@ -3,10 +3,11 @@
  * Off-canvas mobile navigation drawer with touch gesture support
  */
 
-import { state, initIcons } from '../state.js';
+import { state, initIcons, setMediaMode } from '../state.js';
 import { openSearchModal } from './SearchModal.js';
 
 export function renderMobileDrawerMarkup() {
+  const isManga = state.activeMediaMode !== 'anime';
   return `
     <div class="mobile-drawer-backdrop" id="mobile-drawer-backdrop"></div>
     <aside class="mobile-drawer" id="mobile-drawer" aria-label="Menu Navigasi Mobile">
@@ -22,10 +23,24 @@ export function renderMobileDrawerMarkup() {
         </button>
       </div>
 
+      <!-- Segmented Mode Switcher for Mobile -->
+      <div class="drawer-mode-wrap">
+        <div class="media-mode-switcher drawer-mode-switcher" role="tablist" aria-label="Pilih Mode Media">
+          <button class="mode-pill-btn ${isManga ? 'active' : ''}" data-mode="manga" id="drawer-mode-btn-manga" role="tab" type="button">
+            <span class="mode-icon">📖</span>
+            <span class="mode-text">Komik</span>
+          </button>
+          <button class="mode-pill-btn ${!isManga ? 'active' : ''}" data-mode="anime" id="drawer-mode-btn-anime" role="tab" type="button">
+            <span class="mode-icon">🎬</span>
+            <span class="mode-text">Anime</span>
+          </button>
+        </div>
+      </div>
+
       <div class="drawer-search-wrap">
         <button class="drawer-search-btn" id="drawer-search-trigger" type="button">
           <i data-lucide="search"></i>
-          <span>Cari Komik Favorit...</span>
+          <span>Cari komik atau anime...</span>
         </button>
       </div>
 
@@ -44,7 +59,7 @@ export function renderMobileDrawerMarkup() {
         <button class="drawer-nav-item" id="drawer-nav-history">
           <i data-lucide="clock"></i>
           <div class="drawer-item-content">
-            <span>Riwayat Baca</span>
+            <span>Riwayat</span>
             <span class="drawer-badge" id="drawer-badge-history">0</span>
           </div>
         </button>
@@ -105,6 +120,16 @@ export function initMobileDrawerEvents({ onNavigate, onOpenSearch } = {}) {
 
   btnClose?.addEventListener('click', closeMobileDrawer);
   backdrop?.addEventListener('click', closeMobileDrawer);
+
+  document.getElementById('drawer-mode-btn-manga')?.addEventListener('click', () => {
+    setMediaMode('manga');
+    closeMobileDrawer();
+  });
+
+  document.getElementById('drawer-mode-btn-anime')?.addEventListener('click', () => {
+    setMediaMode('anime');
+    closeMobileDrawer();
+  });
 
   document.querySelector('.drawer-brand')?.addEventListener('click', () => {
     closeMobileDrawer();

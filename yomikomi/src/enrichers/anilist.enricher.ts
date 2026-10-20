@@ -2,6 +2,27 @@ import axios from 'axios';
 import { MangaDetail } from '../types/manga.js';
 import { globalCache } from '../utils/cache.js';
 
+export interface AniListRelationNode {
+  id: number;
+  title: {
+    romaji?: string;
+    english?: string;
+    native?: string;
+  };
+  type?: 'MANGA' | 'ANIME';
+  format?: string;
+  status?: string;
+  coverImage?: {
+    large?: string;
+    extraLarge?: string;
+  };
+}
+
+export interface AniListRelationEdge {
+  relationType: string;
+  node: AniListRelationNode;
+}
+
 export interface AniListMetadata {
   id: number;
   title: {
@@ -19,13 +40,19 @@ export interface AniListMetadata {
   averageScore?: number;
   genres?: string[];
   status?: string;
+  format?: string;
+  episodes?: number;
+  chapters?: number;
+  relations?: {
+    edges: AniListRelationEdge[];
+  };
 }
 
 const ANILIST_ENDPOINT = 'https://graphql.anilist.co';
 
 const ANILIST_QUERY = `
-query ($search: String) {
-  Media (search: $search, type: MANGA) {
+query ($search: String, $type: MediaType = MANGA) {
+  Media (search: $search, type: $type) {
     id
     title {
       romaji
@@ -42,6 +69,29 @@ query ($search: String) {
     averageScore
     genres
     status
+    format
+    episodes
+    chapters
+    relations {
+      edges {
+        relationType
+        node {
+          id
+          title {
+            romaji
+            english
+            native
+          }
+          type
+          format
+          status
+          coverImage {
+            large
+            extraLarge
+          }
+        }
+      }
+    }
   }
 }
 `;

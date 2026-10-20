@@ -13,6 +13,7 @@ import { renderExplorePageMarkup, loadExploreFeed } from './pages/ExplorePage.js
 import { renderDetailPageMarkup, initDetailPageEvents, openMangaDetail } from './pages/DetailPage.js';
 import { renderBookmarkPageMarkup, initBookmarkPageEvents, switchCollectionTab, resumeReadingChapter, renderBookmarksList, renderHistoryList } from './pages/BookmarkPage.js';
 import { renderOfflinePageMarkup, initOfflinePageEvents, renderOfflineLibraryView } from './pages/OfflinePage.js';
+import { renderAnimeWatchPageMarkup, initAnimeWatchPageEvents, openAnimeWatch } from './pages/AnimeWatchPage.js';
 import { openReader, initReaderControls, openExternalReader, openEnglishReader } from './components/Reader.js';
 import { toggleBookmark, refreshBookmarkSet, updateAllCollectionBadges } from './services/storage.js';
 import { prefetchManga } from './services/mangaCache.js';
@@ -165,7 +166,7 @@ export function switchView(viewName) {
     revokeActiveObjectUrls();
   }
 
-  const views = ['home', 'explore', 'detail', 'reader', 'history', 'offline'];
+  const views = ['home', 'explore', 'detail', 'reader', 'history', 'offline', 'anime-watch'];
   views.forEach(v => {
     const el = document.getElementById(`view-${v}`);
     if (el) {
@@ -423,6 +424,7 @@ function renderAppShell() {
       ${renderReaderViewMarkup()}
       ${renderBookmarkPageMarkup()}
       ${renderOfflinePageMarkup()}
+      ${renderAnimeWatchPageMarkup()}
     </main>
     ${renderDownloadQueueMarkup()}
     ${renderSiteFooterMarkup()}
@@ -432,6 +434,7 @@ function renderAppShell() {
 // Global window bindings for compatibility
 window.switchView = switchView;
 window.openMangaDetail = openMangaDetail;
+window.openAnimeWatch = openAnimeWatch;
 window.openReader = openReader;
 window.openExternalReader = openExternalReader;
 window.openEnglishReader = openEnglishReader;
@@ -464,6 +467,7 @@ function initApp() {
 
     initHomePage();
     initDetailPageEvents();
+    initAnimeWatchPageEvents();
     initReaderControls();
     initBookmarkPageEvents();
     initOfflinePageEvents();

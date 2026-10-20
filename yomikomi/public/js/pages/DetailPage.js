@@ -22,7 +22,7 @@ import {
   toggleChapterSort,
   openUnifiedChapter
 } from '../components/ChapterList.js';
-import { fetchKomikuManga } from '../services/api.js';
+import { fetchKomikuManga, fetchAniList } from '../services/api.js';
 import { prefetchChapter } from '../components/Reader.js';
 import { getMangaDetailCached, setMangaDetailCached } from '../services/mangaCache.js';
 
@@ -155,9 +155,51 @@ export function renderMangaDetailHero(manga) {
           <i data-lucide="${isBooked ? 'bookmark-check' : 'bookmark'}"></i>
           <span>${isBooked ? 'Tersimpan di Bookmark' : '+ Bookmark'}</span>
         </button>
+        <div class="detail-crosslink-slot" id="detail-crosslink-slot"></div>
       </div>
     </div>
   `;
+
+  // Smart Cross-Link via AniList Relations (Komik <-> Anime)
+  const slot = document.getElementById('detail-crosslink-slot');
+  const isManga = !manga.mediaType || manga.mediaType === 'manga';
+
+  const attachDetailCrosslink = (meta) => {
+    if (!slot || !meta) return;
+    if (isManga && meta.relatedAnime) {
+      slot.innerHTML = `
+        <button class="btn-crosslink btn-anime-crosslink" id="btn-detail-anime-crosslink" type="button" title="Tonton Adaptasi Anime: ${meta.relatedAnime.title?.romaji || ''}">
+          <i data-lucide="film"></i>
+          <span>🎬 Tonton Anime</span>
+        </button>
+      `;
+      slot.querySelector('#btn-detail-anime-crosslink')?.addEventListener('click', () => {
+        if (typeof window.openAnimeWatch === 'function') {
+          window.openAnimeWatch(meta.relatedAnime.id);
+        }
+      });
+      initIcons();
+    } else if (!isManga && meta.relatedManga) {
+      slot.innerHTML = `
+        <button class="btn-crosslink btn-manga-crosslink" id="btn-detail-manga-crosslink" type="button" title="Baca Sumber Manga: ${meta.relatedManga.title?.romaji || ''}">
+          <i data-lucide="book-open"></i>
+          <span>📖 Baca Komik</span>
+        </button>
+      `;
+      slot.querySelector('#btn-detail-manga-crosslink')?.addEventListener('click', () => {
+        if (typeof window.openMangaDetail === 'function') {
+          window.openMangaDetail(meta.relatedManga.id, meta.relatedManga);
+        }
+      });
+      initIcons();
+    }
+  };
+
+  if (manga.relatedAnime || manga.relatedManga) {
+    attachDetailCrosslink({ relatedAnime: manga.relatedAnime, relatedManga: manga.relatedManga });
+  } else {
+    fetchAniList(title).then(attachDetailCrosslink);
+  }
 
   document.getElementById('btn-bookmark-manga')?.addEventListener('click', (e) => {
     const btn = e.currentTarget;
@@ -212,6 +254,41 @@ export function renderMangaDetailHero(manga) {
 }
 
 export async function openMangaDetail(mangaId, maybeMangaData = null) {
+  // If mangaId is an object or purely numeric AniList ID, resolve to MangaDex/Komiku
+  const isNumericAniListId = typeof mangaId === 'number' || (typeof mangaId === 'string' && /^\d+$/.test(mangaId) && !mangaId.includes('-'));
+  const isObjectTarget = typeof mangaId === 'object' && mangaId !== null;
+
+  if (isObjectTarget || isNumericAniListId) {
+    const rawTarget = isObjectTarget ? mangaId : maybeMangaData;
+    const searchTitle = rawTarget?.title?.romaji || rawTarget?.title?.english || (typeof rawTarget?.title === 'string' ? rawTarget.title : '');
+    
+    if (searchTitle) {
+      if (typeof window.switchView === 'function') window.switchView('detail');
+      const heroContent = document.getElementById('detail-hero-content');
+      if (heroContent) heroContent.innerHTML = `<div class="spinner" style="margin: 3rem auto;"></div>`;
+
+      try {
+        const searchRes = await fetch(`/api/search?q=${encodeURIComponent(searchTitle)}&limit=1`);
+        const searchJson = await searchRes.json();
+        const found = searchJson.data?.[0];
+        if (found && found.id) {
+          return openMangaDetail(found.id, found);
+        }
+
+        // Try Komiku
+        const kSearchRes = await fetch(`/api/komiku/search?q=${encodeURIComponent(searchTitle)}`);
+        const kSearchJson = await kSearchRes.json();
+        const kFound = kSearchJson.data?.[0];
+        if (kFound && (kFound.slug || kFound.id)) {
+          const kSlug = kFound.slug || kFound.id.replace(/^komiku-/, '');
+          return openMangaDetail(`komiku-${kSlug}`, kFound);
+        }
+      } catch (resErr) {
+        console.warn('Crosslink manga resolution failed:', resErr);
+      }
+    }
+  }
+
   if (typeof window.switchView === 'function') {
     window.switchView('detail');
   }

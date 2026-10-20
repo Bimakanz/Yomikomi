@@ -10,6 +10,9 @@ import {
   getMangaTitle,
   getCoverUrl,
   CoverCache,
+  getStoredList,
+  STORAGE_KEY_HISTORY,
+  getAnimeHistory,
   MANGADEX_GENRES,
   MANGADEX_POPULAR_THEMES,
   MANGADEX_FORMATS,
@@ -27,19 +30,24 @@ export function renderHomePageMarkup() {
         <div class="hero-skeleton skeleton-pulse"></div>
       </div>
 
+      <!-- Horizontal Continue Reading / Watching Row ("▶️ Lanjutkan") -->
+      <div class="continue-section hidden" id="continue-section">
+        <div class="continue-header">
+          <div class="continue-title-wrap">
+            <span class="continue-icon">▶️</span>
+            <h3 class="continue-title">Lanjutkan</h3>
+          </div>
+          <button class="continue-see-all-btn" id="btn-continue-all" type="button">Lihat Riwayat</button>
+        </div>
+        <div class="continue-cards-grid" id="continue-cards-grid">
+          <!-- Populated dynamically by renderContinueRow() -->
+        </div>
+      </div>
+
       <!-- Quick Filter & Tags Bar -->
       <div class="filter-bar">
-        <div class="filter-tabs">
-          <button class="filter-tab active" data-filter="all">Semua Komik</button>
-          <button class="filter-tab" data-filter="popular">Paling Populer</button>
-          <button class="filter-tab" data-filter="latest">Baru Diupdate</button>
-          <button class="filter-tab" data-filter="indo">🇮🇩 Indo Scan</button>
-          <button class="filter-tab" data-filter="english">🇬🇧 English</button>
-          <button class="filter-tab genre-dropdown-toggle" id="btn-genre-toggle" type="button" aria-expanded="false" title="Pilih Genre Komik">
-            <i data-lucide="tag"></i>
-            <span id="genre-toggle-text">Filter Genre</span>
-            <i data-lucide="chevron-down" class="dropdown-chevron" id="genre-toggle-chevron"></i>
-          </button>
+        <div class="filter-tabs" id="filter-tabs-container">
+          <!-- Populated dynamically by renderFilterTabs() -->
         </div>
 
         <!-- Genre Full Grid Modal / Dropdown Panel -->
@@ -105,18 +113,152 @@ export function showGridSkeleton() {
   }
 }
 
-export function renderMangaGrid(mangaList) {
+export function renderContinueRow() {
+  const container = document.getElementById('continue-cards-grid');
+  const section = document.getElementById('continue-section');
+  if (!container || !section) return;
+
+  const isAnimeMode = state.activeMediaMode === 'anime';
+  const animeHist = getAnimeHistory();
+  const mangaHist = getStoredList(STORAGE_KEY_HISTORY);
+
+  let items = [];
+  if (isAnimeMode) {
+    items = animeHist.length > 0 
+      ? animeHist.map(h => ({ ...h, mediaType: 'anime' }))
+      : mangaHist.map(h => ({ ...h, mediaType: 'manga' }));
+  } else {
+    items = mangaHist.length > 0 
+      ? mangaHist.map(h => ({ ...h, mediaType: 'manga' }))
+      : animeHist.map(h => ({ ...h, mediaType: 'anime' }));
+  }
+
+  const validItems = items.filter(it => it && (it.mangaId || it.animeId || it.id)).slice(0, 4);
+
+  if (validItems.length === 0) {
+    section.classList.add('hidden');
+    container.innerHTML = '';
+    return;
+  }
+
+  section.classList.remove('hidden');
+  container.innerHTML = '';
+
+  validItems.forEach(item => {
+    const isItemAnime = item.mediaType === 'anime' || !!item.animeId;
+    const title = item.title || item.mangaTitle || 'Untitled';
+    const coverUrl = item.coverUrl || 'https://placehold.co/100x140/1e2025/ffffff?text=Cover';
+    const lastLabel = isItemAnime 
+      ? (item.episodeTitle || `Ep. ${item.episode || 1}`) 
+      : (item.chapterNum ? `Ch. ${item.chapterNum}` : (item.chapterTitle || 'Chapter'));
+    const progress = item.progress || (item.pageIndex && item.totalPages ? `${Math.round(((item.pageIndex + 1) / item.totalPages) * 100)}%` : '85%');
+
+    const card = document.createElement('div');
+    card.className = 'continue-card';
+    card.setAttribute('role', 'button');
+    card.tabIndex = 0;
+    card.innerHTML = `
+      <div class="continue-poster-wrap">
+        <img class="continue-poster" src="${coverUrl}" alt="${title}" loading="lazy" onerror="this.src='https://placehold.co/100x140/1e2025/ffffff?text=Cover';">
+        <span class="continue-type-badge">${isItemAnime ? '🎬 Anime' : '📖 Komik'}</span>
+      </div>
+      <div class="continue-info">
+        <h4 class="continue-item-title" title="${title}">${title}</h4>
+        <div class="continue-badge-row">
+          <span class="continue-chapter-badge">${lastLabel}</span>
+        </div>
+        <div class="continue-progress-wrap">
+          <div class="continue-progress-bar">
+            <div class="continue-progress-fill" style="width: ${progress};"></div>
+          </div>
+        </div>
+      </div>
+      <button class="continue-action-btn" type="button" title="Lanjut ${isItemAnime ? 'Nonton' : 'Baca'}">
+        <i data-lucide="play"></i>
+      </button>
+    `;
+
+    const handleAction = () => {
+      if (isItemAnime) {
+        if (typeof window.openAnimeWatch === 'function') {
+          window.openAnimeWatch(item.animeId || item.id, item.episode || 1, item);
+        }
+      } else {
+        if (typeof window.resumeReadingChapter === 'function') {
+          window.resumeReadingChapter(item.mangaId || item.id, item.chapterId, item.chapterNum, item);
+        } else if (typeof window.openMangaDetail === 'function') {
+          window.openMangaDetail(item.mangaId || item.id);
+        }
+      }
+    };
+
+    card.addEventListener('click', handleAction);
+    container.appendChild(card);
+  });
+
+  document.getElementById('btn-continue-all')?.addEventListener('click', () => {
+    if (typeof window.switchView === 'function') {
+      window.switchView('history');
+      if (typeof window.switchCollectionTab === 'function') {
+        window.switchCollectionTab(isAnimeMode ? 'anime-history' : 'history');
+      }
+    }
+  });
+
+  initIcons();
+}
+
+export function renderFilterTabs(activeMode = state.activeMediaMode) {
+  const container = document.getElementById('filter-tabs-container');
+  if (!container) return;
+
+  const isAnime = activeMode === 'anime';
+
+  if (isAnime) {
+    container.innerHTML = `
+      <button class="filter-tab active" data-filter="anime-popular">Semua Anime</button>
+      <button class="filter-tab" data-filter="anime-seasonal">Sedang Tayang (Seasonal)</button>
+      <button class="filter-tab" data-filter="anime-popular">Paling Populer</button>
+      <button class="filter-tab" data-filter="anime-subindo">Sub Indo</button>
+      <button class="filter-tab" data-filter="anime-movies">Movie</button>
+      <button class="filter-tab genre-dropdown-toggle" id="btn-genre-toggle" type="button" aria-expanded="false" title="Pilih Genre">
+        <i data-lucide="tag"></i>
+        <span id="genre-toggle-text">Filter Genre</span>
+        <i data-lucide="chevron-down" class="dropdown-chevron" id="genre-toggle-chevron"></i>
+      </button>
+    `;
+  } else {
+    container.innerHTML = `
+      <button class="filter-tab active" data-filter="all">Semua Komik</button>
+      <button class="filter-tab" data-filter="popular">Paling Populer</button>
+      <button class="filter-tab" data-filter="latest">Baru Diupdate</button>
+      <button class="filter-tab" data-filter="indo">🇮🇩 Indo Scan</button>
+      <button class="filter-tab" data-filter="english">🇬🇧 English</button>
+      <button class="filter-tab genre-dropdown-toggle" id="btn-genre-toggle" type="button" aria-expanded="false" title="Pilih Genre Komik">
+        <i data-lucide="tag"></i>
+        <span id="genre-toggle-text">Filter Genre</span>
+        <i data-lucide="chevron-down" class="dropdown-chevron" id="genre-toggle-chevron"></i>
+      </button>
+    `;
+  }
+
+  initFilters();
+  initGenreFilter();
+  initIcons();
+}
+
+export function renderMediaGrid(mediaList, mediaType = state.activeMediaMode) {
   const grid = document.getElementById('manga-grid');
   const countBadge = document.getElementById('grid-count-badge');
-  if (countBadge) countBadge.textContent = `${mangaList.length} Judul`;
+  if (countBadge) countBadge.textContent = `${mediaList.length} Judul`;
 
   if (!grid) return;
 
-  if (!mangaList || mangaList.length === 0) {
+  if (!mediaList || mediaList.length === 0) {
     grid.innerHTML = `
       <div class="empty-state" style="grid-column: 1 / -1;">
-        <i data-lucide="book-x"></i>
-        <h3>Tidak Ada Komik Ditemukan</h3>
+        <i data-lucide="${mediaType === 'anime' ? 'film' : 'book-x'}"></i>
+        <h3>Tidak Ada ${mediaType === 'anime' ? 'Anime' : 'Komik'} Ditemukan</h3>
         <p>Coba gunakan kata kunci lain atau pilih filter yang berbeda.</p>
       </div>
     `;
@@ -125,44 +267,69 @@ export function renderMangaGrid(mangaList) {
   }
 
   grid.innerHTML = '';
-  mangaList.forEach((manga, idx) => {
-    const isKomiku = manga.source === 'komiku' || manga.id?.startsWith('komiku-');
-    const title = isKomiku ? manga.title : getMangaTitle(manga.attributes);
-    const coverUrl = isKomiku ? manga.coverUrl : getCoverUrl(manga);
-    const status = isKomiku 
-      ? (manga.status ? manga.status.toUpperCase() : 'ONGOING') 
-      : (manga.attributes?.status ? manga.attributes.status.toUpperCase() : 'ONGOING');
-    const lastChapter = isKomiku
-      ? (manga.latestChapter || manga.lastChapter || 'Update')
-      : (manga.attributes?.lastChapter ? `Ch. ${manga.attributes.lastChapter}` : 'Update');
+  mediaList.forEach((item) => {
+    const isAnime = mediaType === 'anime' || item.mediaType === 'anime';
+    const isKomiku = item.source === 'komiku' || item.id?.toString().startsWith('komiku-');
+    const title = isAnime ? item.title : (isKomiku ? item.title : getMangaTitle(item.attributes));
+    const coverUrl = isAnime ? item.coverUrl : (isKomiku ? item.coverUrl : getCoverUrl(item));
+    const status = isAnime
+      ? (item.status || 'RELEASING').toUpperCase()
+      : (isKomiku 
+          ? (item.status ? item.status.toUpperCase() : 'ONGOING') 
+          : (item.attributes?.status ? item.attributes.status.toUpperCase() : 'ONGOING'));
+    
+    // Rating badge (e.g. ⭐ 8.4)
+    let rating = isAnime ? item.rating : '';
+    if (!rating && item.attributes?.rating) rating = `⭐ ${item.attributes.rating}`;
+    if (!rating && item.averageScore) rating = `⭐ ${(item.averageScore / 10).toFixed(1)}`;
+
+    // Latest chapter / episode badge
+    const lastBadge = isAnime
+      ? (item.latestEpisode || `Ep. ${item.episodes || '1'} • Sub`)
+      : (isKomiku
+          ? (item.latestChapter || item.lastChapter || 'Update')
+          : (item.attributes?.lastChapter ? `Ch. ${item.attributes.lastChapter}` : 'Update'));
+
+    const formatBadge = isAnime ? (item.format || 'ANIME') : (item.type || 'MANGA');
+
     const card = document.createElement('article');
-    card.className = 'manga-card';
+    card.className = `manga-card ${isAnime ? 'anime-card' : ''}`;
     card.tabIndex = 0;
     card.innerHTML = `
       <div class="card-poster">
         <img src="${coverUrl}" alt="${title}" loading="lazy" decoding="async" onerror="this.src='https://placehold.co/300x420/1e2025/ffffff?text=Cover';">
         <div class="card-overlay-gradient"></div>
-        <span class="card-status-badge">${status}</span>
+        <span class="card-status-badge ${status.toLowerCase()}">${status}</span>
+        ${rating ? `<span class="card-rating-badge">${rating}</span>` : ''}
+        <span class="card-episode-badge">${lastBadge}</span>
       </div>
       <div class="card-content">
         <h3 class="card-title" title="${title}">${title}</h3>
         <div class="card-meta">
-          <span>${lastChapter}</span>
+          <span>${formatBadge}</span>
           <div class="card-languages">
-            ${isKomiku ? '<span class="lang-flag" title="Tersedia Bahasa Indonesia">🇮🇩 ID</span>' : ''}
-            ${!isKomiku && manga.attributes?.availableTranslatedLanguages?.includes('id') ? '<span class="lang-flag" title="Tersedia Bahasa Indonesia">🇮🇩</span>' : ''}
-            ${!isKomiku && manga.attributes?.availableTranslatedLanguages?.includes('en') ? '<span class="lang-flag" title="Tersedia English">🇬🇧</span>' : ''}
+            ${isAnime ? '<span class="lang-flag" title="Subtitle Indonesia">🇮🇩 Sub</span>' : ''}
+            ${!isAnime && isKomiku ? '<span class="lang-flag" title="Tersedia Bahasa Indonesia">🇮🇩 ID</span>' : ''}
+            ${!isAnime && !isKomiku && item.attributes?.availableTranslatedLanguages?.includes('id') ? '<span class="lang-flag" title="Tersedia Bahasa Indonesia">🇮🇩</span>' : ''}
+            ${!isAnime && !isKomiku && item.attributes?.availableTranslatedLanguages?.includes('en') ? '<span class="lang-flag" title="Tersedia English">🇬🇧</span>' : ''}
           </div>
         </div>
       </div>
     `;
 
-    // Attach hover and viewport prefetch for instant 0ms detail page opening
-    attachMangaCardHoverPrefetch(card, manga.id, manga);
+    if (!isAnime) {
+      attachMangaCardHoverPrefetch(card, item.id, item);
+    }
 
     card.addEventListener('click', () => {
-      if (typeof window.openMangaDetail === 'function') {
-        window.openMangaDetail(manga.id, manga);
+      if (isAnime) {
+        if (typeof window.openAnimeWatch === 'function') {
+          window.openAnimeWatch(item.id, 1, item);
+        }
+      } else {
+        if (typeof window.openMangaDetail === 'function') {
+          window.openMangaDetail(item.id, item);
+        }
       }
     });
     grid.appendChild(card);
@@ -170,6 +337,9 @@ export function renderMangaGrid(mangaList) {
 
   initIcons();
 }
+
+// Backward compatibility alias
+export const renderMangaGrid = renderMediaGrid;
 
 export async function loadPopularManga() {
   const sectionTitle = document.getElementById('grid-section-title');
@@ -390,6 +560,103 @@ export async function loadExploreCategory(categoryTitle, fetchUrl) {
 }
 window.loadExploreCategory = loadExploreCategory;
 
+// Anime Feed Loaders
+export async function loadPopularAnime() {
+  const sectionTitle = document.getElementById('grid-section-title');
+  if (sectionTitle) sectionTitle.textContent = 'Anime Paling Populer (Trending)';
+  showGridSkeleton();
+
+  try {
+    const res = await fetch('/api/anime/popular');
+    const data = await res.json();
+    const list = data.data || [];
+    state.popularAnime = list;
+    state.animeList = list;
+
+    renderMediaGrid(list, 'anime');
+
+    if (list.length >= 3 && state.activeMediaMode === 'anime') {
+      renderHeroBanner(list.slice(0, 5));
+    }
+  } catch (error) {
+    console.error('Failed to load popular anime:', error);
+    showToast('Gagal memuat anime populer');
+  }
+}
+window.loadPopularAnime = loadPopularAnime;
+
+export async function loadSeasonalAnime() {
+  const sectionTitle = document.getElementById('grid-section-title');
+  if (sectionTitle) sectionTitle.textContent = 'Anime Sedang Tayang (Seasonal)';
+  showGridSkeleton();
+
+  try {
+    const res = await fetch('/api/anime/seasonal');
+    const data = await res.json();
+    state.animeList = data.data || [];
+    renderMediaGrid(state.animeList, 'anime');
+  } catch (error) {
+    console.error('Failed to load seasonal anime:', error);
+    showToast('Gagal memuat anime seasonal');
+  }
+}
+window.loadSeasonalAnime = loadSeasonalAnime;
+
+export async function loadLatestAnime() {
+  const sectionTitle = document.getElementById('grid-section-title');
+  if (sectionTitle) sectionTitle.textContent = 'Rilis Episode Anime Terbaru';
+  showGridSkeleton();
+
+  try {
+    const res = await fetch('/api/anime/latest');
+    const data = await res.json();
+    state.animeList = data.data || [];
+    renderMediaGrid(state.animeList, 'anime');
+  } catch (error) {
+    console.error('Failed to load latest anime:', error);
+    showToast('Gagal memuat episode terbaru');
+  }
+}
+window.loadLatestAnime = loadLatestAnime;
+
+export async function loadSubIndoAnime() {
+  const sectionTitle = document.getElementById('grid-section-title');
+  if (sectionTitle) sectionTitle.textContent = 'Anime Subtitle Indonesia 🇮🇩';
+  showGridSkeleton();
+
+  try {
+    const res = await fetch('/api/anime/popular');
+    const data = await res.json();
+    const list = (data.data || []).map(a => ({
+      ...a,
+      subIndo: true,
+      latestEpisode: a.latestEpisode ? `${a.latestEpisode} • Sub ID` : 'Sub Indo'
+    }));
+    state.animeList = list;
+    renderMediaGrid(list, 'anime');
+  } catch (error) {
+    console.error('Failed to load sub indo anime:', error);
+  }
+}
+window.loadSubIndoAnime = loadSubIndoAnime;
+
+export async function loadMovieAnime() {
+  const sectionTitle = document.getElementById('grid-section-title');
+  if (sectionTitle) sectionTitle.textContent = 'Anime Movies (Film Layar Lebar)';
+  showGridSkeleton();
+
+  try {
+    const res = await fetch('/api/anime/movies');
+    const data = await res.json();
+    state.animeList = data.data || [];
+    renderMediaGrid(state.animeList, 'anime');
+  } catch (error) {
+    console.error('Failed to load anime movies:', error);
+    showToast('Gagal memuat anime movies');
+  }
+}
+window.loadMovieAnime = loadMovieAnime;
+
 export function initFilters() {
   const tabs = document.querySelectorAll('.filter-tab:not(.genre-dropdown-toggle)');
   tabs.forEach(tab => {
@@ -410,6 +677,16 @@ export function initFilters() {
         loadIndonesianManga();
       } else if (filter === 'english') {
         loadEnglishManga();
+      } else if (filter === 'anime-popular' || filter === 'anime-all') {
+        loadPopularAnime();
+      } else if (filter === 'anime-seasonal') {
+        loadSeasonalAnime();
+      } else if (filter === 'anime-latest') {
+        loadLatestAnime();
+      } else if (filter === 'anime-subindo') {
+        loadSubIndoAnime();
+      } else if (filter === 'anime-movies') {
+        loadMovieAnime();
       }
     });
   });
@@ -655,7 +932,44 @@ export function initGenreFilter() {
 }
 
 export function initHomePage() {
-  initFilters();
-  initGenreFilter();
-  loadPopularManga();
+  renderContinueRow();
+  renderFilterTabs(state.activeMediaMode);
+
+  if (state.activeMediaMode === 'anime') {
+    const sectionTitle = document.getElementById('grid-section-title');
+    if (sectionTitle) sectionTitle.textContent = 'Anime Paling Populer (Trending)';
+    loadPopularAnime();
+  } else {
+    loadPopularManga();
+  }
+
+  // Reactive listener when user switches media mode from navbar / drawer
+  window.addEventListener('yomikomi:mediamode', (e) => {
+    const newMode = e.detail?.mode || state.activeMediaMode;
+    renderFilterTabs(newMode);
+    renderContinueRow();
+    const sectionTitle = document.getElementById('grid-section-title');
+
+    if (newMode === 'anime') {
+      if (sectionTitle) sectionTitle.textContent = 'Anime Paling Populer (Trending)';
+      loadPopularAnime();
+    } else {
+      if (sectionTitle) sectionTitle.textContent = 'Komik Paling Populer (Trending)';
+      loadPopularManga();
+    }
+  });
+
+  // Re-check continue row on window focus / visibility change
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && state.currentView === 'home') {
+      renderContinueRow();
+    }
+  });
+}
+
+// Global window bindings
+if (typeof window !== 'undefined') {
+  window.renderContinueRow = renderContinueRow;
+  window.renderFilterTabs = renderFilterTabs;
+  window.renderMediaGrid = renderMediaGrid;
 }

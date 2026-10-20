@@ -13,8 +13,11 @@ import {
   CoverCache,
   getStoredList,
   saveStoredList,
+  getAnimeHistory,
+  clearAnimeHistory,
   STORAGE_KEY_BOOKMARKS,
-  STORAGE_KEY_HISTORY
+  STORAGE_KEY_HISTORY,
+  STORAGE_KEY_ANIME_HISTORY
 } from '../state.js';
 import { getBookmarks, updateAllCollectionBadges } from '../services/storage.js';
 import { openReader, openExternalReader, openEnglishReader, extractChapterNumber } from '../components/Reader.js';
@@ -29,13 +32,13 @@ export function renderBookmarkPageMarkup() {
             <h2 class="section-title" id="collection-view-title">Koleksi Saya</h2>
             <span class="section-badge" id="history-count-badge">0 Judul</span>
           </div>
-          <button class="btn-clear-history hidden" id="btn-clear-history" title="Bersihkan Seluruh Riwayat Baca">
+          <button class="btn-clear-history hidden" id="btn-clear-history" title="Bersihkan Seluruh Riwayat">
             <i data-lucide="trash-2"></i>
             <span>Hapus Riwayat</span>
           </button>
         </div>
 
-        <!-- Collection Subtabs: Bookmark vs History -->
+        <!-- Collection Subtabs: Bookmark vs Riwayat Komik vs Riwayat Anime -->
         <div class="collection-tabs-wrap">
           <button class="collection-tab active" id="tab-collection-bookmarks" data-tab="bookmarks">
             <i data-lucide="bookmark"></i>
@@ -43,9 +46,14 @@ export function renderBookmarkPageMarkup() {
             <span class="collection-tab-count" id="count-collection-bookmarks">0</span>
           </button>
           <button class="collection-tab" id="tab-collection-history" data-tab="history">
-            <i data-lucide="clock"></i>
-            <span>Riwayat Membaca</span>
+            <i data-lucide="book-open"></i>
+            <span>Riwayat Komik</span>
             <span class="collection-tab-count" id="count-collection-history">0</span>
+          </button>
+          <button class="collection-tab" id="tab-collection-anime" data-tab="anime-history">
+            <i data-lucide="film"></i>
+            <span>Riwayat Anime</span>
+            <span class="collection-tab-count" id="count-collection-anime">0</span>
           </button>
         </div>
 
@@ -62,20 +70,25 @@ export function switchCollectionTab(tabName) {
 
   const tabBkm = document.getElementById('tab-collection-bookmarks');
   const tabHist = document.getElementById('tab-collection-history');
+  const tabAnime = document.getElementById('tab-collection-anime');
   const clearBtn = document.getElementById('btn-clear-history');
   const viewTitle = document.getElementById('collection-view-title');
 
+  tabBkm?.classList.toggle('active', tabName === 'bookmarks');
+  tabHist?.classList.toggle('active', tabName === 'history');
+  tabAnime?.classList.toggle('active', tabName === 'anime-history');
+
   if (tabName === 'bookmarks') {
-    tabBkm?.classList.add('active');
-    tabHist?.classList.remove('active');
     clearBtn?.classList.add('hidden');
     if (viewTitle) viewTitle.textContent = 'Bookmark Saya';
     renderBookmarksList();
-  } else {
-    tabHist?.classList.add('active');
-    tabBkm?.classList.remove('active');
+  } else if (tabName === 'anime-history') {
     clearBtn?.classList.remove('hidden');
-    if (viewTitle) viewTitle.textContent = 'Riwayat Membaca';
+    if (viewTitle) viewTitle.textContent = 'Riwayat Nonton Anime';
+    renderAnimeHistoryList();
+  } else {
+    clearBtn?.classList.remove('hidden');
+    if (viewTitle) viewTitle.textContent = 'Riwayat Membaca Komik';
     renderHistoryList();
   }
   updateAllCollectionBadges();
@@ -647,19 +660,111 @@ export function applyResolvedHistoryCover(imgElement, mangaTitle, mangaId, cover
   }
 }
 
+export function renderAnimeHistoryList() {
+  const history = getAnimeHistory();
+  const grid = document.getElementById('history-grid');
+  const countBadge = document.getElementById('history-count-badge');
+  if (countBadge) countBadge.textContent = `${history.length} Judul`;
+
+  if (!grid) return;
+
+  if (history.length === 0) {
+    grid.innerHTML = `
+      <div class="empty-state">
+        <i data-lucide="film" style="width: 48px; height: 48px; margin-bottom: 1rem; color: var(--text-subtle);"></i>
+        <h3>Belum Ada Riwayat Nonton Anime</h3>
+        <p>Anime dan episode yang Anda tonton akan otomatis tercatat di sini agar Anda bisa melanjutkan kapan saja.</p>
+        <button class="btn-explore" id="btn-explore-anime-empty" style="margin-top: 1rem;">Jelajahi Anime Sekarang</button>
+      </div>
+    `;
+    document.getElementById('btn-explore-anime-empty')?.addEventListener('click', () => {
+      if (typeof window.setMediaMode === 'function') window.setMediaMode('anime');
+      if (typeof window.switchView === 'function') window.switchView('home');
+    });
+    initIcons();
+    return;
+  }
+
+  grid.innerHTML = '';
+  history.forEach(item => {
+    const title = item.title || 'Anime';
+    const coverUrl = item.coverUrl || 'https://placehold.co/300x420/1e2025/ffffff?text=Cover';
+    const epLabel = item.episodeTitle || `Episode ${item.episode || 1}`;
+    const progress = item.progress || '100%';
+
+    const card = document.createElement('article');
+    card.className = 'history-card anime-history-card';
+    card.tabIndex = 0;
+    card.innerHTML = `
+      <div class="history-poster-wrap">
+        <img src="${coverUrl}" alt="${title}" loading="lazy" onerror="this.src='https://placehold.co/300x420/1e2025/ffffff?text=Cover';">
+        <span class="history-badge">🎬 ANIME</span>
+      </div>
+      <div class="history-content">
+        <h3 class="history-title" title="${title}">${title}</h3>
+        <div class="history-meta-row">
+          <span class="history-chapter-badge">${epLabel}</span>
+        </div>
+        <div class="history-progress-wrap">
+          <div class="history-progress-bar">
+            <div class="history-progress-fill" style="width: ${progress};"></div>
+          </div>
+        </div>
+        <button class="btn-resume-chapter" type="button">
+          <i data-lucide="play"></i>
+          <span>Lanjut Nonton</span>
+        </button>
+      </div>
+    `;
+
+    card.querySelector('.btn-resume-chapter')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (typeof window.openAnimeWatch === 'function') {
+        window.openAnimeWatch(item.animeId, item.episode);
+      }
+    });
+
+    card.addEventListener('click', () => {
+      if (typeof window.openAnimeWatch === 'function') {
+        window.openAnimeWatch(item.animeId, item.episode);
+      }
+    });
+
+    grid.appendChild(card);
+  });
+
+  initIcons();
+}
+
 export function initBookmarkPageEvents() {
   const tabBkm = document.getElementById('tab-collection-bookmarks');
   const tabHist = document.getElementById('tab-collection-history');
+  const tabAnime = document.getElementById('tab-collection-anime');
 
   tabBkm?.addEventListener('click', () => switchCollectionTab('bookmarks'));
   tabHist?.addEventListener('click', () => switchCollectionTab('history'));
+  tabAnime?.addEventListener('click', () => switchCollectionTab('anime-history'));
 
   document.getElementById('btn-clear-history')?.addEventListener('click', () => {
-    if (confirm('Apakah Anda yakin ingin menghapus seluruh riwayat membaca?')) {
-      localStorage.removeItem(STORAGE_KEY_HISTORY);
-      renderHistoryList();
-      updateAllCollectionBadges();
-      showToast('Riwayat membaca telah dibersihkan.');
+    if (state.currentCollectionTab === 'anime-history') {
+      if (confirm('Apakah Anda yakin ingin menghapus seluruh riwayat nonton anime?')) {
+        clearAnimeHistory();
+        renderAnimeHistoryList();
+        updateAllCollectionBadges();
+        showToast('Riwayat nonton anime telah dibersihkan.');
+      }
+    } else {
+      if (confirm('Apakah Anda yakin ingin menghapus seluruh riwayat membaca?')) {
+        localStorage.removeItem(STORAGE_KEY_HISTORY);
+        renderHistoryList();
+        updateAllCollectionBadges();
+        showToast('Riwayat membaca telah dibersihkan.');
+      }
     }
   });
+}
+
+// Global window bindings
+if (typeof window !== 'undefined') {
+  window.renderAnimeHistoryList = renderAnimeHistoryList;
 }

@@ -23,12 +23,17 @@ export function renderHeroBanner(containerOrItems, maybeItems, onReadClick, onDe
   state.heroManga = items.slice(0, 5);
   state.activeHeroIndex = 0;
 
-  state.heroManga.forEach((manga, idx) => {
-    const title = getMangaTitle(manga.attributes);
-    const coverUrl = getCoverUrl(manga);
-    const desc = manga.attributes.description?.id || manga.attributes.description?.en || 'Jelajahi petualangan manga menakjubkan ini secara gratis di Yomikomi.';
-    const status = manga.attributes.status?.toUpperCase() || 'ONGOING';
-    const tags = manga.attributes.tags?.slice(0, 2).map(t => t.attributes.name.en) || ['Manga'];
+  state.heroManga.forEach((item, idx) => {
+    const isAnime = item.mediaType === 'anime' || state.activeMediaMode === 'anime';
+    const title = isAnime ? item.title : getMangaTitle(item.attributes);
+    const coverUrl = isAnime ? (item.coverUrl || item.bannerUrl) : getCoverUrl(item);
+    const rawDesc = isAnime ? item.description : (item.attributes?.description?.id || item.attributes?.description?.en);
+    const cleanDesc = (rawDesc || 'Jelajahi petualangan menakjubkan ini secara gratis di Yomikomi.')
+      .replace(/<[^>]*>/g, ' ')
+      .slice(0, 160) + '...';
+    const status = isAnime ? (item.status || 'RELEASING') : (item.attributes?.status?.toUpperCase() || 'ONGOING');
+    const tags = isAnime ? (item.genres?.slice(0, 2) || ['Anime']) : (item.attributes?.tags?.slice(0, 2).map(t => t.attributes.name.en) || ['Manga']);
+    const ratingText = isAnime ? (item.rating || (item.averageScore ? `⭐ ${(item.averageScore / 10).toFixed(1)}` : '')) : '';
 
     const slide = document.createElement('div');
     slide.className = `hero-slide ${idx === 0 ? 'active' : ''}`;
@@ -37,28 +42,68 @@ export function renderHeroBanner(containerOrItems, maybeItems, onReadClick, onDe
       <div class="hero-content">
         <div class="hero-badge-row">
           <span class="badge-tag accent">
-            <span>Populer</span>
+            <span>${isAnime ? '🎬 Populer' : '📖 Populer'}</span>
           </span>
           <span class="badge-tag">${status}</span>
           ${tags.map(t => `<span class="badge-tag">${t}</span>`).join('')}
-          <span class="badge-tag rating-badge hidden" id="hero-rating-${idx}"></span>
+          <span class="badge-tag rating-badge ${ratingText ? '' : 'hidden'}" id="hero-rating-${idx}">${ratingText}</span>
         </div>
         <h1 class="hero-title">${title}</h1>
-        <p class="hero-desc">${desc}</p>
+        <p class="hero-desc">${cleanDesc}</p>
         <div class="hero-actions">
           <button class="btn-primary btn-hero-read" type="button">
-            <i data-lucide="book-open"></i>
-            <span>Baca</span>
+            <i data-lucide="${isAnime ? 'play' : 'book-open'}"></i>
+            <span>${isAnime ? 'Tonton' : 'Baca'}</span>
           </button>
           <button class="btn-secondary btn-hero-info" type="button">
             <i data-lucide="info"></i>
             <span>Info</span>
           </button>
+          <div class="hero-crosslink-slot" id="hero-crosslink-${idx}"></div>
         </div>
       </div>
     `;
 
-    // Enrich with AniList GraphQL (HD landscape banner & rating badge)
+    // Handle relations crosslink
+    const attachCrosslink = (crosslinkWrap, meta) => {
+      if (!crosslinkWrap || !meta) return;
+      if (!isAnime && meta.relatedAnime) {
+        crosslinkWrap.innerHTML = `
+          <button class="btn-crosslink btn-anime-crosslink" type="button" title="Tonton Adaptasi Anime: ${meta.relatedAnime.title?.romaji || ''}">
+            <i data-lucide="film"></i>
+            <span>🎬 Tonton Anime</span>
+          </button>
+        `;
+        crosslinkWrap.querySelector('.btn-anime-crosslink')?.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (typeof window.openAnimeWatch === 'function') {
+            window.openAnimeWatch(meta.relatedAnime.id);
+          }
+        });
+        initIcons();
+      } else if (isAnime && meta.relatedManga) {
+        crosslinkWrap.innerHTML = `
+          <button class="btn-crosslink btn-manga-crosslink" type="button" title="Baca Sumber Manga: ${meta.relatedManga.title?.romaji || ''}">
+            <i data-lucide="book-open"></i>
+            <span>📖 Baca Komik</span>
+          </button>
+        `;
+        crosslinkWrap.querySelector('.btn-manga-crosslink')?.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (typeof window.openMangaDetail === 'function') {
+            window.openMangaDetail(meta.relatedManga.id, meta.relatedManga);
+          }
+        });
+        initIcons();
+      }
+    };
+
+    if (isAnime && item.relatedManga) {
+      const crosslinkWrap = slide.querySelector(`#hero-crosslink-${idx}`);
+      attachCrosslink(crosslinkWrap, { relatedManga: item.relatedManga });
+    }
+
+    // Enrich with AniList GraphQL (HD landscape banner, rating badge & relations)
     fetchAniList(title).then(meta => {
       if (meta) {
         if (meta.bannerImage) {
@@ -71,26 +116,42 @@ export function renderHeroBanner(containerOrItems, maybeItems, onReadClick, onDe
             ratingEl.classList.remove('hidden');
           }
         }
+        const crosslinkWrap = slide.querySelector(`#hero-crosslink-${idx}`);
+        attachCrosslink(crosslinkWrap, meta);
       }
     });
 
     slide.querySelector('.btn-hero-read')?.addEventListener('click', () => {
-      if (typeof onReadClick === 'function') {
-        onReadClick(manga.id);
-      } else if (typeof window.openMangaDetail === 'function') {
-        window.openMangaDetail(manga.id);
+      if (isAnime) {
+        if (typeof window.openAnimeWatch === 'function') {
+          window.openAnimeWatch(item.id, 1, item);
+        }
+      } else {
+        if (typeof onReadClick === 'function') {
+          onReadClick(item.id);
+        } else if (typeof window.openMangaDetail === 'function') {
+          window.openMangaDetail(item.id);
+        }
       }
     });
 
     slide.querySelector('.btn-hero-info')?.addEventListener('click', () => {
-      if (typeof onDetailClick === 'function') {
-        onDetailClick(manga.id);
-      } else if (typeof window.openMangaDetail === 'function') {
-        window.openMangaDetail(manga.id);
+      if (isAnime) {
+        if (typeof window.openAnimeWatch === 'function') {
+          window.openAnimeWatch(item.id, 1, item);
+        }
+      } else {
+        if (typeof onDetailClick === 'function') {
+          onDetailClick(item.id);
+        } else if (typeof window.openMangaDetail === 'function') {
+          window.openMangaDetail(item.id);
+        }
       }
     });
 
-    attachMangaCardHoverPrefetch(slide, manga.id, manga);
+    if (!isAnime) {
+      attachMangaCardHoverPrefetch(slide, item.id, item);
+    }
 
     container.appendChild(slide);
   });

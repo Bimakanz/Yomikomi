@@ -46,9 +46,8 @@ export function renderNavbarMarkup() {
             <span class="search-trigger-text">Cari komik...</span>
             <kbd class="search-kbd">Ctrl K</kbd>
           </button>
-          <button class="btn-install-app hidden" id="btn-install-app" title="📲 Install Aplikasi Yomikomi" type="button">
+          <button class="btn-install-app hidden" id="btn-install-app" title="Install Aplikasi Yomikomi" aria-label="Install Aplikasi Yomikomi" type="button">
             <i data-lucide="download-cloud"></i>
-            <span class="btn-install-label">Install App</span>
           </button>
           <button class="mobile-search-btn" id="mobile-search-trigger" title="Cari Komik" aria-label="Cari Komik">
             <i data-lucide="search"></i>

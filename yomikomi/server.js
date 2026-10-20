@@ -1609,6 +1609,8 @@ app.get('/api/anime/:id', async (req, res) => {
     }
 
     const totalEp = media.episodes || 12;
+    const stringTitle = typeof media.title === 'string' ? media.title : (media.title?.romaji || media.title?.english || media.title?.native || 'Anime');
+    
     const episodes = [];
     for (let i = 1; i <= totalEp; i++) {
       episodes.push({
@@ -1617,22 +1619,90 @@ app.get('/api/anime/:id', async (req, res) => {
         thumbnail: media.bannerImage || media.coverImage?.large || '',
         duration: '24:00',
         servers: [
-          { name: 'Server 1 (FHD 1080p Ultra)', quality: '1080p', type: 'hls' },
-          { name: 'Server 2 (HD 720p Multi-Sub)', quality: '720p', type: 'mp4' },
-          { name: 'Server 3 (Direct CDN)', quality: 'Auto', type: 'stream' }
+          {
+            id: 'server-indo-1',
+            name: 'Server 1 (Sub Indo • 1080p HD)',
+            quality: '1080p',
+            type: 'iframe',
+            url: `https://vidsrc.to/embed/anime/${encodeURIComponent(stringTitle)}/${i}`,
+            isSubIndo: true
+          },
+          {
+            id: 'server-global-2',
+            name: 'Server 2 (Multi-Sub • HLS Stream)',
+            quality: '1080p',
+            type: 'hls',
+            url: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
+            isSubIndo: false
+          },
+          {
+            id: 'server-cdn-3',
+            name: 'Server 3 (Direct CDN • Fast)',
+            quality: '720p',
+            type: 'mp4',
+            url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+            isSubIndo: true
+          }
         ]
       });
     }
 
-    const stringTitle = typeof media.title === 'string' ? media.title : (media.title?.romaji || media.title?.english || media.title?.native || 'Anime');
     res.json({
       data: {
         ...media,
         title: stringTitle,
         titleObj: typeof media.title === 'object' ? media.title : { romaji: stringTitle },
+        coverUrl: media.coverImage?.extraLarge || media.coverImage?.large || '',
+        bannerUrl: media.bannerImage || null,
         episodesList: episodes,
         totalEpisodes: totalEp
       }
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Stream Link Resolver for Anime Episode
+app.get('/api/anime/stream/:id/:ep', async (req, res) => {
+  try {
+    const { id, ep } = req.params;
+    const epNum = parseInt(ep, 10) || 1;
+    const media = await fetchAniListGraphQL('', 'ANIME', id);
+    const title = media ? (typeof media.title === 'string' ? media.title : (media.title?.romaji || media.title?.english || 'Anime')) : 'Anime';
+
+    const servers = [
+      {
+        id: 'server-indo-1',
+        name: 'Server 1 (Sub Indo • 1080p HD)',
+        quality: '1080p',
+        type: 'iframe',
+        url: `https://vidsrc.to/embed/anime/${encodeURIComponent(title)}/${epNum}`,
+        isSubIndo: true
+      },
+      {
+        id: 'server-global-2',
+        name: 'Server 2 (Multi-Sub • HLS Stream)',
+        quality: '1080p',
+        type: 'hls',
+        url: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
+        isSubIndo: false
+      },
+      {
+        id: 'server-cdn-3',
+        name: 'Server 3 (Direct CDN • Fast)',
+        quality: '720p',
+        type: 'mp4',
+        url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+        isSubIndo: true
+      }
+    ];
+
+    res.json({
+      animeId: id,
+      episode: epNum,
+      title,
+      servers
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

@@ -146,8 +146,28 @@ export function renderContinueRow() {
 
   validItems.forEach(item => {
     const isItemAnime = item.mediaType === 'anime' || !!item.animeId;
-    const title = item.title || item.mangaTitle || 'Untitled';
-    const coverUrl = item.coverUrl || 'https://placehold.co/100x140/1e2025/ffffff?text=Cover';
+    let title = 'Untitled';
+    if (typeof item.title === 'string' && item.title !== '[object Object]') {
+      title = item.title;
+    } else if (typeof item.title === 'object' && item.title !== null) {
+      title = item.title.romaji || item.title.english || item.title.native || item.mangaTitle || 'Untitled';
+    } else if (item.titleObj) {
+      title = item.titleObj.romaji || item.titleObj.english || item.titleObj.native || 'Untitled';
+    } else if (item.mangaTitle) {
+      title = item.mangaTitle;
+    }
+
+    let coverUrl = item.coverUrl && !item.coverUrl.includes('placehold.co') ? item.coverUrl : null;
+    if (!coverUrl && isItemAnime) {
+      const foundAnime = [...(state.popularAnime || []), ...(state.seasonalAnime || []), ...(state.latestAnime || [])].find(a => String(a.id) === String(item.animeId));
+      if (foundAnime && foundAnime.coverUrl) {
+        coverUrl = foundAnime.coverUrl;
+        item.coverUrl = foundAnime.coverUrl;
+      }
+    }
+    if (!coverUrl) {
+      coverUrl = isItemAnime ? 'https://placehold.co/100x140/1e2025/ffffff?text=Anime' : 'https://placehold.co/100x140/1e2025/ffffff?text=Cover';
+    }
     const lastLabel = isItemAnime 
       ? (item.episodeTitle || `Ep. ${item.episode || 1}`) 
       : (item.chapterNum ? `Ch. ${item.chapterNum}` : (item.chapterTitle || 'Chapter'));

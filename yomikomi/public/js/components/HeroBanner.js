@@ -59,51 +59,11 @@ export function renderHeroBanner(containerOrItems, maybeItems, onReadClick, onDe
             <i data-lucide="info"></i>
             <span>Info</span>
           </button>
-          <div class="hero-crosslink-slot" id="hero-crosslink-${idx}"></div>
         </div>
       </div>
     `;
 
-    // Handle relations crosslink
-    const attachCrosslink = (crosslinkWrap, meta) => {
-      if (!crosslinkWrap || !meta) return;
-      if (!isAnime && meta.relatedAnime) {
-        crosslinkWrap.innerHTML = `
-          <button class="btn-crosslink btn-anime-crosslink" type="button" title="Tonton Adaptasi Anime: ${meta.relatedAnime.title?.romaji || ''}">
-            <i data-lucide="film"></i>
-            <span>🎬 Tonton Anime</span>
-          </button>
-        `;
-        crosslinkWrap.querySelector('.btn-anime-crosslink')?.addEventListener('click', (e) => {
-          e.stopPropagation();
-          if (typeof window.openAnimeWatch === 'function') {
-            window.openAnimeWatch(meta.relatedAnime.id);
-          }
-        });
-        initIcons();
-      } else if (isAnime && meta.relatedManga) {
-        crosslinkWrap.innerHTML = `
-          <button class="btn-crosslink btn-manga-crosslink" type="button" title="Baca Sumber Manga: ${meta.relatedManga.title?.romaji || ''}">
-            <i data-lucide="book-open"></i>
-            <span>📖 Baca Komik</span>
-          </button>
-        `;
-        crosslinkWrap.querySelector('.btn-manga-crosslink')?.addEventListener('click', (e) => {
-          e.stopPropagation();
-          if (typeof window.openMangaDetail === 'function') {
-            window.openMangaDetail(meta.relatedManga.id, meta.relatedManga);
-          }
-        });
-        initIcons();
-      }
-    };
-
-    if (isAnime && item.relatedManga) {
-      const crosslinkWrap = slide.querySelector(`#hero-crosslink-${idx}`);
-      attachCrosslink(crosslinkWrap, { relatedManga: item.relatedManga });
-    }
-
-    // Enrich with AniList GraphQL (HD landscape banner, rating badge & relations)
+    // Enrich with AniList GraphQL (HD landscape banner & rating badge)
     fetchAniList(title).then(meta => {
       if (meta) {
         if (meta.bannerImage) {
@@ -116,8 +76,6 @@ export function renderHeroBanner(containerOrItems, maybeItems, onReadClick, onDe
             ratingEl.classList.remove('hidden');
           }
         }
-        const crosslinkWrap = slide.querySelector(`#hero-crosslink-${idx}`);
-        attachCrosslink(crosslinkWrap, meta);
       }
     });
 

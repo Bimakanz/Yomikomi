@@ -687,8 +687,15 @@ export function renderAnimeHistoryList() {
 
   grid.innerHTML = '';
   history.forEach(item => {
-    const title = item.title || 'Anime';
-    const coverUrl = item.coverUrl || 'https://placehold.co/300x420/1e2025/ffffff?text=Cover';
+    let title = 'Anime';
+    if (typeof item.title === 'string' && item.title !== '[object Object]') {
+      title = item.title;
+    } else if (typeof item.title === 'object' && item.title !== null) {
+      title = item.title.romaji || item.title.english || item.title.native || 'Anime';
+    } else if (item.titleObj) {
+      title = item.titleObj.romaji || item.titleObj.english || item.titleObj.native || 'Anime';
+    }
+    const coverUrl = item.coverUrl || item.coverImage?.extraLarge || item.coverImage?.large || 'https://placehold.co/300x420/1e2025/ffffff?text=Cover';
     const epLabel = item.episodeTitle || `Episode ${item.episode || 1}`;
     const progress = item.progress || '100%';
 

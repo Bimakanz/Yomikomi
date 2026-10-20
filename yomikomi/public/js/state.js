@@ -612,17 +612,45 @@ export function saveStoredList(key, list) {
 
 // Anime History Storage Helpers
 export function getAnimeHistory() {
-  return getStoredList(STORAGE_KEY_ANIME_HISTORY);
+  const raw = getStoredList(STORAGE_KEY_ANIME_HISTORY);
+  return raw.map(item => {
+    let cleanTitle = 'Anime';
+    if (typeof item.title === 'string' && item.title !== '[object Object]') {
+      cleanTitle = item.title;
+    } else if (typeof item.title === 'object' && item.title !== null) {
+      cleanTitle = item.title.romaji || item.title.english || item.title.native || 'Anime';
+    } else if (item.titleObj) {
+      cleanTitle = item.titleObj.romaji || item.titleObj.english || item.titleObj.native || 'Anime';
+    }
+    const cleanCover = item.coverUrl || item.coverImage?.extraLarge || item.coverImage?.large || '';
+    return {
+      ...item,
+      title: cleanTitle,
+      coverUrl: cleanCover
+    };
+  });
 }
 
 export function saveAnimeHistory(record) {
   if (!record || !record.animeId) return;
   const list = getAnimeHistory();
   const existingIndex = list.findIndex(item => String(item.animeId) === String(record.animeId));
+  
+  let resolvedTitle = 'Anime';
+  if (typeof record.title === 'string' && record.title !== '[object Object]') {
+    resolvedTitle = record.title;
+  } else if (typeof record.title === 'object' && record.title !== null) {
+    resolvedTitle = record.title.romaji || record.title.english || record.title.native || 'Anime';
+  } else if (record.titleObj) {
+    resolvedTitle = record.titleObj.romaji || record.titleObj.english || record.titleObj.native || 'Anime';
+  }
+
+  const resolvedCover = record.coverUrl || record.coverImage?.extraLarge || record.coverImage?.large || '';
+
   const newEntry = {
     animeId: record.animeId,
-    title: record.title || 'Anime',
-    coverUrl: record.coverUrl || '',
+    title: resolvedTitle,
+    coverUrl: resolvedCover,
     episode: record.episode || 1,
     episodeTitle: record.episodeTitle || `Episode ${record.episode || 1}`,
     totalEpisodes: record.totalEpisodes || null,

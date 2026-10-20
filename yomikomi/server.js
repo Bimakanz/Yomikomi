@@ -1079,17 +1079,11 @@ app.get(['/api/proxy-image', '/api/proxy/image'], async (req, res) => {
         const saverPath = parsed.pathname.replace('/data/', '/data-saver/');
         candidates.push({ url: `https://uploads.mangadex.org${saverPath}${parsed.search}`, referer: 'https://mangadex.org/' });
       }
-
-      // Public Edge Proxy fallback (wsrv.nl)
-      candidates.push({
-        url: `https://wsrv.nl/?url=${encodeURIComponent(imageUrl)}&we=1&n=-1`,
-        referer: ''
-      });
     } else {
       // Non-MangaDex mirrors (Komiku, Mangapill, etc.)
       // Retry candidate with clean empty Referer (bypasses strict CDN referer validations)
       candidates.push({ url: imageUrl, referer: '' });
-      // Edge CDN fallback
+      // Edge CDN fallback (wsrv.nl works great for external mirrors)
       candidates.push({
         url: `https://wsrv.nl/?url=${encodeURIComponent(imageUrl)}&we=1&n=-1`,
         referer: ''
@@ -1103,13 +1097,6 @@ app.get(['/api/proxy-image', '/api/proxy/image'], async (req, res) => {
       try {
         const result = await fetchSingleStream(cand.url, cand.referer);
         const buf = result.buffer;
-
-        // Discard MangaDex anti-hotlink placeholder banner (~59480 bytes)
-        const isPlaceholderBanner = isMangaDex && buf && buf.length >= 59400 && buf.length <= 59600;
-        if (isPlaceholderBanner) {
-          console.warn(`[Proxy Guard] Intercepted anti-hotlink banner (${buf.length} bytes) for ${cand.url}. Proceeding to next candidate...`);
-          continue;
-        }
 
         if (buf && buf.length > 200) {
           successfulResult = result;

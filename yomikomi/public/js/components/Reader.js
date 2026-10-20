@@ -23,21 +23,42 @@ export function getReaderStageUrl(rawUrl, stage = 0, retryTimestamp = null) {
   const ts = retryTimestamp || Date.now();
   const isMangaDex = cleanUrl.includes('mangadex.org') || cleanUrl.includes('mangadex.network');
 
+  if (isMangaDex) {
+    // Note: MangaDex domains are blocked by wsrv.nl policy (Domain blocked). Never send MangaDex to wsrv.nl!
+    if (stage === 0) {
+      // Stage 0: Direct MangaDex @Home URL
+      return cleanUrl;
+    } else if (stage === 1) {
+      // Stage 1: Yomikomi internal proxy (handles ISP DNS unblocking and upstream node failover)
+      return `/api/proxy/image?url=${encodeURIComponent(cleanUrl)}&t=${ts}`;
+    } else if (stage === 2) {
+      // Stage 2: Direct official CDN fallback if node URL
+      if (cleanUrl.includes('mangadex.network')) {
+        try {
+          const u = new URL(cleanUrl);
+          return `https://uploads.mangadex.org${u.pathname}${u.search ? u.search + '&' : '?'}retry=${ts}`;
+        } catch (e) {}
+      }
+      return `/api/proxy/image?url=${encodeURIComponent(cleanUrl)}&alt=1&t=${ts}`;
+    } else {
+      // Stage 3: Direct URL with cache-buster
+      const sep = cleanUrl.includes('?') ? '&' : '?';
+      return `${cleanUrl}${sep}retry=${ts}`;
+    }
+  }
+
+  // Non-MangaDex images (Komiku, Bacakomik, Mangapill, external CDNs)
   if (stage === 0) {
     // Stage 0: Edge CDN proxy (wsrv.nl) with WebP output & quality 80
     return `https://wsrv.nl/?url=${encodeURIComponent(cleanUrl)}&output=webp&q=80&we&n=-1`;
   } else if (stage === 1) {
-    // Stage 1: Direct URL with no-referrer
-    if (isMangaDex) {
-      return cleanUrl;
-    }
-    // For non-MangaDex mirrors that block direct hotlinking, fallback to proxy alt
-    return `/api/proxy/image?url=${encodeURIComponent(cleanUrl)}&alt=1&t=${ts}`;
-  } else if (stage === 2) {
-    // Stage 2: Internal Proxy
+    // Stage 1: Local proxy
     return `/api/proxy/image?url=${encodeURIComponent(cleanUrl)}&t=${ts}`;
+  } else if (stage === 2) {
+    // Stage 2: Direct URL
+    return cleanUrl;
   } else {
-    // Stage 3: Direct original URL + cache buster
+    // Stage 3: Direct URL + cache buster
     const sep = cleanUrl.includes('?') ? '&' : '?';
     return `${cleanUrl}${sep}retry=${ts}`;
   }
@@ -65,9 +86,14 @@ export function applyImageStage(imgEl, rawUrl, stage = 0) {
 
   const ts = Date.now();
   imgEl.dataset.retryStage = String(stage);
+  const isMangaDex = typeof rawUrl === 'string' && (rawUrl.includes('mangadex.org') || rawUrl.includes('mangadex.network'));
 
   if (stage === 0) {
-    imgEl.removeAttribute('referrerpolicy');
+    if (isMangaDex) {
+      imgEl.referrerPolicy = 'no-referrer';
+    } else {
+      imgEl.removeAttribute('referrerpolicy');
+    }
     imgEl.removeAttribute('crossorigin');
     imgEl.src = getReaderStageUrl(rawUrl, 0, ts);
   } else if (stage === 1) {
@@ -75,7 +101,7 @@ export function applyImageStage(imgEl, rawUrl, stage = 0) {
     imgEl.removeAttribute('crossorigin');
     imgEl.src = getReaderStageUrl(rawUrl, 1, ts);
   } else if (stage === 2) {
-    imgEl.removeAttribute('referrerpolicy');
+    imgEl.referrerPolicy = 'no-referrer';
     imgEl.removeAttribute('crossorigin');
     imgEl.src = getReaderStageUrl(rawUrl, 2, ts);
   } else if (stage === 3) {

@@ -497,7 +497,7 @@ const MANGADEX_POPULAR_THEMES = [
   { id: '36fd93ea-e8b8-445e-b836-358f02b3d33d', name: 'Monsters', icon: 'target' },
   { id: '39730448-9a5f-48a2-85b0-a70db87b1233', name: 'Demons', icon: 'skull' },
   { id: '9438db5a-7e2a-4ac0-b39e-e0d95a34b8a8', name: 'Video Games', icon: 'gamepad-2' },
-  { id: '9467335a-1b83-4497-9231-765337a00b96', name: 'Post-Apocalyptic', icon: 'radioactive' },
+  { id: '9467335a-1b83-4497-9231-765337a00b96', name: 'Post-Apocalyptic', icon: 'radiation' },
   { id: 'a1f53773-c69a-4ce5-8cab-fffcd90b1565', name: 'Magic', icon: 'sparkles' },
   { id: 'ac72833b-c4e9-4878-b9db-6c8a4a99444a', name: 'Military', icon: 'crosshair' },
   { id: 'd14322ac-4d6f-4e9b-afd9-629d5f4d8a41', name: 'Villainess', icon: 'crown' },

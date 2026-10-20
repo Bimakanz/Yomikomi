@@ -309,7 +309,7 @@ export const MANGADEX_POPULAR_THEMES = [
   {
     "id": "9467335a-1b83-4497-9231-765337a00b96",
     "name": "Post-Apocalyptic",
-    "icon": "radioactive"
+    "icon": "radiation"
   },
   {
     "id": "0bc90acb-ccc1-44ca-a34a-b9f3a73259d0",

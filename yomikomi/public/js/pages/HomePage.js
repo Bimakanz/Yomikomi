@@ -77,8 +77,7 @@ export function renderHomePageMarkup() {
       <!-- Manga Grid Section -->
       <div class="section-header">
         <div class="section-title-wrap">
-          <h2 class="section-title" id="grid-section-title">Komik Sedang Tren</h2>
-          <span class="section-badge" id="grid-count-badge">20 Judul</span>
+          <h2 class="section-title" id="grid-section-title">Semua Katalog Komik</h2>
         </div>
       </div>
 
@@ -249,7 +248,7 @@ export function renderFilterTabs(activeMode = state.activeMediaMode) {
   } else {
     container.innerHTML = `
       <button class="filter-tab active" data-filter="all">Semua Komik</button>
-      <button class="filter-tab" data-filter="popular">Paling Populer</button>
+      <button class="filter-tab" data-filter="popular">Trending</button>
       <button class="filter-tab" data-filter="latest">Baru Diupdate</button>
       <button class="filter-tab" data-filter="indo">Indo Scan</button>
       <button class="filter-tab" data-filter="english">English</button>
@@ -266,11 +265,79 @@ export function renderFilterTabs(activeMode = state.activeMediaMode) {
   initIcons();
 }
 
+export function createMediaCard(item, mediaType = state.activeMediaMode) {
+  const isAnime = mediaType === 'anime' || item.mediaType === 'anime';
+  const isKomiku = item.source === 'komiku' || item.id?.toString().startsWith('komiku-');
+  const title = isAnime ? item.title : (isKomiku ? item.title : getMangaTitle(item.attributes));
+  const coverUrl = isAnime ? item.coverUrl : (isKomiku ? item.coverUrl : getCoverUrl(item));
+  const status = isAnime
+    ? (item.status || 'RELEASING').toUpperCase()
+    : (isKomiku 
+        ? (item.status ? item.status.toUpperCase() : 'ONGOING') 
+        : (item.attributes?.status ? item.attributes.status.toUpperCase() : 'ONGOING'));
+
+  // Rating badge with Lucide icon
+  let rawRating = isAnime ? item.rating : '';
+  if (!rawRating && item.attributes?.rating) rawRating = String(item.attributes.rating);
+  if (!rawRating && item.averageScore) rawRating = String((item.averageScore / 10).toFixed(1));
+  const numRatingMatch = rawRating ? String(rawRating).match(/[\d.]+/) : null;
+  const cleanRating = numRatingMatch ? numRatingMatch[0] : '';
+
+  // Latest chapter / episode badge
+  const lastBadge = isAnime
+    ? (item.latestEpisode || `Ep. ${item.episodes || '1'} • Sub`)
+    : (isKomiku
+        ? (item.latestChapter || item.lastChapter || 'Update')
+        : (item.attributes?.lastChapter ? `Ch. ${item.attributes.lastChapter}` : 'Update'));
+
+  const formatBadge = isAnime ? (item.format || 'ANIME') : (item.type || 'MANGA');
+
+  const card = document.createElement('article');
+  card.className = `manga-card ${isAnime ? 'anime-card' : ''}`;
+  card.tabIndex = 0;
+  card.innerHTML = `
+    <div class="card-poster">
+      <img src="${coverUrl}" alt="${title}" loading="lazy" decoding="async" onerror="this.src='https://placehold.co/300x420/1e2025/ffffff?text=Cover';">
+      <div class="card-overlay-gradient"></div>
+      <span class="card-status-badge ${status.toLowerCase()}">${status}</span>
+      ${cleanRating ? `<span class="card-rating-badge"><i data-lucide="star"></i> ${cleanRating}</span>` : ''}
+      <span class="card-episode-badge">${lastBadge}</span>
+    </div>
+    <div class="card-content">
+      <h3 class="card-title" title="${title}">${title}</h3>
+      <div class="card-meta">
+        <span>${formatBadge}</span>
+        <div class="card-languages">
+          ${isAnime ? '<span class="lang-flag" title="Subtitle Indonesia">Sub Indo</span>' : ''}
+          ${!isAnime && isKomiku ? '<span class="lang-flag" title="Tersedia Bahasa Indonesia">ID</span>' : ''}
+          ${!isAnime && !isKomiku && item.attributes?.availableTranslatedLanguages?.includes('id') ? '<span class="lang-flag" title="Tersedia Bahasa Indonesia">ID</span>' : ''}
+          ${!isAnime && !isKomiku && item.attributes?.availableTranslatedLanguages?.includes('en') ? '<span class="lang-flag" title="Tersedia English">EN</span>' : ''}
+        </div>
+      </div>
+    </div>
+  `;
+
+  if (!isAnime) {
+    attachMangaCardHoverPrefetch(card, item.id, item);
+  }
+
+  card.addEventListener('click', () => {
+    if (isAnime) {
+      if (typeof window.openAnimeWatch === 'function') {
+        window.openAnimeWatch(item.id, 1, item);
+      }
+    } else {
+      if (typeof window.openMangaDetail === 'function') {
+        window.openMangaDetail(item.id, item);
+      }
+    }
+  });
+
+  return card;
+}
+
 export function renderMediaGrid(mediaList, mediaType = state.activeMediaMode) {
   const grid = document.getElementById('manga-grid');
-  const countBadge = document.getElementById('grid-count-badge');
-  if (countBadge) countBadge.textContent = `${mediaList.length} Judul`;
-
   if (!grid) return;
 
   if (!mediaList || mediaList.length === 0) {
@@ -287,73 +354,18 @@ export function renderMediaGrid(mediaList, mediaType = state.activeMediaMode) {
 
   grid.innerHTML = '';
   mediaList.forEach((item) => {
-    const isAnime = mediaType === 'anime' || item.mediaType === 'anime';
-    const isKomiku = item.source === 'komiku' || item.id?.toString().startsWith('komiku-');
-    const title = isAnime ? item.title : (isKomiku ? item.title : getMangaTitle(item.attributes));
-    const coverUrl = isAnime ? item.coverUrl : (isKomiku ? item.coverUrl : getCoverUrl(item));
-    const status = isAnime
-      ? (item.status || 'RELEASING').toUpperCase()
-      : (isKomiku 
-          ? (item.status ? item.status.toUpperCase() : 'ONGOING') 
-          : (item.attributes?.status ? item.attributes.status.toUpperCase() : 'ONGOING'));
-    
-    // Rating badge with Lucide icon
-    let rawRating = isAnime ? item.rating : '';
-    if (!rawRating && item.attributes?.rating) rawRating = String(item.attributes.rating);
-    if (!rawRating && item.averageScore) rawRating = String((item.averageScore / 10).toFixed(1));
-    const numRatingMatch = rawRating ? String(rawRating).match(/[\d.]+/) : null;
-    const cleanRating = numRatingMatch ? numRatingMatch[0] : '';
+    grid.appendChild(createMediaCard(item, mediaType));
+  });
 
-    // Latest chapter / episode badge
-    const lastBadge = isAnime
-      ? (item.latestEpisode || `Ep. ${item.episodes || '1'} • Sub`)
-      : (isKomiku
-          ? (item.latestChapter || item.lastChapter || 'Update')
-          : (item.attributes?.lastChapter ? `Ch. ${item.attributes.lastChapter}` : 'Update'));
+  initIcons();
+}
 
-    const formatBadge = isAnime ? (item.format || 'ANIME') : (item.type || 'MANGA');
+export function appendMediaToGrid(mediaList, mediaType = state.activeMediaMode) {
+  const grid = document.getElementById('manga-grid');
+  if (!grid || !mediaList || mediaList.length === 0) return;
 
-    const card = document.createElement('article');
-    card.className = `manga-card ${isAnime ? 'anime-card' : ''}`;
-    card.tabIndex = 0;
-    card.innerHTML = `
-      <div class="card-poster">
-        <img src="${coverUrl}" alt="${title}" loading="lazy" decoding="async" onerror="this.src='https://placehold.co/300x420/1e2025/ffffff?text=Cover';">
-        <div class="card-overlay-gradient"></div>
-        <span class="card-status-badge ${status.toLowerCase()}">${status}</span>
-        ${cleanRating ? `<span class="card-rating-badge"><i data-lucide="star"></i> ${cleanRating}</span>` : ''}
-        <span class="card-episode-badge">${lastBadge}</span>
-      </div>
-      <div class="card-content">
-        <h3 class="card-title" title="${title}">${title}</h3>
-        <div class="card-meta">
-          <span>${formatBadge}</span>
-          <div class="card-languages">
-            ${isAnime ? '<span class="lang-flag" title="Subtitle Indonesia">Sub Indo</span>' : ''}
-            ${!isAnime && isKomiku ? '<span class="lang-flag" title="Tersedia Bahasa Indonesia">ID</span>' : ''}
-            ${!isAnime && !isKomiku && item.attributes?.availableTranslatedLanguages?.includes('id') ? '<span class="lang-flag" title="Tersedia Bahasa Indonesia">ID</span>' : ''}
-            ${!isAnime && !isKomiku && item.attributes?.availableTranslatedLanguages?.includes('en') ? '<span class="lang-flag" title="Tersedia English">EN</span>' : ''}
-          </div>
-        </div>
-      </div>
-    `;
-
-    if (!isAnime) {
-      attachMangaCardHoverPrefetch(card, item.id, item);
-    }
-
-    card.addEventListener('click', () => {
-      if (isAnime) {
-        if (typeof window.openAnimeWatch === 'function') {
-          window.openAnimeWatch(item.id, 1, item);
-        }
-      } else {
-        if (typeof window.openMangaDetail === 'function') {
-          window.openMangaDetail(item.id, item);
-        }
-      }
-    });
-    grid.appendChild(card);
+  mediaList.forEach((item) => {
+    grid.appendChild(createMediaCard(item, mediaType));
   });
 
   initIcons();
@@ -362,9 +374,127 @@ export function renderMediaGrid(mediaList, mediaType = state.activeMediaMode) {
 // Backward compatibility alias
 export const renderMangaGrid = renderMediaGrid;
 
-export async function loadPopularManga() {
+export function renderLoadMoreButton(onClick) {
+  let btnWrap = document.getElementById('load-more-wrap');
+  if (!btnWrap) {
+    btnWrap = document.createElement('div');
+    btnWrap.id = 'load-more-wrap';
+    btnWrap.className = 'load-more-wrap';
+    btnWrap.innerHTML = `
+      <button class="btn-load-more" id="btn-load-more-manga" type="button">
+        <i data-lucide="chevron-down"></i>
+        <span>Muat Lebih Banyak Komik</span>
+      </button>
+    `;
+    const homeSection = document.getElementById('home-section') || document.getElementById('manga-grid')?.parentElement;
+    if (homeSection) homeSection.appendChild(btnWrap);
+  }
+  const btn = document.getElementById('btn-load-more-manga');
+  if (btn && onClick) {
+    btn.onclick = onClick;
+  }
+  initIcons();
+}
+
+export function removeLoadMoreButton() {
+  const btnWrap = document.getElementById('load-more-wrap');
+  if (btnWrap) btnWrap.remove();
+}
+
+let allMangaOffset = 0;
+let isLoadingAllManga = false;
+let hasMoreAllManga = true;
+
+export async function loadAllManga(isAppend = false) {
   const sectionTitle = document.getElementById('grid-section-title');
-  if (sectionTitle) sectionTitle.textContent = 'Komik Paling Populer (Trending)';
+  if (sectionTitle) sectionTitle.textContent = 'Semua Katalog Komik';
+
+  if (!isAppend) {
+    allMangaOffset = 0;
+    hasMoreAllManga = true;
+    removeLoadMoreButton();
+    showGridSkeleton();
+  } else if (isLoadingAllManga || !hasMoreAllManga) {
+    return;
+  }
+
+  isLoadingAllManga = true;
+  const loadMoreBtn = document.getElementById('btn-load-more-manga');
+  if (loadMoreBtn) {
+    loadMoreBtn.disabled = true;
+    loadMoreBtn.innerHTML = '<span>Memuat lebih banyak...</span>';
+  }
+
+  try {
+    const [mdRes, komikuData] = await Promise.allSettled([
+      fetch(`/api/search?limit=60&offset=${allMangaOffset}&order=followedCount`).then(r => r.json()),
+      allMangaOffset === 0 ? fetchKomikuLatest() : Promise.resolve([])
+    ]);
+
+    let mdList = [];
+    if (mdRes.status === 'fulfilled' && Array.isArray(mdRes.value?.data)) {
+      mdList = mdRes.value.data.map(m => ({ ...m, source: 'mangadex' }));
+    }
+
+    let kList = [];
+    if (komikuData.status === 'fulfilled' && Array.isArray(komikuData.value)) {
+      kList = komikuData.value.map(k => ({ ...k, source: 'komiku' }));
+    }
+
+    let newItems = [];
+    if (mdList.length > 0 && kList.length > 0) {
+      const maxL = Math.max(mdList.length, kList.length);
+      for (let i = 0; i < maxL; i++) {
+        if (i < mdList.length) newItems.push(mdList[i]);
+        if (i < kList.length) newItems.push(kList[i]);
+      }
+    } else {
+      newItems = mdList.length > 0 ? mdList : kList;
+    }
+
+    if (newItems.length < 30) {
+      hasMoreAllManga = false;
+    }
+
+    newItems.forEach(m => {
+      if (m.source === 'mangadex') {
+        CoverCache.set(m.id, getMangaTitle(m.attributes), getCoverUrl(m));
+      }
+    });
+
+    if (isAppend) {
+      state.mangaList = [...(state.mangaList || []), ...newItems];
+      appendMediaToGrid(newItems, 'manga');
+    } else {
+      state.mangaList = newItems;
+      renderMangaGrid(state.mangaList, 'manga');
+    }
+
+    allMangaOffset += (mdList.length > 0 ? mdList.length : newItems.length);
+
+    if (hasMoreAllManga) {
+      renderLoadMoreButton(() => loadAllManga(true));
+    } else {
+      removeLoadMoreButton();
+    }
+  } catch (err) {
+    console.error('Failed to load all manga:', err);
+    showToast('Gagal memuat katalog semua komik');
+  } finally {
+    isLoadingAllManga = false;
+    if (loadMoreBtn && hasMoreAllManga) {
+      loadMoreBtn.disabled = false;
+      loadMoreBtn.innerHTML = '<i data-lucide="chevron-down"></i><span>Muat Lebih Banyak Komik</span>';
+      initIcons();
+    }
+  }
+}
+window.loadAllManga = loadAllManga;
+
+export async function loadPopularManga() {
+  removeLoadMoreButton();
+  const sectionTitle = document.getElementById('grid-section-title');
+  if (sectionTitle) sectionTitle.textContent = 'Komik Sedang Tren (Trending)';
 
   // Instant 0ms render from memory or sessionStorage cache
   if (!state.popularManga || state.popularManga.length === 0) {
@@ -503,13 +633,10 @@ export async function loadEnglishManga() {
 }
 
 export async function loadMangaByGenre(tagId, tagName) {
+  removeLoadMoreButton();
   const sectionTitle = document.getElementById('grid-section-title');
   if (sectionTitle) {
     sectionTitle.textContent = `Komik Genre: ${tagName}`;
-  }
-  const countBadge = document.getElementById('grid-count-badge');
-  if (countBadge) {
-    countBadge.textContent = 'Memuat...';
   }
   showGridSkeleton();
 
@@ -527,27 +654,18 @@ export async function loadMangaByGenre(tagId, tagName) {
       CoverCache.set(m.id, getMangaTitle(m.attributes), getCoverUrl(m));
     });
     renderMangaGrid(state.mangaList);
-    if (countBadge) {
-      countBadge.textContent = `${state.mangaList.length} Judul`;
-    }
   } catch (error) {
     console.error(`Failed to load genre ${tagName}:`, error);
     showToast(`Gagal memuat komik genre ${tagName}`);
-    if (countBadge) {
-      countBadge.textContent = '0 Judul';
-    }
   }
 }
 window.loadMangaByGenre = loadMangaByGenre;
 
 export async function loadExploreCategory(categoryTitle, fetchUrl) {
+  removeLoadMoreButton();
   const sectionTitle = document.getElementById('grid-section-title');
   if (sectionTitle) {
     sectionTitle.textContent = categoryTitle;
-  }
-  const countBadge = document.getElementById('grid-count-badge');
-  if (countBadge) {
-    countBadge.textContent = 'Memuat...';
   }
 
   // Deactivate filter tabs since this is a specific Explore category
@@ -697,7 +815,10 @@ export function initFilters() {
         window.resetGenreSelection(false);
       }
 
-      if (filter === 'all' || filter === 'popular') {
+      removeLoadMoreButton();
+      if (filter === 'all') {
+        loadAllManga();
+      } else if (filter === 'popular') {
         loadPopularManga();
       } else if (filter === 'latest') {
         loadLatestManga();
@@ -968,7 +1089,7 @@ export function initHomePage() {
     if (sectionTitle) sectionTitle.textContent = 'Anime Paling Populer (Trending)';
     loadPopularAnime();
   } else {
-    loadPopularManga();
+    loadAllManga();
   }
 
   // Reactive listener when user switches media mode from navbar / drawer

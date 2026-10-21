@@ -314,17 +314,18 @@ app.get('/api/latest', async (req, res) => {
 app.get('/api/search', async (req, res) => {
   try {
     const query = req.query.q || '';
-    const limit = parseInt(req.query.limit) || 20;
+    const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+    const offset = Math.max(parseInt(req.query.offset) || 0, 0);
     const tag = req.query.tag || '';
     const lang = req.query.lang || '';
     const order = req.query.order || (tag ? 'followedCount' : '');
 
-    const cacheKey = `search_${query}_${limit}_${tag}_${lang}_${order}`;
+    const cacheKey = `search_${query}_${limit}_${offset}_${tag}_${lang}_${order}`;
     const cached = getCache(cacheKey);
     res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
     if (cached) return res.json(cached);
 
-    let endpoint = `/manga?limit=${limit}&includes[]=cover_art&includes[]=author`;
+    let endpoint = `/manga?limit=${limit}&offset=${offset}&includes[]=cover_art&includes[]=author`;
     
     // Explicit tag/content handling for Hentai, Erotica, and full catalog search
     if (tag === 'hentai' || tag === 'content_rating_pornographic') {

@@ -705,7 +705,7 @@ export function renderAnimeHistoryList() {
     card.innerHTML = `
       <div class="history-poster-wrap">
         <img src="${coverUrl}" alt="${title}" loading="lazy" onerror="this.src='https://placehold.co/300x420/1e2025/ffffff?text=Cover';">
-        <span class="history-badge">🎬 ANIME</span>
+        <span class="history-badge">Anime</span>
       </div>
       <div class="history-content">
         <h3 class="history-title" title="${title}">${title}</h3>

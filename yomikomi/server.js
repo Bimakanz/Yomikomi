@@ -1390,7 +1390,7 @@ async function fetchAniListGraphQL(title, mediaType = 'MANGA', mediaId = null) {
           const media = json.data?.Media;
           if (media) {
             const rating = typeof media.averageScore === 'number' ? Math.round((media.averageScore / 10) * 10) / 10 : null;
-            const ratingFormatted = rating ? `⭐ ${rating.toFixed(1)}` : null;
+            const ratingFormatted = rating ? rating.toFixed(1) : null;
 
             // Extract cross-relations (Anime <-> Manga)
             const relations = (media.relations?.edges || []).map(edge => ({
@@ -2049,6 +2049,111 @@ app.get('/api/external/en/chapter-pages', async (req, res) => {
     });
   } catch (err) {
     res.json({ pages: [], error: err.message });
+  }
+});
+
+// ==========================================
+// COMICK PROVIDER (Consumet ComicK Engine)
+// ==========================================
+let comickProvider = null;
+try {
+  const { MANGA } = require('@consumet/extensions');
+  if (MANGA?.ComicK) {
+    comickProvider = new MANGA.ComicK();
+    console.log('⚡ ComicK Consumet Provider ACTIVE!');
+  }
+} catch (e) {
+  console.warn('Consumet ComicK init failed:', e.message);
+}
+
+app.get('/api/comick/search', async (req, res) => {
+  try {
+    const q = (req.query.q || req.query.query || '').trim();
+    if (!q) return res.json({ data: [] });
+    if (!comickProvider) return res.json({ data: [] });
+
+    const cacheKey = `comick_search_${q.toLowerCase()}`;
+    const cached = getCache(cacheKey);
+    if (cached) return res.json(cached);
+
+    const searchResult = await comickProvider.search(q);
+    const rawList = searchResult.results || (Array.isArray(searchResult) ? searchResult : []);
+    const items = rawList.map(item => ({
+      id: `comick-${item.id}`,
+      slug: item.id,
+      title: item.title,
+      coverUrl: item.image,
+      source: 'comick',
+      mediaType: 'manga'
+    }));
+
+    const payload = { source: 'comick', total: items.length, data: items };
+    setCache(cacheKey, payload, CACHE_TTL.search);
+    res.json(payload);
+  } catch (err) {
+    console.error('ComicK search error:', err.message);
+    res.json({ data: [], error: err.message });
+  }
+});
+
+app.get('/api/comick/manga/:slug', async (req, res) => {
+  try {
+    const slug = req.params.slug.replace(/^comick-/, '');
+    if (!comickProvider) return res.status(503).json({ error: 'ComicK provider not available' });
+
+    const cacheKey = `comick_manga_${slug}`;
+    const cached = getCache(cacheKey);
+    if (cached) return res.json(cached);
+
+    const info = await comickProvider.fetchMangaInfo(slug);
+    const chapters = (info.chapters || []).map((ch, idx) => ({
+      id: ch.id,
+      number: ch.chapterNumber ? parseFloat(ch.chapterNumber) : (idx + 1),
+      chapterNumStr: String(ch.chapterNumber || idx + 1),
+      title: ch.title ? `Chapter ${ch.chapterNumber}: ${ch.title}` : `Chapter ${ch.chapterNumber || idx + 1}`,
+      releaseDate: ch.releaseDate || '',
+      language: ch.lang || 'en',
+      source: 'comick',
+      scanlationGroup: 'ComicK Scan'
+    }));
+
+    const payload = {
+      id: `comick-${slug}`,
+      slug,
+      title: info.title,
+      coverUrl: info.image,
+      synopsis: info.description || '',
+      status: info.status || 'ONGOING',
+      chapters
+    };
+
+    setCache(cacheKey, payload, CACHE_TTL.chapters);
+    res.json(payload);
+  } catch (err) {
+    console.error(`ComicK detail error for ${req.params.slug}:`, err.message);
+    res.status(500).json({ error: err.message, chapters: [] });
+  }
+});
+
+app.get('/api/comick/chapter-pages', async (req, res) => {
+  try {
+    const chapterId = (req.query.chapterId || req.query.id || req.query.url || '').trim();
+    if (!chapterId) return res.json({ pages: [] });
+    if (!comickProvider) return res.status(503).json({ error: 'ComicK provider not available' });
+
+    const cacheKey = `comick_pages_${chapterId}`;
+    const cached = getCache(cacheKey);
+    if (cached) return res.json(cached);
+
+    const pagesResult = await comickProvider.fetchChapterPages(chapterId);
+    const pages = (pagesResult || []).map(p => (p && typeof p === 'object' ? (p.img || p.imageUrl || p.url) : p)).filter(Boolean);
+    const payload = { pages, total: pages.length };
+
+    setCache(cacheKey, payload, CACHE_TTL.atHome);
+    res.json(payload);
+  } catch (err) {
+    console.error('ComicK chapter pages error:', err.message);
+    res.status(500).json({ error: err.message, pages: [] });
   }
 });
 

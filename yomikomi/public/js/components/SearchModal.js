@@ -26,10 +26,12 @@ export function renderSearchModalMarkup() {
         </div>
 
         <!-- Unified Media Type Switcher Tabs in Search Modal -->
-        <div class="search-media-tabs" id="search-media-tabs">
-          <button class="search-media-tab active" data-type="all" type="button">Semua</button>
-          <button class="search-media-tab" data-type="manga" type="button">📖 Komik</button>
-          <button class="search-media-tab" data-type="anime" type="button">🎬 Anime</button>
+        <div class="search-filters-bar">
+          <div class="search-media-tabs" id="search-media-tabs">
+            <button class="search-media-tab active" data-type="all" type="button">Semua</button>
+            <button class="search-media-tab" data-type="manga" type="button">Komik</button>
+            <button class="search-media-tab" data-type="anime" type="button">Anime</button>
+          </div>
         </div>
 
         <div class="search-quick-tags" id="search-quick-tags">
@@ -181,6 +183,11 @@ async function performSearch(query, onSelectManga) {
     if (shouldSearchManga) {
       promises.push(searchManga(query).catch(() => ({ data: [] })));
       promises.push(fetchKomikuSearch(query).catch(() => []));
+      promises.push(
+        fetch(`/api/comick/search?q=${encodeURIComponent(query)}`)
+          .then(r => r.json())
+          .catch(() => ({ data: [] }))
+      );
     }
     if (shouldSearchAnime) {
       promises.push(
@@ -194,6 +201,7 @@ async function performSearch(query, onSelectManga) {
 
     let mangadexResults = [];
     let komikuResults = [];
+    let comickResults = [];
     let animeResults = [];
 
     let pIdx = 0;
@@ -206,6 +214,10 @@ async function performSearch(query, onSelectManga) {
       if (kmRes.status === 'fulfilled' && Array.isArray(kmRes.value)) {
         komikuResults = kmRes.value.map(k => ({ ...k, source: 'komiku', mediaType: 'manga' }));
       }
+      const ckRes = settled[pIdx++];
+      if (ckRes.status === 'fulfilled' && ckRes.value?.data) {
+        comickResults = ckRes.value.data.map(c => ({ ...c, source: 'comick', mediaType: 'manga' }));
+      }
     }
 
     if (shouldSearchAnime) {
@@ -215,9 +227,10 @@ async function performSearch(query, onSelectManga) {
       }
     }
 
-    // Unify MangaDex & Komiku manga into exactly 1 card per title ("1 komik 1 sumber")
+    // Unify MangaDex, Komiku & ComicK manga into exactly 1 card per title ("1 komik 1 sumber")
     const unifiedMangaList = [];
     const matchedKomikuSlugs = new Set();
+    const matchedComickSlugs = new Set();
 
     mangadexResults.forEach(mdItem => {
       const mdTitle = getMangaTitle(mdItem.attributes) || '';
@@ -232,37 +245,65 @@ async function performSearch(query, onSelectManga) {
         });
       }
 
-      let bestMatch = null;
-      let highestSimilarity = 0;
-
+      // 1. Check match with Komiku
+      let bestKomikuMatch = null;
+      let highestKomikuSim = 0;
       komikuResults.forEach(kmItem => {
         if (matchedKomikuSlugs.has(kmItem.slug)) return;
         for (const titleCandidate of allCheckTitles) {
           const sim = calculateTitleSimilarity(titleCandidate, kmItem.title);
-          if (sim > highestSimilarity) {
-            highestSimilarity = sim;
-            bestMatch = kmItem;
+          if (sim > highestKomikuSim) {
+            highestKomikuSim = sim;
+            bestKomikuMatch = kmItem;
           }
         }
       });
 
-      if (bestMatch && highestSimilarity >= 0.5) {
-        matchedKomikuSlugs.add(bestMatch.slug);
-        unifiedMangaList.push({
-          ...mdItem,
-          komikuSlug: bestMatch.slug,
-          komikuTitle: bestMatch.title,
-          komikuData: bestMatch
-        });
-      } else {
-        unifiedMangaList.push(mdItem);
+      // 2. Check match with ComicK
+      let bestComickMatch = null;
+      let highestComickSim = 0;
+      comickResults.forEach(ckItem => {
+        if (matchedComickSlugs.has(ckItem.slug)) return;
+        for (const titleCandidate of allCheckTitles) {
+          const sim = calculateTitleSimilarity(titleCandidate, ckItem.title);
+          if (sim > highestComickSim) {
+            highestComickSim = sim;
+            bestComickMatch = ckItem;
+          }
+        }
+      });
+
+      const hasKomiku = bestKomikuMatch && highestKomikuSim >= 0.5;
+      const hasComick = bestComickMatch && highestComickSim >= 0.5;
+
+      if (hasKomiku) matchedKomikuSlugs.add(bestKomikuMatch.slug);
+      if (hasComick) matchedComickSlugs.add(bestComickMatch.slug);
+
+      // Filter Out Check: If MangaDex has 0 readable chapters (latestUploadedChapter is null)
+      // AND neither Komiku nor ComicK has readable chapters for it, omit from search results!
+      const isMangaDexEmpty = mdItem.attributes?.latestUploadedChapter === null;
+      if (isMangaDexEmpty && !hasKomiku && !hasComick) {
+        return; // Skip ghost/unreadable comic with 0 chapters
       }
+
+      unifiedMangaList.push({
+        ...mdItem,
+        ...(hasKomiku ? { komikuSlug: bestKomikuMatch.slug, komikuTitle: bestKomikuMatch.title, komikuData: bestKomikuMatch } : {}),
+        ...(hasComick ? { comickSlug: bestComickMatch.slug, comickTitle: bestComickMatch.title, comickData: bestComickMatch } : {})
+      });
     });
 
-    // Append unmatched Komiku results (titles that only exist on Komiku)
+    // Append unmatched Komiku results (titles available only on Komiku)
     komikuResults.forEach(kmItem => {
       if (!matchedKomikuSlugs.has(kmItem.slug)) {
         unifiedMangaList.push(kmItem);
+      }
+    });
+
+    // Append unmatched ComicK results (titles available on ComicK, e.g. One-Room TA if not in MangaDex)
+    comickResults.forEach(ckItem => {
+      if (!matchedComickSlugs.has(ckItem.slug)) {
+        unifiedMangaList.push(ckItem);
       }
     });
 
@@ -289,14 +330,20 @@ async function performSearch(query, onSelectManga) {
     results.forEach(item => {
       const isAnime = item.mediaType === 'anime';
       const isKomiku = item.source === 'komiku' || item.id?.toString().startsWith('komiku-');
-      const title = isAnime ? item.title : (isKomiku ? item.title : getMangaTitle(item.attributes));
-      const coverUrl = isAnime ? item.coverUrl : (isKomiku ? item.coverUrl : getCoverUrl(item));
+      const isComicK = item.source === 'comick' || item.id?.toString().startsWith('comick-');
+      const title = isAnime ? item.title : (isKomiku || isComicK ? item.title : getMangaTitle(item.attributes));
+      const coverUrl = isAnime ? item.coverUrl : (isKomiku || isComicK ? item.coverUrl : getCoverUrl(item));
       const status = isAnime 
         ? (item.status || 'RELEASING').toUpperCase() 
-        : (!isKomiku && item.attributes?.status ? item.attributes.status.toUpperCase() : 'ONGOING');
+        : (!isKomiku && !isComicK && item.attributes?.status ? item.attributes.status.toUpperCase() : 'ONGOING');
       const statusClass = 'status-' + status.toLowerCase();
       
-      const rating = isAnime ? item.rating : (item.attributes?.rating ? `⭐ ${item.attributes.rating}` : '');
+      const rawRating = isAnime ? item.rating : item.attributes?.rating;
+      let cleanRatingNum = '';
+      if (rawRating) {
+        const numMatch = String(rawRating).match(/[\d.]+/);
+        if (numMatch) cleanRatingNum = numMatch[0];
+      }
       const typeLabel = isAnime ? 'Anime' : 'Komik';
 
       const resultRow = document.createElement('div');
@@ -313,7 +360,7 @@ async function performSearch(query, onSelectManga) {
           <div class="search-result-meta">
             <span class="search-badge ${statusClass}">${status}</span>
             <span class="search-badge search-badge-type">${typeLabel}</span>
-            ${rating ? `<span class="search-badge search-badge-rating">${rating}</span>` : ''}
+            ${cleanRatingNum ? `<span class="search-badge search-badge-rating"><i data-lucide="star"></i> ${cleanRatingNum}</span>` : ''}
             ${isAnime && item.latestEpisode ? `<span class="search-badge">${item.latestEpisode}</span>` : ''}
           </div>
         </div>

@@ -13,7 +13,6 @@ export function renderMobileDrawerMarkup() {
     <aside class="mobile-drawer" id="mobile-drawer" aria-label="Menu Navigasi Mobile">
       <div class="drawer-header">
         <div class="drawer-brand" role="button" tabindex="0">
-          <div class="brand-icon"><i data-lucide="book-open"></i></div>
           <div class="brand-text">
             <span class="brand-title">Yomi<span class="text-accent">komi</span></span>
           </div>
@@ -76,7 +75,7 @@ export function renderMobileDrawerMarkup() {
               <i data-lucide="download-cloud"></i>
             </div>
             <div class="drawer-install-text">
-              <span class="drawer-install-title">📲 Install Aplikasi</span>
+              <span class="drawer-install-title">Install Aplikasi</span>
               <span class="drawer-install-desc">Pasang di Layar HP / Laptop (Offline Siap)</span>
             </div>
           </div>

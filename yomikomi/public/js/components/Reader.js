@@ -782,12 +782,17 @@ export async function openEnglishReader(chapterUrl, chapterTitle, allChapters, c
   }
 
   try {
-    const res = await fetch(`/api/external/en/chapter-pages?url=${encodeURIComponent(chapterUrl)}`);
+    const isComicK = state.currentSource === 'comick' || (state.currentUnifiedChapter && state.currentUnifiedChapter.source === 'comick') || String(chapterUrl).includes('/');
+    const endpoint = isComicK
+      ? `/api/comick/chapter-pages?chapterId=${encodeURIComponent(chapterUrl)}`
+      : `/api/external/en/chapter-pages?url=${encodeURIComponent(chapterUrl)}`;
+
+    const res = await fetch(endpoint);
     const data = await res.json();
     state.currentChapterData = {
-      pages: data.pages,
-      dataSaverPages: data.pages,
-      totalPages: data.pages.length
+      pages: data.pages || [],
+      dataSaverPages: data.pages || [],
+      totalPages: (data.pages || []).length
     };
 
     renderReaderPages(state.currentChapterData);

@@ -251,8 +251,8 @@ export function renderFilterTabs(activeMode = state.activeMediaMode) {
       <button class="filter-tab active" data-filter="all">Semua Komik</button>
       <button class="filter-tab" data-filter="popular">Paling Populer</button>
       <button class="filter-tab" data-filter="latest">Baru Diupdate</button>
-      <button class="filter-tab" data-filter="indo">🇮🇩 Indo Scan</button>
-      <button class="filter-tab" data-filter="english">🇬🇧 English</button>
+      <button class="filter-tab" data-filter="indo">Indo Scan</button>
+      <button class="filter-tab" data-filter="english">English</button>
       <button class="filter-tab genre-dropdown-toggle" id="btn-genre-toggle" type="button" aria-expanded="false" title="Pilih Genre Komik">
         <i data-lucide="tag"></i>
         <span id="genre-toggle-text">Filter Genre</span>
@@ -297,10 +297,12 @@ export function renderMediaGrid(mediaList, mediaType = state.activeMediaMode) {
           ? (item.status ? item.status.toUpperCase() : 'ONGOING') 
           : (item.attributes?.status ? item.attributes.status.toUpperCase() : 'ONGOING'));
     
-    // Rating badge (e.g. ⭐ 8.4)
-    let rating = isAnime ? item.rating : '';
-    if (!rating && item.attributes?.rating) rating = `⭐ ${item.attributes.rating}`;
-    if (!rating && item.averageScore) rating = `⭐ ${(item.averageScore / 10).toFixed(1)}`;
+    // Rating badge with Lucide icon
+    let rawRating = isAnime ? item.rating : '';
+    if (!rawRating && item.attributes?.rating) rawRating = String(item.attributes.rating);
+    if (!rawRating && item.averageScore) rawRating = String((item.averageScore / 10).toFixed(1));
+    const numRatingMatch = rawRating ? String(rawRating).match(/[\d.]+/) : null;
+    const cleanRating = numRatingMatch ? numRatingMatch[0] : '';
 
     // Latest chapter / episode badge
     const lastBadge = isAnime
@@ -319,7 +321,7 @@ export function renderMediaGrid(mediaList, mediaType = state.activeMediaMode) {
         <img src="${coverUrl}" alt="${title}" loading="lazy" decoding="async" onerror="this.src='https://placehold.co/300x420/1e2025/ffffff?text=Cover';">
         <div class="card-overlay-gradient"></div>
         <span class="card-status-badge ${status.toLowerCase()}">${status}</span>
-        ${rating ? `<span class="card-rating-badge">${rating}</span>` : ''}
+        ${cleanRating ? `<span class="card-rating-badge"><i data-lucide="star"></i> ${cleanRating}</span>` : ''}
         <span class="card-episode-badge">${lastBadge}</span>
       </div>
       <div class="card-content">
@@ -327,10 +329,10 @@ export function renderMediaGrid(mediaList, mediaType = state.activeMediaMode) {
         <div class="card-meta">
           <span>${formatBadge}</span>
           <div class="card-languages">
-            ${isAnime ? '<span class="lang-flag" title="Subtitle Indonesia">🇮🇩 Sub</span>' : ''}
-            ${!isAnime && isKomiku ? '<span class="lang-flag" title="Tersedia Bahasa Indonesia">🇮🇩 ID</span>' : ''}
-            ${!isAnime && !isKomiku && item.attributes?.availableTranslatedLanguages?.includes('id') ? '<span class="lang-flag" title="Tersedia Bahasa Indonesia">🇮🇩</span>' : ''}
-            ${!isAnime && !isKomiku && item.attributes?.availableTranslatedLanguages?.includes('en') ? '<span class="lang-flag" title="Tersedia English">🇬🇧</span>' : ''}
+            ${isAnime ? '<span class="lang-flag" title="Subtitle Indonesia">Sub Indo</span>' : ''}
+            ${!isAnime && isKomiku ? '<span class="lang-flag" title="Tersedia Bahasa Indonesia">ID</span>' : ''}
+            ${!isAnime && !isKomiku && item.attributes?.availableTranslatedLanguages?.includes('id') ? '<span class="lang-flag" title="Tersedia Bahasa Indonesia">ID</span>' : ''}
+            ${!isAnime && !isKomiku && item.attributes?.availableTranslatedLanguages?.includes('en') ? '<span class="lang-flag" title="Tersedia English">EN</span>' : ''}
           </div>
         </div>
       </div>
@@ -443,7 +445,7 @@ export async function loadLatestManga() {
 
 export async function loadIndonesianManga() {
   const sectionTitle = document.getElementById('grid-section-title');
-  if (sectionTitle) sectionTitle.textContent = 'Manga Terjemahan Bahasa Indonesia 🇮🇩';
+  if (sectionTitle) sectionTitle.textContent = 'Manga Terjemahan Bahasa Indonesia';
   showGridSkeleton();
 
   try {
@@ -487,7 +489,7 @@ export async function loadIndonesianManga() {
 
 export async function loadEnglishManga() {
   const sectionTitle = document.getElementById('grid-section-title');
-  if (sectionTitle) sectionTitle.textContent = 'Manga Scanlation English 🇬🇧';
+  if (sectionTitle) sectionTitle.textContent = 'Manga Scanlation English';
   showGridSkeleton();
 
   try {
@@ -647,7 +649,7 @@ window.loadLatestAnime = loadLatestAnime;
 
 export async function loadSubIndoAnime() {
   const sectionTitle = document.getElementById('grid-section-title');
-  if (sectionTitle) sectionTitle.textContent = 'Anime Subtitle Indonesia 🇮🇩';
+  if (sectionTitle) sectionTitle.textContent = 'Anime Subtitle Indonesia';
   showGridSkeleton();
 
   try {

@@ -143,16 +143,16 @@ export function initPWA() {
   } catch (e) { }
 
   window.addEventListener('appinstalled', () => {
-    showToast('Yomikomi berhasil terpasang di perangkat Anda! 📲');
+    showToast('Yomikomi berhasil terpasang di perangkat Anda!');
     deferredPWAInstallPrompt = null;
     hideAllInstallButtons();
   });
 
   window.addEventListener('offline', () => {
-    showToast('⚠️ Koneksi terputus. Anda dapat tetap membaca manga dari Offline Library!');
+    showToast('Koneksi terputus. Anda dapat tetap membaca manga dari Offline Library!');
   });
   window.addEventListener('online', () => {
-    showToast('✅ Koneksi internet kembali aktif.');
+    showToast('Koneksi internet kembali aktif.');
   });
 }
 

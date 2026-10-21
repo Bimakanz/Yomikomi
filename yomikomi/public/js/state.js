@@ -568,18 +568,18 @@ export function getCoverUrl(manga) {
 
 // Language Flag Helper
 export function getLanguageFlag(langCode) {
-  if (!langCode) return '🇯🇵';
-  const flags = {
-    ja: '🇯🇵',
-    ko: '🇰🇷',
-    zh: '🇨🇳',
-    'zh-hk': '🇭🇰',
-    en: '🇬🇧',
-    id: '🇮🇩',
-    fr: '🇫🇷',
-    es: '🇪🇸'
+  if (!langCode) return 'JP';
+  const codes = {
+    ja: 'JP',
+    ko: 'KR',
+    zh: 'CN',
+    'zh-hk': 'HK',
+    en: 'EN',
+    id: 'ID',
+    fr: 'FR',
+    es: 'ES'
   };
-  return flags[langCode.toLowerCase()] || '🌐';
+  return codes[langCode.toLowerCase()] || (langCode.length <= 3 ? langCode.toUpperCase() : 'RAW');
 }
 
 // Title normalization for fuzzy matching

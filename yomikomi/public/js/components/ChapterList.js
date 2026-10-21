@@ -168,17 +168,19 @@ function extractTitleCandidates(manga) {
  * Parallel fetches from MangaDex, Komiku, and mirrors, deduplicates by chapter number,
  * and partitions cleanly into { id: [...], en: [...] }
  */
-export async function fetchAndMergeUnifiedChapters(mangaId, mangaData = null, prefetchedKomikuChapters = null) {
+export async function fetchAndMergeUnifiedChapters(mangaId, mangaData = null, prefetchedKomikuChapters = null, prefetchedComickChapters = null) {
   const currentManga = mangaData || state.currentManga;
   const isKomikuManga = (typeof mangaId === 'string' && mangaId.startsWith('komiku-')) || currentManga?.source === 'komiku';
   const cleanSlug = isKomikuManga ? (currentManga?.slug || mangaId).replace(/^komiku-/, '') : null;
+  const isComicKManga = (typeof mangaId === 'string' && mangaId.startsWith('comick-')) || currentManga?.source === 'comick';
+  const comickSlug = currentManga?.comickSlug || mangaData?.comickSlug || (isComicKManga ? (currentManga?.slug || mangaId).replace(/^comick-/, '') : null);
 
   const titleCandidates = extractTitleCandidates(currentManga);
   const primaryTitle = titleCandidates[0] || '';
 
   // Task 1: Fetch MangaDex Chapters
   const fetchMangaDexTask = async () => {
-    if (!isKomikuManga) {
+    if (!isKomikuManga && !isComicKManga) {
       try {
         const res = await fetch(`/api/manga/${mangaId}/chapters?lang=all&order=asc&limit=500`);
         const data = await res.json();
@@ -275,17 +277,58 @@ export async function fetchAndMergeUnifiedChapters(mangaId, mangaData = null, pr
     return [];
   };
 
-  const [mdResult, komikuResult] = await Promise.allSettled([
+  // Task 3: Fetch ComicK Chapters
+  const fetchComicKTask = async () => {
+    if (prefetchedComickChapters && prefetchedComickChapters.length > 0) {
+      return prefetchedComickChapters;
+    }
+    if (comickSlug) {
+      try {
+        const cRes = await fetch(`/api/comick/manga/${encodeURIComponent(comickSlug)}`);
+        const cData = await cRes.json();
+        if (cData.chapters && cData.chapters.length > 0) {
+          return cData.chapters;
+        }
+      } catch (e) {
+        console.warn('[SmartMerger] ComicK explicit slug fetch failed:', e.message);
+      }
+    }
+
+    for (const q of titleCandidates.slice(0, 3)) {
+      try {
+        const sRes = await fetch(`/api/comick/search?q=${encodeURIComponent(q)}`);
+        const sData = await sRes.json();
+        const list = sData.data || [];
+        if (list.length > 0) {
+          const matched = list.find(it => calculateTitleSimilarity(q, it.title) >= 0.5) || list[0];
+          if (matched && matched.slug) {
+            const cRes = await fetch(`/api/comick/manga/${encodeURIComponent(matched.slug)}`);
+            const cData = await cRes.json();
+            if (cData.chapters && cData.chapters.length > 0) {
+              return cData.chapters;
+            }
+          }
+        }
+      } catch (e) { }
+    }
+    return [];
+  };
+
+  const [mdResult, komikuResult, comickResult] = await Promise.allSettled([
     fetchMangaDexTask(),
-    fetchKomikuTask()
+    fetchKomikuTask(),
+    fetchComicKTask()
   ]);
 
   const mdChapters = mdResult.status === 'fulfilled' ? mdResult.value : [];
   const komikuChapters = komikuResult.status === 'fulfilled' ? komikuResult.value : [];
+  const comickChapters = comickResult.status === 'fulfilled' ? comickResult.value : [];
 
   let englishMirrorChapters = [];
   const mdHasEn = mdChapters.some(c => c.attributes?.translatedLanguage === 'en');
-  if (!mdHasEn) {
+  const comickHasChapters = comickChapters.length > 0;
+
+  if (!mdHasEn && !comickHasChapters) {
     for (const query of titleCandidates.slice(0, 3)) {
       try {
         const enRes = await fetch(`/api/external/en/search?q=${encodeURIComponent(query)}`);
@@ -330,6 +373,28 @@ export async function fetchAndMergeUnifiedChapters(mangaId, mangaData = null, pr
 
     if (lang === 'id') rawIdList.push(item);
     else if (lang === 'en') rawEnList.push(item);
+  });
+
+  comickChapters.forEach((cc, idx) => {
+    const rawNum = cc.number || (idx + 1);
+    const num = typeof rawNum === 'number' ? rawNum : parseFloat(rawNum);
+    const lang = cc.language === 'id' ? 'id' : 'en';
+
+    const item = {
+      id: cc.id,
+      number: isNaN(num) ? (idx + 1) : num,
+      chapterNumStr: cc.chapterNumStr || String(num),
+      title: cc.title || `Chapter ${num}`,
+      subTitle: '',
+      language: lang,
+      source: 'comick',
+      scanlationGroup: cc.scanlationGroup || 'ComicK Scan',
+      releaseDate: cc.releaseDate || '',
+      raw: cc
+    };
+
+    if (lang === 'id') rawIdList.push(item);
+    else rawEnList.push(item);
   });
 
   komikuChapters.forEach((kc, idx) => {
@@ -406,7 +471,7 @@ export async function fetchAndMergeUnifiedChapters(mangaId, mangaData = null, pr
 }
 window.fetchAndMergeUnifiedChapters = fetchAndMergeUnifiedChapters;
 
-export async function loadUnifiedChapters(mangaId, mangaData = null, prefetchedKomikuChapters = null) {
+export async function loadUnifiedChapters(mangaId, mangaData = null, prefetchedKomikuChapters = null, prefetchedComickChapters = null) {
   const chaptersContainer = document.getElementById('chapters-list');
   const countBadge = document.getElementById('chapters-total-badge');
   const countIdEl = document.getElementById('lang-count-id');
@@ -450,7 +515,7 @@ export async function loadUnifiedChapters(mangaId, mangaData = null, prefetchedK
   if (countEnEl) countEnEl.textContent = '...';
 
   const currentManga = mangaData || state.currentManga;
-  const merged = await fetchAndMergeUnifiedChapters(mangaId, currentManga, prefetchedKomikuChapters);
+  const merged = await fetchAndMergeUnifiedChapters(mangaId, currentManga, prefetchedKomikuChapters, prefetchedComickChapters);
 
   state.unifiedChapters = merged.unifiedChapters;
   state.allMangaDexChapters = merged.allMangaDexChapters;
@@ -499,7 +564,7 @@ export async function renderUnifiedChaptersList() {
       <div class="empty-state">
         <i data-lucide="book-x"></i>
         <h4>Belum Ada Chapter ${activeLang === 'id' ? 'Bahasa Indonesia' : 'English'}</h4>
-        <p>Tidak ada rilis chapter untuk bahasa ini. Coba pilih tab ${activeLang === 'id' ? '🇬🇧 English' : '🇮🇩 Indonesia'}.</p>
+        <p>Tidak ada rilis chapter untuk bahasa ini. Coba pilih tab ${activeLang === 'id' ? 'English' : 'Indonesia'}.</p>
       </div>
     `;
     initIcons();
@@ -522,6 +587,8 @@ export async function renderUnifiedChaptersList() {
       sourcePillHtml = `<span class="chapter-source-pill source-komiku" title="Komiku Indo Scan">Komiku Indo Scan</span>`;
     } else if (ch.source === 'bacakomik') {
       sourcePillHtml = `<span class="chapter-source-pill source-komiku" title="Indo Mirror">Indo Mirror</span>`;
+    } else if (ch.source === 'comick') {
+      sourcePillHtml = `<span class="chapter-source-pill source-comick" title="ComicK Scan">ComicK Scan</span>`;
     } else {
       sourcePillHtml = `<span class="chapter-source-pill source-mangapill" title="English Mirror">EN Mirror</span>`;
     }

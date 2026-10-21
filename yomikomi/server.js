@@ -1832,14 +1832,10 @@ app.get(['/api/komiku/chapter-pages', '/api/komiku/chapter/:chapterSlug'], async
 // ==========================================
 let aggregatorService = null;
 let handleImageProxyRequest = null;
-let localIndoProvider = null;
-let consumetProvider = null;
 
 import('./dist/index.js').then(module => {
   aggregatorService = module.aggregatorService;
   handleImageProxyRequest = module.handleImageProxyRequest;
-  if (module.LocalIndoProvider) localIndoProvider = new module.LocalIndoProvider();
-  if (module.ConsumetProvider) consumetProvider = new module.ConsumetProvider();
   console.log('⚡ Unified Data Service Layer (MangaDex, Indo Mirror, Consumet, AniList) ACTIVE!');
 }).catch(err => {
   console.error('Failed to load Unified Service Layer:', err.message);
@@ -1935,120 +1931,6 @@ app.get('/api/v2/chapter/:source/:id', async (req, res) => {
     res.json({ source, total: pages.length, pages });
   } catch (err) {
     res.status(500).json({ error: err.message });
-  }
-});
-
-// ==========================================
-// EXTERNAL COMIC MIRROR ROUTES (Indo & EN)
-// ==========================================
-app.get('/api/external/search', async (req, res) => {
-  try {
-    const q = (req.query.q || req.query.query || '').trim();
-    if (!q) return res.json({ data: [] });
-    if (!localIndoProvider) return res.json({ data: [] });
-    const items = await localIndoProvider.search(q);
-    res.json({
-      data: items.map(it => ({
-        id: it.id,
-        slug: it.slug,
-        url: it.slug,
-        title: it.title,
-        coverUrl: it.coverUrl,
-        type: it.type
-      }))
-    });
-  } catch (err) {
-    res.json({ data: [], error: err.message });
-  }
-});
-
-app.get('/api/external/chapters', async (req, res) => {
-  try {
-    const url = (req.query.url || req.query.slug || '').trim();
-    if (!url || !localIndoProvider) return res.json({ chapters: [] });
-    const detail = await localIndoProvider.getDetailAndChapters(url);
-    res.json({
-      title: detail.title,
-      chapters: (detail.chapters || []).map(ch => ({
-        id: ch.id,
-        url: ch.id,
-        number: ch.number,
-        title: ch.title,
-        releaseDate: ch.releaseDate,
-        source: 'bacakomik',
-        language: 'id'
-      }))
-    });
-  } catch (err) {
-    res.json({ chapters: [], error: err.message });
-  }
-});
-
-app.get('/api/external/chapter-pages', async (req, res) => {
-  try {
-    const url = (req.query.url || req.query.slug || '').trim();
-    if (!url || !localIndoProvider) return res.json({ pages: [] });
-    const pages = await localIndoProvider.getChapterImages(url);
-    res.json({
-      pages: pages.map(p => p.proxiedUrl || p.imageUrl)
-    });
-  } catch (err) {
-    res.json({ pages: [], error: err.message });
-  }
-});
-
-app.get('/api/external/en/search', async (req, res) => {
-  try {
-    const q = (req.query.q || req.query.query || '').trim();
-    if (!q) return res.json({ data: [] });
-    if (!consumetProvider) return res.json({ data: [] });
-    const items = await consumetProvider.search(q);
-    res.json({
-      data: items.map(it => ({
-        id: it.id,
-        slug: it.slug,
-        url: it.slug,
-        title: it.title,
-        coverUrl: it.coverUrl,
-        type: it.type
-      }))
-    });
-  } catch (err) {
-    res.json({ data: [], error: err.message });
-  }
-});
-
-app.get('/api/external/en/chapters', async (req, res) => {
-  try {
-    const url = (req.query.url || req.query.slug || '').trim();
-    if (!url || !consumetProvider) return res.json({ chapters: [] });
-    const detail = await consumetProvider.getDetailAndChapters(url);
-    res.json({
-      title: detail.title,
-      chapters: (detail.chapters || []).map(ch => ({
-        id: ch.id,
-        url: ch.id,
-        number: ch.number,
-        title: ch.title,
-        source: 'mangapill',
-        language: 'en'
-      }))
-    });
-  } catch (err) {
-    res.json({ chapters: [], error: err.message });
-  }
-});
-
-app.get('/api/external/en/chapter-pages', async (req, res) => {
-  try {
-    const url = (req.query.url || req.query.slug || '').trim();
-    if (!url || !consumetProvider) return res.json({ pages: [] });
-    const pages = await consumetProvider.getChapterImages(url);
-    res.json({
-      pages: pages.map(p => p.proxiedUrl || p.imageUrl)
-    });
-  } catch (err) {
-    res.json({ pages: [], error: err.message });
   }
 });
 

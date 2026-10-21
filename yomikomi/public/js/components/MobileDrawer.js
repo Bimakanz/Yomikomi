@@ -27,9 +27,11 @@ export function renderMobileDrawerMarkup() {
       <div class="drawer-mode-wrap">
         <div class="media-mode-switcher drawer-mode-switcher" role="tablist" aria-label="Pilih Mode Media">
           <button class="mode-pill-btn ${isManga ? 'active' : ''}" data-mode="manga" id="drawer-mode-btn-manga" role="tab" type="button">
+            <span class="mode-icon">📖</span>
             <span class="mode-text">Komik</span>
           </button>
           <button class="mode-pill-btn ${!isManga ? 'active' : ''}" data-mode="anime" id="drawer-mode-btn-anime" role="tab" type="button">
+            <span class="mode-icon">🎬</span>
             <span class="mode-text">Anime</span>
           </button>
         </div>

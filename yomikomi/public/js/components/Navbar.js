@@ -25,9 +25,11 @@ export function renderNavbarMarkup() {
           <!-- Segmented Global Media Mode Switcher (Komik | Anime) -->
           <div class="media-mode-switcher" id="media-mode-switcher" role="tablist" aria-label="Pilih Mode Media">
             <button class="mode-pill-btn ${isManga ? 'active' : ''}" data-mode="manga" role="tab" id="mode-btn-manga" title="Mode Baca Komik (Manga, Manhwa, Manhua)">
+              <span class="mode-icon">📖</span>
               <span class="mode-text">Komik</span>
             </button>
             <button class="mode-pill-btn ${!isManga ? 'active' : ''}" data-mode="anime" role="tab" id="mode-btn-anime" title="Mode Nonton Anime">
+              <span class="mode-icon">🎬</span>
               <span class="mode-text">Anime</span>
             </button>
           </div>

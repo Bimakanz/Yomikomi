@@ -2305,29 +2305,41 @@ app.get('/api/anime/stream/:id/:ep', async (req, res) => {
     res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
     if (cached) return res.json(cached);
 
-    // Get anime title for scraper queries
+    // Get anime title and AniZip mappings for scraper queries & stream resolution
     let animeTitle = '';
+    let malId = null;
+    let tmdbId = null;
+
     const detailCacheKey = `anime_detail_${id}`;
     const cachedDetail = getCache(detailCacheKey);
-    if (cachedDetail?.data?.title) {
-      animeTitle = cachedDetail.data.title;
-    } else {
-      // Quick AniList title fetch
-      const titleQuery = `query ($id: Int) { Media(id: $id, type: ANIME) { title { romaji english } } }`;
-      const titleData = await fetchAniListAnime(titleQuery, { id: parseInt(id) });
+    if (cachedDetail?.data) {
+      animeTitle = cachedDetail.data.title || cachedDetail.data.titleObj?.romaji || '';
+      malId = cachedDetail.data.mappings?.mal_id || null;
+      tmdbId = cachedDetail.data.mappings?.themoviedb_id || null;
+    }
+
+    if (!animeTitle || !malId || !tmdbId) {
+      const [titleData, zipData] = await Promise.all([
+        fetchAniListAnime(`query ($id: Int) { Media(id: $id, type: ANIME) { title { romaji english } } }`, { id: parseInt(id) }),
+        fetchAniZipMappings(id)
+      ]);
       if (titleData?.Media?.title) {
-        animeTitle = titleData.Media.title.romaji || titleData.Media.title.english || '';
+        animeTitle = titleData.Media.title.romaji || titleData.Media.title.english || animeTitle;
+      }
+      if (zipData?.mappings) {
+        malId = zipData.mappings.mal_id || malId;
+        tmdbId = zipData.mappings.themoviedb_id || tmdbId;
       }
     }
 
     let servers = [];
 
-    // Try unified aggregator from compiled TypeScript service with 2.2s strict budget
+    // Try unified aggregator from compiled TypeScript service with 3.5s budget
     if (animeAggregator && animeTitle) {
       try {
-        const timeoutPromise = new Promise(resolve => setTimeout(() => resolve([]), 2200));
+        const timeoutPromise = new Promise(resolve => setTimeout(() => resolve([]), 3500));
         servers = await Promise.race([
-          animeAggregator.getUnifiedEpisodeStreams(animeTitle, epNum),
+          animeAggregator.getUnifiedEpisodeStreams(animeTitle, epNum, { malId, tmdbId }),
           timeoutPromise
         ]);
       } catch (aggErr) {
@@ -2335,35 +2347,58 @@ app.get('/api/anime/stream/:id/:ep', async (req, res) => {
       }
     }
 
-    // Instant high-performance servers if scrapers timed out or found nothing
+    // High performance real anime embeds if scrapers returned nothing
     if (servers.length === 0) {
       const safeTitle = encodeURIComponent(animeTitle || 'anime');
-      servers.push(
-        {
-          id: 'server-indo-1',
-          name: 'Server 1 (Sub Indo • Direct HD)',
+
+      if (malId) {
+        servers.push({
+          id: 'server-vidsrc-mal',
+          name: 'Server 1 (Global HD • Multi-Sub)',
           type: 'iframe',
-          url: `https://vidsrc.to/embed/anime/${safeTitle}/${epNum}`,
-          quality: '1080p',
-          isSubIndo: true
-        },
-        {
-          id: 'server-global-2',
-          name: 'Server 2 (Global FHD • Multi-Sub HLS)',
-          type: 'hls',
-          url: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
+          url: `https://vidsrc.pm/embed/anime?mal=${malId}&ep=${epNum}`,
           quality: '1080p',
           isSubIndo: false
-        },
-        {
-          id: 'server-mirror-3',
-          name: 'Server 3 (Direct CDN)',
-          type: 'mp4',
-          url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+        });
+      }
+
+      if (tmdbId) {
+        servers.push({
+          id: 'server-multiembed-tmdb',
+          name: `Server ${servers.length + 1} (AutoStream FHD)`,
+          type: 'iframe',
+          url: `https://multiembed.mov/?video_id=${tmdbId}&tmdb=1&s=1&e=${epNum}`,
+          quality: '1080p',
+          isSubIndo: false
+        });
+        servers.push({
+          id: 'server-2embed-tmdb',
+          name: `Server ${servers.length + 1} (Direct Cloud 720p)`,
+          type: 'iframe',
+          url: `https://2embed.cc/embedtv/${tmdbId}&s=1&e=${epNum}`,
           quality: '720p',
-          isSubIndo: true
-        }
-      );
+          isSubIndo: false
+        });
+        servers.push({
+          id: 'server-autoembed-tmdb',
+          name: `Server ${servers.length + 1} (Fast CDN)`,
+          type: 'iframe',
+          url: `https://autoembed.co/tv/tmdb/${tmdbId}-1-${epNum}`,
+          quality: 'Auto',
+          isSubIndo: false
+        });
+      }
+
+      if (servers.length === 0) {
+        servers.push({
+          id: 'server-embed-title',
+          name: 'Server 1 (Direct Stream HD)',
+          type: 'iframe',
+          url: `https://multiembed.mov/?video_id=${safeTitle}&s=1&e=${epNum}`,
+          quality: '1080p',
+          isSubIndo: false
+        });
+      }
     }
 
     const payload = { animeId: id, episode: epNum, title: animeTitle, servers };

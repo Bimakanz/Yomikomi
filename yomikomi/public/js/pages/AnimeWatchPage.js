@@ -32,12 +32,9 @@ export function renderAnimeWatchPageMarkup() {
           <!-- Left Column (70%): Video Player & Controls & Anime Info -->
           <div class="anime-player-col">
             <div class="video-player-wrapper" id="video-player-wrapper">
-              <video class="anime-video-player" id="anime-video-player" controls preload="metadata" playsinline poster="https://placehold.co/1280x720/14151a/8b5cf6?text=Memuat+Player...">
-                <source id="video-source" src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4" type="video/mp4">
-                Browser Anda tidak mendukung HTML5 video.
-              </video>
-              <div class="video-overlay-loader hidden" id="video-overlay-loader">
+              <div class="video-overlay-loader" id="video-overlay-loader">
                 <div class="spinner-small"></div>
+                <span class="video-loader-text" style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.5rem;">Memuat Pemutar Video...</span>
               </div>
             </div>
 
@@ -137,13 +134,6 @@ export function renderAnimeWatchPageMarkup() {
   `;
 }
 
-// Sample streaming servers
-const SERVER_STREAMS = {
-  1: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-  2: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
-  3: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4'
-};
-
 export async function openAnimeWatch(animeId, epNumber = 1, maybeAnimeData = null) {
   if (typeof window.switchView === 'function') {
     window.switchView('anime-watch');
@@ -154,14 +144,14 @@ export async function openAnimeWatch(animeId, epNumber = 1, maybeAnimeData = nul
 
   let anime = maybeAnimeData;
 
-  // Optimistic initial render and instant playback if data provided
+  // Optimistic initial render if data provided
   if (anime) {
     state.currentAnime = anime;
     renderAnimeDetails(anime, state.currentAnimeEpisode);
     loadEpisode(state.currentAnimeEpisode);
   }
 
-  // Fetch full details and enriched AniZip episode thumbnails in parallel
+  // Fetch full details, mappings, and enriched AniZip episode thumbnails
   fetch(`/api/anime/${animeId}`)
     .then(res => res.json())
     .then(data => {
@@ -169,7 +159,8 @@ export async function openAnimeWatch(animeId, epNumber = 1, maybeAnimeData = nul
         anime = data.data;
         state.currentAnime = anime;
         renderAnimeDetails(anime, state.currentAnimeEpisode);
-        if (!maybeAnimeData) {
+        // Refresh episode stream if initial render lacked mappings/episodesList
+        if (!maybeAnimeData?.mappings || !maybeAnimeData?.episodesList?.length) {
           loadEpisode(state.currentAnimeEpisode);
         }
       }
@@ -191,7 +182,7 @@ export function renderAnimeDetails(anime, activeEp = 1) {
   const format = anime.format || 'TV';
   const desc = (anime.description || 'Sinopsis tidak tersedia.').replace(/<[^>]*>/g, ' ');
   const genres = anime.genres || ['Action', 'Fantasy'];
-  const totalEps = anime.episodes || 12;
+  const totalEps = anime.episodesList?.length || anime.totalEpisodes || anime.episodes || 12;
 
   // Breadcrumb
   const bTitle = document.getElementById('watch-breadcrumb-title');
@@ -397,38 +388,61 @@ export async function loadEpisode(epNumber) {
     : (anime.title?.romaji || anime.title?.english || anime.titleObj?.romaji || 'Anime');
   const safeTitle = encodeURIComponent(animeTitle);
 
-  // Get servers from episode data or build instant high-performance servers immediately
+  const malId = anime.mappings?.mal_id || null;
+  const tmdbId = anime.mappings?.themoviedb_id || null;
+
+  // Get servers from episode data or build instant real anime servers immediately
   let servers = anime.episodesList?.[epNumber - 1]?.servers || [];
 
   if (servers.length === 0) {
-    servers = [
-      {
-        id: 'server-indo-1',
-        name: 'Server 1 (Sub Indo • Direct HD)',
-        quality: '1080p',
+    if (malId) {
+      servers.push({
+        id: 'server-vidsrc-mal',
+        name: 'Server 1 (Global HD • Multi-Sub)',
         type: 'iframe',
-        url: `https://vidsrc.to/embed/anime/${safeTitle}/${epNumber}`,
-        isSubIndo: true
-      },
-      {
-        id: 'server-global-2',
-        name: 'Server 2 (Global FHD • Multi-Sub HLS)',
+        url: `https://vidsrc.pm/embed/anime?mal=${malId}&ep=${epNumber}`,
         quality: '1080p',
-        type: 'hls',
-        url: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
         isSubIndo: false
-      },
-      {
-        id: 'server-cdn-3',
-        name: 'Server 3 (Direct CDN • Fast)',
+      });
+    }
+    if (tmdbId) {
+      servers.push({
+        id: 'server-multiembed-tmdb',
+        name: `Server ${servers.length + 1} (AutoStream FHD)`,
+        type: 'iframe',
+        url: `https://multiembed.mov/?video_id=${tmdbId}&tmdb=1&s=1&e=${epNumber}`,
+        quality: '1080p',
+        isSubIndo: false
+      });
+      servers.push({
+        id: 'server-2embed-tmdb',
+        name: `Server ${servers.length + 1} (Direct Cloud 720p)`,
+        type: 'iframe',
+        url: `https://2embed.cc/embedtv/${tmdbId}&s=1&e=${epNumber}`,
         quality: '720p',
-        type: 'mp4',
-        url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-        isSubIndo: true
-      }
-    ];
+        isSubIndo: false
+      });
+      servers.push({
+        id: 'server-autoembed-tmdb',
+        name: `Server ${servers.length + 1} (Fast CDN)`,
+        type: 'iframe',
+        url: `https://autoembed.co/tv/tmdb/${tmdbId}-1-${epNumber}`,
+        quality: 'Auto',
+        isSubIndo: false
+      });
+    }
+    if (servers.length === 0) {
+      servers.push({
+        id: 'server-direct-embed',
+        name: 'Server 1 (Direct Stream HD)',
+        type: 'iframe',
+        url: `https://multiembed.mov/?video_id=${safeTitle}&s=1&e=${epNumber}`,
+        quality: '1080p',
+        isSubIndo: false
+      });
+    }
 
-    // Background fetch to enrich servers without blocking video playback or UI
+    // Background fetch to enrich with live Sub Indo / DesuStream and update player
     fetch(`/api/anime/stream/${anime.id}/${epNumber}`)
       .then(res => res.json())
       .then(streamData => {
@@ -437,14 +451,16 @@ export async function loadEpisode(epNumber) {
           if (anime.episodesList && anime.episodesList[epNumber - 1]) {
             anime.episodesList[epNumber - 1].servers = freshServers;
           }
-          const sSelect = document.getElementById('select-anime-server');
-          if (sSelect) {
-            const currentVal = sSelect.value;
-            sSelect.innerHTML = freshServers.map((s, idx) => `
-              <option value="${idx}" ${String(idx) === currentVal ? 'selected' : ''}>
-                ${s.name || `Server ${idx + 1}`}
-              </option>
-            `).join('');
+          if (state.currentAnimeEpisode === epNumber) {
+            const sSelect = document.getElementById('select-anime-server');
+            if (sSelect) {
+              sSelect.innerHTML = freshServers.map((s, idx) => `
+                <option value="${idx}" ${idx === 0 ? 'selected' : ''}>
+                  ${s.name || `Server ${idx + 1}`}
+                </option>
+              `).join('');
+            }
+            renderPlayerEngine(freshServers[0]);
           }
         }
       })
@@ -471,7 +487,7 @@ export async function loadEpisode(epNumber) {
   // Update Prev / Next Buttons states
   const prevBtn = document.getElementById('btn-anime-prev-ep');
   const nextBtn = document.getElementById('btn-anime-next-ep');
-  const totalEps = anime.episodes || 12;
+  const totalEps = anime.episodesList?.length || anime.totalEpisodes || anime.episodes || 12;
 
   if (prevBtn) prevBtn.disabled = epNumber <= 1;
   if (nextBtn) nextBtn.disabled = epNumber >= totalEps;

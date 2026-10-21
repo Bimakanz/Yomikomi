@@ -7015,22 +7015,26 @@ img {
 .episodes-list-scrollable {
   max-height: 540px;
   overflow-y: auto;
-  padding: 0.65rem 0.75rem;
+  padding: 0.65rem 0.65rem 0.65rem 0.75rem;
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
+  scrollbar-gutter: stable;
 }
 
 .episode-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 0.65rem;
   padding: 0.65rem 0.85rem;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: all var(--transition-fast);
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .episode-item:hover {
@@ -7048,6 +7052,8 @@ img {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  flex: 1 1 0%;
+  min-width: 0;
 }
 
 .ep-num-badge {
@@ -7061,6 +7067,7 @@ img {
   align-items: center;
   justify-content: center;
   color: var(--text-main);
+  flex-shrink: 0;
 }
 
 .episode-item.active .ep-num-badge {
@@ -7071,21 +7078,40 @@ img {
 .ep-info {
   display: flex;
   flex-direction: column;
+  flex: 1 1 0%;
+  min-width: 0;
+  overflow: hidden;
+  gap: 0.15rem;
 }
 
 .ep-title {
   font-size: 0.85rem;
   font-weight: 700;
   color: var(--text-main);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: break-word;
+  line-height: 1.35;
 }
 
 .ep-sub-badge {
   font-size: 0.7rem;
   color: var(--text-subtle);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .ep-status-icon {
+  flex-shrink: 0;
   color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
 }
 
 .episode-item.active .ep-status-icon {
@@ -7106,7 +7132,7 @@ img {
   color: var(--text-muted);
   line-height: 1.3;
   margin-top: 2px;
-  max-width: 280px;
+  width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

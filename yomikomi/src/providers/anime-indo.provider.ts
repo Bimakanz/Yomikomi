@@ -10,7 +10,7 @@ import { globalCache } from '../utils/cache.js';
 export class AnimeIndoProvider {
   readonly source = 'anime-indo';
   readonly displayName = 'Anime Sub Indo';
-  readonly baseUrl = process.env.OTAKUDESU_BASE_URL?.trim() || 'https://otakudesu.cloud';
+  readonly baseUrl = process.env.OTAKUDESU_BASE_URL?.trim() || 'https://otakudesu.best';
   protected readonly timeoutMs = 7000;
 
   /**
@@ -63,6 +63,7 @@ export class AnimeIndoProvider {
    */
   async getEpisodeStreams(animeTitle: string, episodeNumber: number): Promise<AnimeStreamServer[]> {
     const cleanTitle = animeTitle
+      .replace(/\(tv\)/i, '')
       .replace(/season\s*\d+/i, '')
       .replace(/s\d+/i, '')
       .replace(/:\s*[^:]+$/, '')
@@ -92,10 +93,17 @@ export class AnimeIndoProvider {
         let targetEpUrl = '';
 
         $('.episodelist ul li a').each((_, el) => {
-          const epText = $(el).text();
-          const epMatch = epText.match(/episode\s*(\d+)/i);
-          if (epMatch && parseInt(epMatch[1], 10) === episodeNumber) {
-            targetEpUrl = $(el).attr('href') || '';
+          const epText = $(el).text().trim();
+          const epHref = $(el).attr('href') || '';
+          if (epText.toLowerCase().includes('pembatas') || epHref.includes('batch')) return;
+          // Avoid matching ranges like "Episode 001 – 025"
+          if (epText.includes('–') || (epText.includes('-') && !epHref.includes('episode-'))) return;
+
+          const numRegex = new RegExp(`\\bepisode\\s*0*${episodeNumber}\\b`, 'i');
+          const hrefRegex = new RegExp(`episode-0*${episodeNumber}-`, 'i');
+
+          if (numRegex.test(epText) || hrefRegex.test(epHref)) {
+            targetEpUrl = epHref;
             return false;
           }
         });
@@ -110,7 +118,7 @@ export class AnimeIndoProvider {
           });
 
           const $ep = cheerio.load(epRes.data);
-          const defaultIframe = $ep('#lightsVideo iframe').attr('src');
+          const defaultIframe = $ep('#lightsVideo iframe, .responsive-embed iframe, iframe').attr('src');
           if (defaultIframe) {
             servers.push({
               id: 'indo-desu-main',
@@ -121,28 +129,6 @@ export class AnimeIndoProvider {
               isSubIndo: true
             });
           }
-
-          // Check alternative mirrors in mirrorstream
-          $ep('.mirrorstream ul li a').each((i, el) => {
-            const serverName = $ep(el).text().trim() || `Mirror ${i + 1}`;
-            const dataContent = $ep(el).attr('data-content');
-            if (dataContent) {
-              try {
-                const decoded = Buffer.from(dataContent, 'base64').toString('utf-8');
-                const srcMatch = decoded.match(/src=["']([^"']+)["']/);
-                if (srcMatch && srcMatch[1]) {
-                  servers.push({
-                    id: `indo-mirror-${i}`,
-                    name: `Server ${i + 2} (Sub Indo • ${serverName})`,
-                    type: 'iframe',
-                    url: srcMatch[1],
-                    quality: 'Auto',
-                    isSubIndo: true
-                  });
-                }
-              } catch (_) {}
-            }
-          });
         }
       }
     } catch (e) {
@@ -152,7 +138,7 @@ export class AnimeIndoProvider {
     // Try Samehadaku Scraper if Otakudesu yielded no servers
     if (servers.length === 0) {
       try {
-        const sRes = await axios.get(`https://samehadaku.email/?s=${encodeURIComponent(cleanTitle)}`, {
+        const sRes = await axios.get(`https://samehadaku.care/?s=${encodeURIComponent(cleanTitle)}`, {
           headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
           timeout: this.timeoutMs
         });
@@ -189,27 +175,6 @@ export class AnimeIndoProvider {
       } catch (sErr) {
         console.warn('[AnimeIndoProvider] Samehadaku fallback failed:', (sErr as any).message);
       }
-    }
-
-    // Default fast fallback iframe / stream server if scraping is restricted by Cloudflare
-    if (servers.length === 0) {
-      const safeQuery = encodeURIComponent(animeTitle);
-      servers.push({
-        id: 'indo-embed-stream',
-        name: 'Server 1 (Sub Indo • Direct HD)',
-        type: 'iframe',
-        url: `https://vidsrc.to/embed/anime/${safeQuery}/${episodeNumber}`,
-        quality: '1080p',
-        isSubIndo: true
-      });
-      servers.push({
-        id: 'indo-backup-stream',
-        name: 'Server 2 (Sub Indo • Fast CDN)',
-        type: 'hls',
-        url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-        quality: '720p',
-        isSubIndo: true
-      });
     }
 
     globalCache.set(cacheKey, servers, 2 * 60 * 60 * 1000);

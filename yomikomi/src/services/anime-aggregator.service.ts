@@ -9,20 +9,21 @@ export class AnimeAggregatorService {
    */
   async getUnifiedEpisodeStreams(
     animeTitle: string,
-    episodeNumber: number
+    episodeNumber: number,
+    mappings?: { malId?: number | string; tmdbId?: number | string; imdbId?: string }
   ): Promise<AnimeStreamServer[]> {
     const cacheKey = `agg_stream_${animeTitle}_ep${episodeNumber}`;
     const cached = globalCache.get<AnimeStreamServer[]>(cacheKey);
     if (cached) return cached;
 
-    // Strict 2.2-second budget for external live scrapers
+    // 3.5-second budget for external live scrapers
     const scraperPromise = Promise.all([
       animeIndoProvider.getEpisodeStreams(animeTitle, episodeNumber).catch(() => []),
       animeGlobalProvider.getEpisodeStreams(animeTitle, episodeNumber).catch(() => [])
     ]);
 
     const timeoutPromise = new Promise<[AnimeStreamServer[], AnimeStreamServer[]]>((resolve) =>
-      setTimeout(() => resolve([[], []]), 2200)
+      setTimeout(() => resolve([[], []]), 3500)
     );
 
     const [indoServers, globalServers] = await Promise.race([scraperPromise, timeoutPromise]);
@@ -39,35 +40,60 @@ export class AnimeAggregatorService {
       combined.push(...globalServers);
     }
 
-    // High quality instant fallback servers if scrapers timed out or found nothing
+    // High quality instant fallback servers using real anime metadata
     if (combined.length === 0) {
+      const tmdbId = mappings?.tmdbId;
+      const malId = mappings?.malId;
       const safeTitle = encodeURIComponent(animeTitle);
-      combined.push(
-        {
-          id: 'server-indo-direct-hd',
-          name: 'Server 1 (Sub Indo • Direct HD)',
+
+      if (malId) {
+        combined.push({
+          id: 'server-vidsrc-mal',
+          name: 'Server 1 (Global HD • Multi-Sub)',
           type: 'iframe',
-          url: `https://vidsrc.to/embed/anime/${safeTitle}/${episodeNumber}`,
-          quality: '1080p',
-          isSubIndo: true
-        },
-        {
-          id: 'server-global-hls-fhd',
-          name: 'Server 2 (Global FHD 1080p • Direct HLS)',
-          type: 'hls',
-          url: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
+          url: `https://vidsrc.pm/embed/anime?mal=${malId}&ep=${episodeNumber}`,
           quality: '1080p',
           isSubIndo: false
-        },
-        {
-          id: 'server-direct-embed-mirror',
-          name: 'Server 3 (Direct CDN Embed)',
+        });
+      }
+
+      if (tmdbId) {
+        combined.push({
+          id: 'server-multiembed-tmdb',
+          name: `Server ${combined.length + 1} (AutoStream FHD)`,
           type: 'iframe',
-          url: `https://player.autoembed.cc/embed/anime/${safeTitle}/${episodeNumber}`,
+          url: `https://multiembed.mov/?video_id=${tmdbId}&tmdb=1&s=1&e=${episodeNumber}`,
+          quality: '1080p',
+          isSubIndo: false
+        });
+        combined.push({
+          id: 'server-2embed-tmdb',
+          name: `Server ${combined.length + 1} (Direct Cloud 720p)`,
+          type: 'iframe',
+          url: `https://2embed.cc/embedtv/${tmdbId}&s=1&e=${episodeNumber}`,
           quality: '720p',
           isSubIndo: false
-        }
-      );
+        });
+        combined.push({
+          id: 'server-autoembed-tmdb',
+          name: `Server ${combined.length + 1} (Fast CDN)`,
+          type: 'iframe',
+          url: `https://autoembed.co/tv/tmdb/${tmdbId}-1-${episodeNumber}`,
+          quality: 'Auto',
+          isSubIndo: false
+        });
+      }
+
+      if (combined.length === 0) {
+        combined.push({
+          id: 'server-embed-title',
+          name: 'Server 1 (Direct Stream HD)',
+          type: 'iframe',
+          url: `https://multiembed.mov/?video_id=${safeTitle}&s=1&e=${episodeNumber}`,
+          quality: '1080p',
+          isSubIndo: false
+        });
+      }
     }
 
     globalCache.set(cacheKey, combined, 60 * 60 * 1000);
@@ -75,7 +101,7 @@ export class AnimeAggregatorService {
   }
 
   /**
-   * Enrich AniList anime with episode streams
+   * Enrich AniList anime with episode list
    */
   async buildEpisodeList(
     animeTitle: string,
@@ -91,32 +117,7 @@ export class AnimeAggregatorService {
         title: `Episode ${i}`,
         thumbnail: bannerOrCover || '',
         duration: '24:00',
-        servers: [
-          {
-            id: 'server-indo-default',
-            name: 'Server 1 (Sub Indo • HD)',
-            type: 'iframe',
-            url: `https://vidsrc.to/embed/anime/${encodeURIComponent(animeTitle)}/${i}`,
-            quality: '1080p',
-            isSubIndo: true
-          },
-          {
-            id: 'server-global-hls',
-            name: 'Server 2 (Global FHD • Multi-Sub HLS)',
-            type: 'hls',
-            url: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
-            quality: '1080p',
-            isSubIndo: false
-          },
-          {
-            id: 'server-mirror-fast',
-            name: 'Server 3 (Direct CDN)',
-            type: 'mp4',
-            url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-            quality: '720p',
-            isSubIndo: true
-          }
-        ]
+        servers: []
       });
     }
 

@@ -116,33 +116,11 @@ export class AnimeGlobalProvider {
       }
     }
 
-    // High quality reliable multi-resolution HLS / MP4 fallbacks
-    if (servers.length === 0) {
-      servers.push({
-        id: 'global-fhd-direct',
-        name: 'Server 1 (Global FHD 1080p • Direct HLS)',
-        type: 'hls',
-        url: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
-        quality: '1080p',
-        isSubIndo: false
-      });
-      servers.push({
-        id: 'global-hd-fast',
-        name: 'Server 2 (Global HD 720p • Multi-Sub)',
-        type: 'mp4',
-        url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-        quality: '720p',
-        isSubIndo: false
-      });
-      servers.push({
-        id: 'global-embed-stream',
-        name: 'Server 3 (Direct CDN Embed)',
-        type: 'iframe',
-        url: `https://vidsrc.to/embed/anime/${encodeURIComponent(cleanTitle)}/${episodeNumber}`,
-        quality: 'Auto',
-        isSubIndo: false
-      });
+    // Return servers if found from @consumet/extensions
+    if (servers.length > 0) {
+      globalCache.set(cacheKey, servers, 2 * 60 * 60 * 1000);
     }
+    return servers;
 
     globalCache.set(cacheKey, servers, 2 * 60 * 60 * 1000);
     return servers;

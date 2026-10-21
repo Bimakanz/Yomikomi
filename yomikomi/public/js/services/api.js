@@ -95,9 +95,9 @@ export async function fetchKomikuSearch(query) {
   }
 }
 
-export async function fetchKomikuLatest(page = 1) {
+export async function fetchKomikuLatest() {
   try {
-    const res = await fetch(`/api/komiku/latest?page=${encodeURIComponent(page)}`);
+    const res = await fetch('/api/komiku/latest');
     if (!res.ok) return [];
     const data = await res.json();
     return data.data || [];

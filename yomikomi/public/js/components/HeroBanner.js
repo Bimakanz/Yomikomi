@@ -33,7 +33,7 @@ export function renderHeroBanner(containerOrItems, maybeItems, onReadClick, onDe
       .slice(0, 160) + '...';
     const status = isAnime ? (item.status || 'RELEASING') : (item.attributes?.status?.toUpperCase() || 'ONGOING');
     const tags = isAnime ? (item.genres?.slice(0, 2) || ['Anime']) : (item.attributes?.tags?.slice(0, 2).map(t => t.attributes.name.en) || ['Manga']);
-    const rawScore = isAnime ? (item.rating || (item.averageScore ? (item.averageScore / 10).toFixed(1) : '')) : '';
+    const ratingText = isAnime ? (item.rating || (item.averageScore ? `⭐ ${(item.averageScore / 10).toFixed(1)}` : '')) : '';
 
     const slide = document.createElement('div');
     slide.className = `hero-slide ${idx === 0 ? 'active' : ''}`;
@@ -42,11 +42,11 @@ export function renderHeroBanner(containerOrItems, maybeItems, onReadClick, onDe
       <div class="hero-content">
         <div class="hero-badge-row">
           <span class="badge-tag accent">
-            <span>${isAnime ? 'Anime Populer' : 'Manga Populer'}</span>
+            <span>${isAnime ? '🎬 Populer' : '📖 Populer'}</span>
           </span>
           <span class="badge-tag">${status}</span>
           ${tags.map(t => `<span class="badge-tag">${t}</span>`).join('')}
-          <span class="badge-tag rating-badge ${rawScore ? '' : 'hidden'}" id="hero-rating-${idx}"><i data-lucide="star" style="width:12px; height:12px; fill:#eab308; stroke:#eab308; vertical-align:middle; margin-right:3px;"></i><span class="hero-score-val">${rawScore}</span></span>
+          <span class="badge-tag rating-badge ${ratingText ? '' : 'hidden'}" id="hero-rating-${idx}">${ratingText}</span>
         </div>
         <h1 class="hero-title">${title}</h1>
         <p class="hero-desc">${cleanDesc}</p>
@@ -69,12 +69,10 @@ export function renderHeroBanner(containerOrItems, maybeItems, onReadClick, onDe
         if (meta.bannerImage) {
           slide.style.backgroundImage = `url('${meta.bannerImage}')`;
         }
-        if (meta.ratingFormatted || meta.rating) {
+        if (meta.ratingFormatted) {
           const ratingEl = slide.querySelector(`#hero-rating-${idx}`);
           if (ratingEl) {
-            const valEl = ratingEl.querySelector('.hero-score-val');
-            const val = meta.rating ? meta.rating.toFixed(1) : (meta.ratingFormatted || '').replace(/[^\d.]/g, '').trim();
-            if (valEl) valEl.textContent = val;
+            ratingEl.textContent = meta.ratingFormatted;
             ratingEl.classList.remove('hidden');
           }
         }

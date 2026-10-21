@@ -85,7 +85,7 @@ export function renderAnimeWatchPageMarkup() {
                   <p class="anime-native-title" id="anime-info-native"></p>
                 </div>
                 <div class="anime-badges-row">
-                  <span class="badge-tag rating-badge" id="anime-info-rating"><i data-lucide="star" style="width:12px; height:12px; fill:#eab308; stroke:#eab308; vertical-align:middle; margin-right:3px;"></i> <span id="anime-info-rating-val">--</span></span>
+                  <span class="badge-tag rating-badge" id="anime-info-rating">⭐ --</span>
                   <span class="badge-tag accent" id="anime-info-status">ONGOING</span>
                   <span class="badge-tag" id="anime-info-format">TV</span>
                 </div>
@@ -177,7 +177,7 @@ export function renderAnimeDetails(anime, activeEp = 1) {
   const nativeTitle = typeof anime.title === 'object' 
     ? (anime.title.native || anime.title.english || '') 
     : (anime.titleObj?.native || anime.titleObj?.english || '');
-  const rawScore = anime.rating || (anime.averageScore ? (anime.averageScore / 10).toFixed(1) : '8.0');
+  const score = anime.rating || (anime.averageScore ? `⭐ ${(anime.averageScore / 10).toFixed(1)}` : '⭐ 8.0');
   const status = (anime.status || 'RELEASING').toUpperCase();
   const format = anime.format || 'TV';
   const desc = (anime.description || 'Sinopsis tidak tersedia.').replace(/<[^>]*>/g, ' ');
@@ -202,9 +202,7 @@ export function renderAnimeDetails(anime, activeEp = 1) {
 
   if (titleEl) titleEl.textContent = title;
   if (nativeEl) nativeEl.textContent = nativeTitle;
-  const ratingValEl = document.getElementById('anime-info-rating-val');
-  if (ratingValEl) ratingValEl.textContent = rawScore;
-  else if (ratingEl) ratingEl.innerHTML = `<i data-lucide="star" style="width:12px; height:12px; fill:#eab308; stroke:#eab308; vertical-align:middle; margin-right:3px;"></i> ${rawScore}`;
+  if (ratingEl) ratingEl.textContent = score;
   if (statusEl) statusEl.textContent = status;
   if (formatEl) formatEl.textContent = format;
   if (descEl) descEl.textContent = desc;
@@ -222,7 +220,7 @@ export function renderAnimeDetails(anime, activeEp = 1) {
       crosslinkSlot.innerHTML = `
         <button class="btn-crosslink btn-manga-crosslink" id="btn-watch-manga-crosslink" type="button" title="Baca Sumber Manga: ${mangaTitle}">
           <i data-lucide="book-open"></i>
-          <span>Baca Komik: ${mangaTitle}</span>
+          <span>📖 Baca Komik: ${mangaTitle}</span>
         </button>
       `;
       crosslinkSlot.querySelector('#btn-watch-manga-crosslink')?.addEventListener('click', () => {

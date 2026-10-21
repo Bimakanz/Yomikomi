@@ -554,51 +554,32 @@ export function getMangaTitle(attributes) {
 // Helper: Extract Cover Art URL with Disk Cache & Proxy fallback
 export function getCoverUrl(manga) {
   if (!manga) return 'https://placehold.co/300x420/1e2025/ffffff?text=No+Cover';
-  if (manga.coverUrl && !manga.coverUrl.includes('placehold.co') && !manga.coverUrl.includes('No+Cover')) {
-    return manga.coverUrl;
-  }
-  const mId = manga.id || manga.mangaId;
-  const rawTitle = (typeof manga.title === 'string' && manga.title !== 'undefined' ? manga.title : getMangaTitle(manga.attributes)) || '';
-  const cleanTitle = rawTitle.replace(/\.{2,}/g, '').trim();
-
-  // 1. MangaDex relationship cover_art
+  if (manga.coverUrl) return manga.coverUrl;
   const coverRel = manga.relationships?.find(r => r.type === 'cover_art');
-  if (coverRel?.attributes?.fileName && mId) {
+  if (coverRel?.attributes?.fileName) {
     const fn = coverRel.attributes.fileName;
     const thumbFn = (fn.endsWith('.256.jpg') || fn.endsWith('.512.jpg')) ? fn : `${fn}.512.jpg`;
-    return `/api/cover/${mId}/${thumbFn}?title=${encodeURIComponent(cleanTitle || rawTitle)}`;
+    return `/api/cover/${manga.id}/${thumbFn}`;
   }
-
-  // 2. Persistent CoverCache check (handles both object and string cache)
-  if (mId) {
-    const cached = CoverCache.get(mId);
-    const cachedCover = typeof cached === 'string' ? cached : cached?.coverUrl;
-    if (cachedCover && !cachedCover.includes('placehold.co') && !cachedCover.includes('No+Cover')) {
-      return cachedCover;
-    }
-  }
-
-  // 3. Fallback to API Cover Proxy with clean title
-  if ((mId || cleanTitle) && cleanTitle !== 'Judul Tidak Tersedia') {
-    return `/api/cover/${encodeURIComponent(mId || 'manga')}/cover.jpg?title=${encodeURIComponent(cleanTitle)}`;
-  }
+  const cached = CoverCache.get(manga.id);
+  if (cached?.coverUrl) return cached.coverUrl;
   return 'https://placehold.co/300x420/1e2025/ffffff?text=No+Cover';
 }
 
 // Language Flag Helper
 export function getLanguageFlag(langCode) {
-  if (!langCode) return 'JP';
-  const codes = {
-    ja: 'JP',
-    ko: 'KR',
-    zh: 'CN',
-    'zh-hk': 'HK',
-    en: 'EN',
-    id: 'ID',
-    fr: 'FR',
-    es: 'ES'
+  if (!langCode) return '🇯🇵';
+  const flags = {
+    ja: '🇯🇵',
+    ko: '🇰🇷',
+    zh: '🇨🇳',
+    'zh-hk': '🇭🇰',
+    en: '🇬🇧',
+    id: '🇮🇩',
+    fr: '🇫🇷',
+    es: '🇪🇸'
   };
-  return codes[langCode.toLowerCase()] || (langCode.length <= 3 ? langCode.toUpperCase() : 'RAW');
+  return flags[langCode.toLowerCase()] || '🌐';
 }
 
 // Title normalization for fuzzy matching

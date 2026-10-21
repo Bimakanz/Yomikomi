@@ -94,7 +94,7 @@ export async function renderOfflineLibraryView() {
       coverSrc = m.coverUrl;
     }
 
-    const sourceLabel = m.source === 'english' ? 'English Mirror' : (m.source === 'bacakomik' ? 'Bacakomik Mirror' : 'Server Utama');
+    const sourceLabel = m.source === 'english' ? '🇬🇧 English Mirror' : (m.source === 'bacakomik' ? '🇮🇩 Bacakomik Mirror' : 'Server Utama');
     const isCorruptedOldBatch = m.totalSizeMb === '0.0' || (parseFloat(m.totalSizeMb) === 0);
 
     const card = document.createElement('div');
@@ -105,8 +105,8 @@ export async function renderOfflineLibraryView() {
         <div>
           <div class="offline-card-title" title="${m.title}">${m.title}</div>
           <div class="offline-card-meta">
-            <span><i data-lucide="hard-drive" style="width:13px; height:13px; vertical-align:middle; margin-right:3px;"></i>${m.chaptersCount} Chapter Terunduh (${m.totalSizeMb} MB) ${isCorruptedOldBatch ? '<span style="color:#f87171; font-weight:600; margin-left:0.3rem;"><i data-lucide="alert-triangle" style="width:12px; height:12px; vertical-align:middle; margin-right:2px;"></i>Perlu Unduh Ulang</span>' : ''}</span>
-            <span><i data-lucide="globe" style="width:13px; height:13px; vertical-align:middle; margin-right:3px;"></i>Sumber: ${sourceLabel}</span>
+            <span>💾 ${m.chaptersCount} Chapter Terunduh (${m.totalSizeMb} MB) ${isCorruptedOldBatch ? '<span style="color:#f87171; font-weight:600; margin-left:0.3rem;">⚠️ Perlu Unduh Ulang</span>' : ''}</span>
+            <span>🌐 Sumber: ${sourceLabel}</span>
           </div>
         </div>
         <div class="offline-card-actions">

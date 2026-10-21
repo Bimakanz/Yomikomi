@@ -277,178 +277,6 @@ function fetchMangaDex(pathStr) {
 // ==========================================
 
 // 1. Popular / Trending Manga
-const MANGADEX_POPULAR_SNAPSHOT = [
-  {
-    id: "a7774250-d070-494f-9260-f8232f35213b",
-    type: "manga",
-    attributes: {
-      title: { en: "Chainsaw Man" },
-      description: { en: "Denji's life of poverty is turned upside down when he merges with his pet devil-dog, Pochita!" },
-      status: "ongoing",
-      contentRating: "suggestive",
-      availableTranslatedLanguages: ["en", "id", "ja"]
-    },
-    relationships: [{ type: "cover_art", attributes: { fileName: "81f9b071-ca36-40e9-b57f-d31e582e0e18.jpg" } }],
-    coverUrl: "https://s4.anilist.co/file/anilistcdn/media/manga/cover/medium/bx105778-euxXZEIfDY2u.png",
-    source: "mangadex"
-  },
-  {
-    id: "c52b2ce3-7f95-469c-96b0-474fb724fb76",
-    type: "manga",
-    attributes: {
-      title: { en: "Jujutsu Kaisen" },
-      description: { en: "Yuji Itadori swallows a cursed talisman and finds himself in the world of Jujutsu Sorcerers." },
-      status: "completed",
-      contentRating: "safe",
-      availableTranslatedLanguages: ["en", "id", "ja"]
-    },
-    relationships: [{ type: "cover_art", attributes: { fileName: "32eb7a4d-0453-4318-9717-b61ec084f04d.jpg" } }],
-    coverUrl: "https://s4.anilist.co/file/anilistcdn/media/manga/cover/medium/bx101517-5nFd8b6zmwCj.jpg",
-    source: "mangadex"
-  },
-  {
-    id: "b0b721ff-c388-4486-aa0f-c8b0e921824b",
-    type: "manga",
-    attributes: {
-      title: { en: "Sousou no Frieren" },
-      description: { en: "The elf mage Frieren begins a new journey after the hero's party defeated the Demon King." },
-      status: "ongoing",
-      contentRating: "safe",
-      availableTranslatedLanguages: ["en", "id", "ja"]
-    },
-    relationships: [{ type: "cover_art", attributes: { fileName: "a75871b6-7f1c-4da6-8fcf-ad12b489a5ad.jpg" } }],
-    coverUrl: "https://s4.anilist.co/file/anilistcdn/media/manga/cover/medium/bx118586-sI8Owe5Nlq4M.jpg",
-    source: "mangadex"
-  },
-  {
-    id: "296cbc31-af1a-4b58-a4ef-02ba508d49a3",
-    type: "manga",
-    attributes: {
-      title: { en: "【OSHI NO KO】" },
-      description: { en: "A doctor and his recently-deceased patient are reborn as the twin children of their favorite idol." },
-      status: "completed",
-      contentRating: "safe",
-      availableTranslatedLanguages: ["en", "id", "ja"]
-    },
-    relationships: [{ type: "cover_art", attributes: { fileName: "60bf806f-4d92-4f96-be6d-6ee5e7fc243d.jpg" } }],
-    coverUrl: "https://s4.anilist.co/file/anilistcdn/media/manga/cover/medium/bx117195-k8L209U1hS9T.jpg",
-    source: "mangadex"
-  },
-  {
-    id: "32d76d19-8a05-4db0-9fc2-e0b0648fe9d0",
-    type: "manga",
-    attributes: {
-      title: { en: "Solo Leveling" },
-      description: { en: "Sung Jin-Woo awakens as the world's only player able to see an interface that lets him level up." },
-      status: "completed",
-      contentRating: "safe",
-      availableTranslatedLanguages: ["en", "id", "ko"]
-    },
-    relationships: [{ type: "cover_art", attributes: { fileName: "1b2b8c9e-5b12-4e89-a2e6-764f69741c88.jpg" } }],
-    coverUrl: "https://s4.anilist.co/file/anilistcdn/media/manga/cover/medium/bx105398-b673TaPprNUp.jpg",
-    source: "mangadex"
-  },
-  {
-    id: "423f2ec4-94e8-48a8-a42e-132d32786a7d",
-    type: "manga",
-    attributes: {
-      title: { en: "Dandadan" },
-      description: { en: "An action-packed occult comedy about ghosts, aliens, and high school romance." },
-      status: "ongoing",
-      contentRating: "suggestive",
-      availableTranslatedLanguages: ["en", "id", "ja"]
-    },
-    relationships: [{ type: "cover_art", attributes: { fileName: "4dcbc465-38b4-4e9b-b565-d0ff785cf61e.jpg" } }],
-    coverUrl: "https://s4.anilist.co/file/anilistcdn/media/manga/cover/medium/bx132029-7J6N1kRk0e0M.jpg",
-    source: "mangadex"
-  },
-  {
-    id: "a1c7c817-4e59-43b7-9365-09675a149a6f",
-    type: "manga",
-    attributes: {
-      title: { en: "One Piece" },
-      description: { en: "Monkey D. Luffy sets out to find the legendary treasure One Piece and become the Pirate King." },
-      status: "ongoing",
-      contentRating: "safe",
-      availableTranslatedLanguages: ["en", "id", "ja"]
-    },
-    relationships: [{ type: "cover_art", attributes: { fileName: "87c94ebc-25d2-4467-938d-dc776bf7eb58.jpg" } }],
-    coverUrl: "https://s4.anilist.co/file/anilistcdn/media/manga/cover/medium/bx30013-ulmsSPjWBPut.png",
-    source: "mangadex"
-  },
-  {
-    id: "6e3553b9-ddb5-478f-b522-42480f0d250b",
-    type: "manga",
-    attributes: {
-      title: { en: "Spy x Family" },
-      description: { en: "A spy creates a fake family for his mission, unaware his wife is an assassin and his daughter a telepath." },
-      status: "ongoing",
-      contentRating: "safe",
-      availableTranslatedLanguages: ["en", "id", "ja"]
-    },
-    relationships: [{ type: "cover_art", attributes: { fileName: "7f5d4750-f8fa-4a37-b95b-06e9ec1914eb.jpg" } }],
-    coverUrl: "https://s4.anilist.co/file/anilistcdn/media/manga/cover/medium/bx108556-BexxSgqGvFzX.jpg",
-    source: "mangadex"
-  },
-  {
-    id: "801513ba-a712-498b-87de-7909758d55ac",
-    type: "manga",
-    attributes: {
-      title: { en: "Berserk" },
-      description: { en: "Guts, a former mercenary known as the 'Black Swordsman', is out for revenge." },
-      status: "ongoing",
-      contentRating: "suggestive",
-      availableTranslatedLanguages: ["en", "id", "ja"]
-    },
-    relationships: [{ type: "cover_art", attributes: { fileName: "a1cb5e3f-6799-4d64-b0a6-169bbf977e23.jpg" } }],
-    coverUrl: "https://s4.anilist.co/file/anilistcdn/media/manga/cover/medium/bx30002-3mN5hGk9rL4N.jpg",
-    source: "mangadex"
-  },
-  {
-    id: "2cbdab16-8679-46f3-a444-2439a2632b4b",
-    type: "manga",
-    attributes: {
-      title: { en: "Blue Lock" },
-      description: { en: "300 high school forwards compete in an isolated training facility to become Japan's greatest striker." },
-      status: "ongoing",
-      contentRating: "safe",
-      availableTranslatedLanguages: ["en", "id", "ja"]
-    },
-    relationships: [{ type: "cover_art", attributes: { fileName: "b45455ea-3610-449e-953b-e3c31fc2aaae.jpg" } }],
-    coverUrl: "https://s4.anilist.co/file/anilistcdn/media/manga/cover/medium/bx106130-i4Jk0Z04d0n4.jpg",
-    source: "mangadex"
-  },
-  {
-    id: "11c65d6c-6a10-4497-a61d-65231c5eeff6",
-    type: "manga",
-    attributes: {
-      title: { en: "Kaiju No. 8" },
-      description: { en: "Kafka Hibino gains the power to turn into a kaiju and uses it to join the Defense Force." },
-      status: "ongoing",
-      contentRating: "safe",
-      availableTranslatedLanguages: ["en", "id", "ja"]
-    },
-    relationships: [{ type: "cover_art", attributes: { fileName: "2d5c2e2e-8c34-4a43-9844-32b5003ea29e.jpg" } }],
-    coverUrl: "https://s4.anilist.co/file/anilistcdn/media/manga/cover/medium/bx120760-4K8P1X2M5A2S.jpg",
-    source: "mangadex"
-  },
-  {
-    id: "5d63ce89-99f8-42f2-85c3-8f0691475734",
-    type: "manga",
-    attributes: {
-      title: { en: "Vinland Saga" },
-      description: { en: "Thorfinn pursues revenge against the Viking leader who murdered his father." },
-      status: "ongoing",
-      contentRating: "suggestive",
-      availableTranslatedLanguages: ["en", "id", "ja"]
-    },
-    relationships: [{ type: "cover_art", attributes: { fileName: "2bc1c52b-7c1e-450f-a42e-cf6151f49615.jpg" } }],
-    coverUrl: "https://s4.anilist.co/file/anilistcdn/media/manga/cover/medium/bx30642-NknK6E2H7eE5.jpg",
-    source: "mangadex"
-  }
-];
-
-// 1. Popular / Trending Manga (Pure MangaDex source for trending and hero carousel)
 app.get('/api/popular', async (req, res) => {
   try {
     const cacheKey = 'popular_manga';
@@ -457,23 +285,11 @@ app.get('/api/popular', async (req, res) => {
     if (cached) return res.json(cached);
 
     const data = await fetchMangaDex('/manga?limit=24&includes[]=cover_art&includes[]=author&order[followedCount]=desc&contentRating[]=safe&contentRating[]=suggestive');
-    if (data && Array.isArray(data.data) && data.data.length > 0) {
-      setCache(cacheKey, data, CACHE_TTL.popular);
-      return res.json(data);
-    }
-    // Fallback to verified MangaDex snapshot if empty response
-    const fallbackData = { result: 'ok', response: 'collection', data: MANGADEX_POPULAR_SNAPSHOT };
-    setCache(cacheKey, fallbackData, CACHE_TTL.popular);
-    return res.json(fallbackData);
+    setCache(cacheKey, data, CACHE_TTL.popular);
+    res.json(data);
   } catch (error) {
-    console.error('Error fetching popular manga from MangaDex:', error.message);
-    const cached = getCache('popular_manga');
-    if (cached) return res.json(cached);
-
-    // Guaranteed pure MangaDex response when MangaDex API is in maintenance
-    const fallbackData = { result: 'ok', response: 'collection', data: MANGADEX_POPULAR_SNAPSHOT };
-    setCache('popular_manga', fallbackData, CACHE_TTL.popular);
-    return res.json(fallbackData);
+    console.error('Error fetching popular manga:', error.message);
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -490,46 +306,6 @@ app.get('/api/latest', async (req, res) => {
     res.json(data);
   } catch (error) {
     console.error('Error fetching latest manga:', error.message);
-    const cached = getCache('latest_manga');
-    if (cached) return res.json(cached);
-
-    try {
-      const html = await fetchExternalHtml('https://komiku.org/');
-      const $ = cheerio.load(html);
-      const items = [];
-      $('.ls2, .ls4, .ls12').each((_, el) => {
-        const a = $(el).find('a').first();
-        const href = a.attr('href') || '';
-        const rawTitle = $(el).find('h4, h3, .tt').first().text().trim() || a.attr('title') || '';
-        const img = $(el).find('img').first().attr('data-src') || $(el).find('img').first().attr('src') || '';
-        const latestCh = $(el).find('.epx, .lsch, .chapter').first().text().trim();
-        if (href && rawTitle) {
-          const slug = href.replace(/\/+$/, '').split('/').pop();
-          if (!items.some(r => r.slug === slug)) {
-            const title = rawTitle.replace(/^Komik\s*/i, '').trim();
-            items.push({
-              id: `komiku-${slug}`,
-              slug,
-              title,
-              type: 'manga',
-              attributes: {
-                title: { en: title, id: title },
-                description: { id: 'Manga rilis chapter terbaru.', en: 'Latest released manga chapter.' },
-                status: 'ongoing',
-                lastChapter: latestCh || 'Update',
-                availableTranslatedLanguages: ['id', 'en']
-              },
-              coverUrl: img ? `/api/proxy-image?url=${encodeURIComponent(img)}` : '',
-              source: 'komiku'
-            });
-          }
-        }
-      });
-      if (items.length > 0) {
-        return res.json({ data: items.slice(0, 24) });
-      }
-    } catch (e) {}
-
     res.status(500).json({ error: error.message });
   }
 });
@@ -538,18 +314,17 @@ app.get('/api/latest', async (req, res) => {
 app.get('/api/search', async (req, res) => {
   try {
     const query = req.query.q || '';
-    const limit = Math.min(parseInt(req.query.limit) || 20, 100);
-    const offset = Math.max(parseInt(req.query.offset) || 0, 0);
+    const limit = parseInt(req.query.limit) || 20;
     const tag = req.query.tag || '';
     const lang = req.query.lang || '';
     const order = req.query.order || (tag ? 'followedCount' : '');
 
-    const cacheKey = `search_${query}_${limit}_${offset}_${tag}_${lang}_${order}`;
+    const cacheKey = `search_${query}_${limit}_${tag}_${lang}_${order}`;
     const cached = getCache(cacheKey);
     res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
     if (cached) return res.json(cached);
 
-    let endpoint = `/manga?limit=${limit}&offset=${offset}&includes[]=cover_art&includes[]=author`;
+    let endpoint = `/manga?limit=${limit}&includes[]=cover_art&includes[]=author`;
     
     // Explicit tag/content handling for Hentai, Erotica, and full catalog search
     if (tag === 'hentai' || tag === 'content_rating_pornographic') {
@@ -589,7 +364,7 @@ app.get('/api/search', async (req, res) => {
     res.json(data);
   } catch (error) {
     console.error('Error searching manga:', error.message);
-    res.json({ data: [], error: error.message });
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -868,119 +643,12 @@ app.get('/api/cover/:mangaId/:filename', (req, res) => {
       if (!coverData) {
         try {
           const wsrvUrl = `https://wsrv.nl/?url=https://uploads.mangadex.org/covers/${mangaId}/${filename}&output=jpg&q=80`;
-          const wsrvRes = await fetch(wsrvUrl, { signal: AbortSignal.timeout(4000) });
+          const wsrvRes = await fetch(wsrvUrl, { signal: AbortSignal.timeout(5000) });
           if (wsrvRes.ok) {
             const arrBuf = await wsrvRes.arrayBuffer();
             coverData = { buffer: Buffer.from(arrBuf), contentType: 'image/jpeg' };
           }
         } catch (e3) {}
-      }
-
-      // Fallback 3: AniList High-Resolution Cover Art by Title & MangaDex API lookup
-      if (!coverData) {
-        try {
-          let searchTitle = (req.query.title || '').trim();
-          if (!searchTitle) {
-            for (const [key, val] of cache.entries()) {
-              if (val && Array.isArray(val.data)) {
-                const found = val.data.find(m => m && m.id === mangaId);
-                if (found) {
-                  const t = found.title || found.attributes?.title;
-                  if (typeof t === 'string') searchTitle = t;
-                  else if (typeof t === 'object' && t !== null) searchTitle = t.en || t.id || t.romaji || Object.values(t)[0];
-                  if (searchTitle) break;
-                }
-              }
-            }
-          }
-
-          // If still no title and mangaId looks like a MangaDex UUID, query MangaDex API directly
-          if (!searchTitle && mangaId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(mangaId)) {
-            try {
-              const mdManga = await fetchMangaDex(`/manga/${mangaId}?includes[]=cover_art`);
-              if (mdManga?.data) {
-                const t = mdManga.data.attributes?.title;
-                if (t) searchTitle = t.en || t.ja || t['ja-ro'] || Object.values(t)[0] || '';
-                const covRel = mdManga.data.relationships?.find(r => r.type === 'cover_art');
-                if (covRel?.attributes?.fileName) {
-                  try {
-                    const fn = covRel.attributes.fileName;
-                    coverData = await fetchMangaDexCover(`${fn}.512.jpg`);
-                  } catch (eCov) {}
-                }
-              }
-            } catch (eMd) {}
-          }
-
-          if (!coverData && searchTitle) {
-            // Clean title: remove trailing dots, brackets, and extra spaces
-            let cleanSearchTitle = searchTitle
-              .replace(/\.{2,}/g, ' ')
-              .replace(/[\[\(][^\]\)]*[\]\)]/g, ' ')
-              .replace(/\s+/g, ' ')
-              .trim();
-
-            const gqlQuery = `query ($s: String) { Media(search: $s, type: MANGA) { title { romaji english } coverImage { large medium } } }`;
-            const queryAniList = async (t) => {
-              try {
-                const alRes = await fetch('https://graphql.anilist.co', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
-                  },
-                  body: JSON.stringify({ query: gqlQuery, variables: { s: t } }),
-                  signal: AbortSignal.timeout(4500)
-                });
-                if (!alRes.ok) return null;
-                const alJson = await alRes.json();
-                return alJson.data?.Media?.coverImage?.large || alJson.data?.Media?.coverImage?.medium || null;
-              } catch {
-                return null;
-              }
-            };
-
-            let alImgUrl = await queryAniList(cleanSearchTitle);
-
-            // If direct search failed and title was truncated (e.g. ended with incomplete word like "datt")
-            if (!alImgUrl) {
-              const words = cleanSearchTitle.split(' ');
-              if (words.length > 2) {
-                const shorter = words.slice(0, words.length - 1).join(' ');
-                alImgUrl = await queryAniList(shorter);
-              }
-            }
-
-            if (alImgUrl) {
-              res.setHeader('Cache-Control', 'public, max-age=2592000, s-maxage=2592000, stale-while-revalidate=86400');
-              return res.redirect(302, alImgUrl);
-            }
-          }
-        } catch (eAl) {}
-      }
-
-      // Fallback 4: ComicK Search API
-      if (!coverData) {
-        try {
-          const rawTitle = (req.query.title || '').replace(/\.{2,}/g, ' ').replace(/[\[\(][^\]\)]*[\]\)]/g, ' ').trim();
-          if (rawTitle) {
-            const cmkRes = await fetch(`https://api.comick.fun/v1.0/search?q=${encodeURIComponent(rawTitle)}&limit=1`, {
-              headers: { 'User-Agent': 'Mozilla/5.0' },
-              signal: AbortSignal.timeout(4000)
-            });
-            if (cmkRes.ok) {
-              const cmkJson = await cmkRes.json();
-              const first = Array.isArray(cmkJson) ? cmkJson[0] : cmkJson?.data?.[0];
-              const cmkCover = first?.md_covers?.[0]?.b2key || first?.cover_url;
-              if (cmkCover) {
-                const fullCmkUrl = cmkCover.startsWith('http') ? cmkCover : `https://meo.comick.pictures/${cmkCover}`;
-                res.setHeader('Cache-Control', 'public, max-age=2592000, s-maxage=2592000, stale-while-revalidate=86400');
-                return res.redirect(302, fullCmkUrl);
-              }
-            }
-          }
-        } catch (eCmk) {}
       }
 
       if (coverData && coverData.buffer && coverData.buffer.length > 500) {
@@ -994,40 +662,10 @@ app.get('/api/cover/:mangaId/:filename', (req, res) => {
         return res.end(coverData.buffer);
       }
 
-      // Fallback 5: Dynamic Sleek SVG Card Placeholder (Never broken ugly text box)
-      const displayTitle = (req.query.title || 'Manga').replace(/\.{2,}/g, '').trim().slice(0, 26);
-      const safeTitleSvg = displayTitle.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]));
-      const fallbackSvg = Buffer.from(
-        `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="420" viewBox="0 0 300 420">` +
-        `<defs><linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#181922"/><stop offset="100%" stop-color="#0e1017"/></linearGradient></defs>` +
-        `<rect width="300" height="420" rx="14" fill="url(#bg)"/>` +
-        `<rect x="1" y="1" width="298" height="418" rx="13" fill="none" stroke="#252733" stroke-width="1.5"/>` +
-        `<circle cx="150" cy="175" r="42" fill="#20222e"/>` +
-        `<path d="M136 164h28a6 6 0 0 1 6 6v26a6 6 0 0 0-6-6h-28a6 6 0 0 0-6 6v-26a6 6 0 0 1 6-6z" fill="none" stroke="#ff4757" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>` +
-        `<text x="150" y="255" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="600" fill="#a0a5b8" text-anchor="middle">${safeTitleSvg}</text>` +
-        `</svg>`
-      );
-      res.writeHead(200, {
-        'Content-Type': 'image/svg+xml; charset=utf-8',
-        'Cache-Control': 'public, max-age=86400'
-      });
-      return res.end(fallbackSvg);
+      // Fallback 3: Clean placeholder image
+      res.redirect(302, 'https://placehold.co/300x420/1e2025/ffffff?text=Cover');
     } catch (err) {
-      const displayTitle = (req.query.title || 'Manga').replace(/\.{2,}/g, '').trim().slice(0, 26);
-      const safeTitleSvg = displayTitle.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]));
-      const fallbackSvg = Buffer.from(
-        `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="420" viewBox="0 0 300 420">` +
-        `<defs><linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#181922"/><stop offset="100%" stop-color="#0e1017"/></linearGradient></defs>` +
-        `<rect width="300" height="420" rx="14" fill="url(#bg)"/>` +
-        `<circle cx="150" cy="175" r="42" fill="#20222e"/>` +
-        `<text x="150" y="255" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="600" fill="#a0a5b8" text-anchor="middle">${safeTitleSvg}</text>` +
-        `</svg>`
-      );
-      res.writeHead(200, {
-        'Content-Type': 'image/svg+xml; charset=utf-8',
-        'Cache-Control': 'public, max-age=86400'
-      });
-      return res.end(fallbackSvg);
+      res.redirect(302, 'https://placehold.co/300x420/1e2025/ffffff?text=Cover');
     }
   })();
 });
@@ -1347,9 +985,6 @@ app.get(['/api/proxy-image', '/api/proxy/image'], async (req, res) => {
       }
       if (h.includes('komiku.org') || h.includes('komiku.to') || h.includes('komiku')) {
         return 'https://komiku.org/';
-      }
-      if (h.includes('comick.art') || h.includes('comick') || h.includes('comicknew.pictures')) {
-        return 'https://comick.art/';
       }
       return `${u.protocol}//${u.host}/`;
     }
@@ -1755,7 +1390,7 @@ async function fetchAniListGraphQL(title, mediaType = 'MANGA', mediaId = null) {
           const media = json.data?.Media;
           if (media) {
             const rating = typeof media.averageScore === 'number' ? Math.round((media.averageScore / 10) * 10) / 10 : null;
-            const ratingFormatted = rating ? rating.toFixed(1) : null;
+            const ratingFormatted = rating ? `⭐ ${rating.toFixed(1)}` : null;
 
             // Extract cross-relations (Anime <-> Manga)
             const relations = (media.relations?.edges || []).map(edge => ({
@@ -2024,13 +1659,11 @@ app.get('/api/komiku/search', async (req, res) => {
 // 2. Latest Releases on Komiku
 app.get('/api/komiku/latest', async (req, res) => {
   try {
-    const page = Math.max(parseInt(req.query.page) || 1, 1);
-    const cacheKey = `komiku_latest_p${page}`;
+    const cacheKey = 'komiku_latest';
     const cached = getCache(cacheKey);
     if (cached) return res.json(cached);
 
-    const targetUrl = page > 1 ? `https://komiku.org/page/${page}/` : 'https://komiku.org/';
-    const html = await fetchExternalHtml(targetUrl);
+    const html = await fetchExternalHtml('https://komiku.org/');
     const $ = cheerio.load(html);
     const results = [];
 
@@ -2062,7 +1695,7 @@ app.get('/api/komiku/latest', async (req, res) => {
       }
     });
 
-    const response = { source: 'komiku', page, total: results.length, data: results };
+    const response = { source: 'komiku', total: results.length, data: results };
     setCache(cacheKey, response, CACHE_TTL.latest);
     res.json(response);
   } catch (err) {
@@ -2416,137 +2049,6 @@ app.get('/api/external/en/chapter-pages', async (req, res) => {
     });
   } catch (err) {
     res.json({ pages: [], error: err.message });
-  }
-});
-
-// ==========================================
-// COMICK PROVIDER (Consumet ComicK Engine)
-// ==========================================
-let comickProvider = null;
-try {
-  const { MANGA } = require('@consumet/extensions');
-  if (MANGA?.ComicK) {
-    comickProvider = new MANGA.ComicK();
-    console.log('⚡ ComicK Consumet Provider ACTIVE!');
-  }
-} catch (e) {
-  console.warn('Consumet ComicK init failed:', e.message);
-}
-
-app.get('/api/comick/search', async (req, res) => {
-  try {
-    const q = (req.query.q || req.query.query || '').trim();
-    if (!q) return res.json({ data: [] });
-    if (!comickProvider) return res.json({ data: [] });
-
-    const cacheKey = `comick_search_${q.toLowerCase()}`;
-    const cached = getCache(cacheKey);
-    if (cached) return res.json(cached);
-
-    const searchResult = await comickProvider.search(q);
-    const rawList = searchResult.results || (Array.isArray(searchResult) ? searchResult : []);
-    const items = rawList.map(item => ({
-      id: `comick-${item.id}`,
-      slug: item.id,
-      title: item.title,
-      coverUrl: item.image,
-      source: 'comick',
-      mediaType: 'manga'
-    }));
-
-    const payload = { source: 'comick', total: items.length, data: items };
-    setCache(cacheKey, payload, CACHE_TTL.search);
-    res.json(payload);
-  } catch (err) {
-    console.error('ComicK search error:', err.message);
-    res.json({ data: [], error: err.message });
-  }
-});
-
-app.get('/api/comick/manga/:slug', async (req, res) => {
-  try {
-    const slug = req.params.slug.replace(/^comick-/, '');
-    if (!comickProvider) return res.status(503).json({ error: 'ComicK provider not available' });
-
-    const cacheKey = `comick_manga_${slug}`;
-    const cached = getCache(cacheKey);
-    if (cached) return res.json(cached);
-
-    const info = await comickProvider.fetchMangaInfo(slug);
-    const chapters = (info.chapters || []).map((ch, idx) => {
-      const chNum = ch.chapterNumber ? parseFloat(ch.chapterNumber) : (idx + 1);
-      const chNumStr = String(ch.chapterNumber || idx + 1);
-
-      // Clean title: If title equals chapter number or is empty, normalize to "Chapter X"
-      const rawTitle = (ch.title || '').trim();
-      const isRedundant = !rawTitle || 
-        rawTitle === chNumStr || 
-        rawTitle.toLowerCase() === `chapter ${chNumStr}` ||
-        /^\d+(\.\d+)?$/.test(rawTitle);
-
-      const hasArabic = /[\u0600-\u06FF]/.test(rawTitle);
-
-      let cleanTitle = `Chapter ${chNumStr}`;
-      let subTitle = '';
-      if (!isRedundant && !hasArabic) {
-        subTitle = rawTitle;
-        cleanTitle = `Chapter ${chNumStr}: ${rawTitle}`;
-      }
-
-      return {
-        id: ch.id,
-        number: isNaN(chNum) ? (idx + 1) : chNum,
-        chapterNumStr: chNumStr,
-        title: cleanTitle,
-        subTitle,
-        releaseDate: '',
-        language: ch.lang || 'en',
-        source: 'comick',
-        scanlationGroup: ''
-      };
-    });
-
-    const payload = {
-      id: `comick-${slug}`,
-      slug,
-      title: info.title,
-      coverUrl: info.image,
-      synopsis: info.description || '',
-      status: info.status || 'ONGOING',
-      chapters
-    };
-
-    setCache(cacheKey, payload, CACHE_TTL.chapters);
-    res.json(payload);
-  } catch (err) {
-    console.error(`ComicK detail error for ${req.params.slug}:`, err.message);
-    res.status(500).json({ error: err.message, chapters: [] });
-  }
-});
-
-app.get('/api/comick/chapter-pages', async (req, res) => {
-  try {
-    const chapterId = (req.query.chapterId || req.query.id || req.query.url || '').trim();
-    if (!chapterId) return res.json({ pages: [] });
-    if (!comickProvider) return res.status(503).json({ error: 'ComicK provider not available' });
-
-    const cacheKey = `comick_pages_${chapterId}`;
-    const cached = getCache(cacheKey);
-    if (cached) return res.json(cached);
-
-    const pagesResult = await comickProvider.fetchChapterPages(chapterId);
-    const rawPages = (pagesResult || [])
-      .map(p => (p && typeof p === 'object' ? (p.img || p.imageUrl || p.url) : p))
-      .filter(Boolean);
-    // Proxy through /api/proxy-image so cdn1.comicknew.pictures receives Referer: https://comick.art/ and returns 200 OK
-    const pages = rawPages.map(url => `/api/proxy-image?url=${encodeURIComponent(url)}`);
-    const payload = { pages, total: pages.length };
-
-    setCache(cacheKey, payload, CACHE_TTL.atHome);
-    res.json(payload);
-  } catch (err) {
-    console.error('ComicK chapter pages error:', err.message);
-    res.status(500).json({ error: err.message, pages: [] });
   }
 });
 

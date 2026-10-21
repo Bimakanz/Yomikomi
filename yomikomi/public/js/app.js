@@ -854,43 +854,29 @@ function getCoverUrl(manga) {
   if (!manga) return 'https://placehold.co/300x420/1e2025/ffffff?text=No+Cover';
 
   // 1. Direct coverUrl property
-  if (manga.coverUrl && typeof manga.coverUrl === 'string' && !manga.coverUrl.includes('No+Cover') && !manga.coverUrl.includes('placehold.co')) {
+  if (manga.coverUrl && typeof manga.coverUrl === 'string' && !manga.coverUrl.includes('No+Cover')) {
     return manga.coverUrl;
   }
 
   // 2. Direct coverUrl inside attributes
-  if (manga.attributes?.coverUrl && typeof manga.attributes.coverUrl === 'string' && !manga.attributes.coverUrl.includes('No+Cover') && !manga.attributes.coverUrl.includes('placehold.co')) {
+  if (manga.attributes?.coverUrl && typeof manga.attributes.coverUrl === 'string' && !manga.attributes.coverUrl.includes('No+Cover')) {
     return manga.attributes.coverUrl;
   }
-
-  const mId = manga.id || manga.mangaId;
-  const rawTitle = manga.attributes ? getMangaTitle(manga.attributes) : (manga.title || '');
-  const cleanTitle = (typeof rawTitle === 'string' ? rawTitle : '').replace(/\.{2,}/g, '').trim();
 
   // 3. MangaDex style relationship cover_art
   const coverRel = manga.relationships?.find(r => r.type === 'cover_art');
   const fileName = coverRel?.attributes?.fileName;
-  if (fileName && mId) {
+  if (fileName) {
     if (fileName.startsWith('http') || fileName.startsWith('/')) {
       return fileName;
     }
-    const thumbFn = (fileName.endsWith('.256.jpg') || fileName.endsWith('.512.jpg')) ? fileName : `${fileName}.512.jpg`;
-    return `/api/cover/${mId}/${thumbFn}?title=${encodeURIComponent(cleanTitle || rawTitle)}`;
+    return `/api/cover/${manga.id}/${fileName}.512.jpg`;
   }
 
   // 4. Check CoverCache
-  if (mId) {
-    const cached = CoverCache.get(mId, cleanTitle);
-    const cachedCover = typeof cached === 'string' ? cached : cached?.coverUrl;
-    if (cachedCover && !cachedCover.includes('No+Cover') && !cachedCover.includes('placehold.co')) {
-      return cachedCover;
-    }
-  }
-
-  // 5. API Cover Proxy fallback with title
-  if ((mId || cleanTitle) && cleanTitle !== 'Judul Tidak Tersedia') {
-    return `/api/cover/${encodeURIComponent(mId || 'manga')}/cover.jpg?title=${encodeURIComponent(cleanTitle || 'Manga')}`;
-  }
+  const title = manga.attributes ? getMangaTitle(manga.attributes) : (manga.title || '');
+  const cached = CoverCache.get(manga.id, title);
+  if (cached) return cached;
 
   return 'https://placehold.co/300x420/1e2025/ffffff?text=No+Cover';
 }

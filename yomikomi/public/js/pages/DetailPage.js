@@ -52,11 +52,11 @@ export function renderDetailPageMarkup() {
             <div class="chapters-header-controls">
               <div class="lang-filter-tabs" id="chapter-lang-tabs">
                 <button class="lang-filter-tab active" data-lang="id" id="tab-lang-id" type="button" title="Chapter Bahasa Indonesia (Gabungan MangaDex & Komiku)">
-                  <span class="lang-tab-label">Indonesia</span>
+                  <span class="lang-tab-label">🇮🇩 Indonesia</span>
                   <span class="lang-count-badge" id="lang-count-id">0</span>
                 </button>
                 <button class="lang-filter-tab" data-lang="en" id="tab-lang-en" type="button" title="Chapter English (MangaDex & Mirror)">
-                  <span class="lang-tab-label">English</span>
+                  <span class="lang-tab-label">🇬🇧 English</span>
                   <span class="lang-count-badge" id="lang-count-en">0</span>
                 </button>
               </div>
@@ -170,7 +170,7 @@ export function renderMangaDetailHero(manga) {
       slot.innerHTML = `
         <button class="btn-crosslink btn-anime-crosslink" id="btn-detail-anime-crosslink" type="button" title="Tonton Adaptasi Anime: ${meta.relatedAnime.title?.romaji || ''}">
           <i data-lucide="film"></i>
-          <span>Tonton Anime</span>
+          <span>🎬 Tonton Anime</span>
         </button>
       `;
       slot.querySelector('#btn-detail-anime-crosslink')?.addEventListener('click', () => {
@@ -183,7 +183,7 @@ export function renderMangaDetailHero(manga) {
       slot.innerHTML = `
         <button class="btn-crosslink btn-manga-crosslink" id="btn-detail-manga-crosslink" type="button" title="Baca Sumber Manga: ${meta.relatedManga.title?.romaji || ''}">
           <i data-lucide="book-open"></i>
-          <span>Baca Komik</span>
+          <span>📖 Baca Komik</span>
         </button>
       `;
       slot.querySelector('#btn-detail-manga-crosslink')?.addEventListener('click', () => {
@@ -368,78 +368,12 @@ export async function openMangaDetail(mangaId, maybeMangaData = null) {
     }
   }
 
-  const isComicK = (typeof mangaId === 'string' && mangaId.startsWith('comick-')) || maybeMangaData?.source === 'comick';
-
-  if (isComicK) {
-    const slug = (maybeMangaData?.slug || mangaId).replace(/^comick-/, '');
-    state.currentSource = 'comick';
-
-    if (maybeMangaData) {
-      state.currentManga = {
-        id: `comick-${slug}`,
-        slug,
-        comickSlug: slug,
-        source: 'comick',
-        title: maybeMangaData.title,
-        coverUrl: maybeMangaData.coverUrl,
-        attributes: {
-          title: { en: maybeMangaData.title, id: maybeMangaData.title },
-          description: { en: maybeMangaData.synopsis || 'Memuat sinopsis komik...', id: maybeMangaData.synopsis || '' },
-          status: maybeMangaData.status || 'ONGOING',
-          tags: []
-        }
-      };
-      renderMangaDetailHero(state.currentManga);
-    } else if (heroContent) {
-      heroContent.innerHTML = `<div class="spinner" style="margin: 3rem auto;"></div>`;
-    }
-
-    if (chaptersList) {
-      chaptersList.innerHTML = `<div class="spinner" style="margin: 2rem auto;"></div>`;
-    }
-
-    loadUnifiedChapters(mangaId, state.currentManga);
-
-    try {
-      const cRes = await fetch(`/api/comick/manga/${encodeURIComponent(slug)}`);
-      const cData = await cRes.json();
-      if (cData && cData.title) {
-        state.currentManga = {
-          id: `comick-${slug}`,
-          slug,
-          comickSlug: slug,
-          source: 'comick',
-          title: cData.title,
-          coverUrl: cData.coverUrl,
-          attributes: {
-            title: { en: cData.title, id: cData.title },
-            description: { en: cData.synopsis, id: cData.synopsis },
-            status: cData.status,
-            tags: []
-          }
-        };
-        CoverCache.set(`comick-${slug}`, cData.title, cData.coverUrl);
-        setMangaDetailCached(mangaId, state.currentManga);
-        renderMangaDetailHero(state.currentManga);
-        loadUnifiedChapters(mangaId, state.currentManga, null, cData.chapters);
-        return;
-      }
-    } catch (cErr) {
-      console.error('Failed to load ComicK details:', cErr);
-    }
-  }
-
   // MangaDex or standard manga
   const existing = maybeMangaData || state.mangaList?.find(m => m.id === mangaId);
   const preservedKomikuSlug = maybeMangaData?.komikuSlug || existing?.komikuSlug;
-  const preservedComickSlug = maybeMangaData?.comickSlug || existing?.comickSlug;
 
   if (existing) {
-    state.currentManga = {
-      ...existing,
-      ...(preservedKomikuSlug ? { komikuSlug: preservedKomikuSlug } : {}),
-      ...(preservedComickSlug ? { comickSlug: preservedComickSlug } : {})
-    };
+    state.currentManga = { ...existing, ...(preservedKomikuSlug ? { komikuSlug: preservedKomikuSlug } : {}) };
     renderMangaDetailHero(state.currentManga);
   } else if (heroContent) {
     heroContent.innerHTML = `<div class="spinner" style="margin: 3rem auto;"></div>`;
@@ -457,20 +391,18 @@ export async function openMangaDetail(mangaId, maybeMangaData = null) {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     const activeKomikuSlug = preservedKomikuSlug || state.currentManga?.komikuSlug || data.data.komikuSlug;
-    const activeComickSlug = preservedComickSlug || state.currentManga?.comickSlug || data.data.comickSlug;
     state.currentManga = {
       ...data.data,
-      ...(activeKomikuSlug ? { komikuSlug: activeKomikuSlug } : {}),
-      ...(activeComickSlug ? { comickSlug: activeComickSlug } : {})
+      ...(activeKomikuSlug ? { komikuSlug: activeKomikuSlug } : {})
     };
 
     CoverCache.set(data.data.id, getMangaTitle(data.data.attributes), getCoverUrl(data.data));
     setMangaDetailCached(mangaId, state.currentManga);
     renderMangaDetailHero(state.currentManga);
 
-    // If initial fetch resulted in 0 chapters across both languages or missing chapters when comickSlug/komikuSlug is known, re-run with complete metadata
+    // If initial fetch resulted in 0 chapters across both languages or missing ID chapters when komikuSlug is known, re-run with complete metadata
     const currentTotalChapters = (state.unifiedChapters?.id?.length || 0) + (state.unifiedChapters?.en?.length || 0);
-    if (currentTotalChapters === 0 || (activeKomikuSlug && (state.unifiedChapters?.id?.length || 0) === 0) || (activeComickSlug && (state.unifiedChapters?.en?.length || 0) === 0)) {
+    if (currentTotalChapters === 0 || (activeKomikuSlug && (state.unifiedChapters?.id?.length || 0) === 0)) {
       loadUnifiedChapters(mangaId, state.currentManga);
     }
   } catch (error) {

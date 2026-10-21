@@ -14,6 +14,9 @@ export function renderNavbarMarkup() {
       <div class="nav-container">
         <div class="nav-brand-group">
           <div class="nav-brand" id="brand-logo" role="button" tabindex="0">
+            <div class="brand-icon">
+              <i data-lucide="book-open"></i>
+            </div>
             <div class="brand-text">
               <span class="brand-title">Yomi<span class="text-accent">komi</span></span>
             </div>

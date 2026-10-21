@@ -2240,7 +2240,8 @@ const ANIME_POPULAR_SNAPSHOT = [
   {
     id: 171018,
     malId: 57334,
-    tmdbId: 242224,
+    tmdbId: 240411,
+    imdbId: 'tt30217403',
     kitsuId: '48269',
     mediaType: 'anime',
     title: 'Dandadan',
@@ -2859,8 +2860,12 @@ app.get('/api/anime/:id', async (req, res) => {
     mapped.mappings = {
       mal_id: snap?.malId || aniZipData?.mappings?.mal_id || null,
       themoviedb_id: snap?.tmdbId || aniZipData?.mappings?.themoviedb_id || null,
+      imdb_id: snap?.imdbId || aniZipData?.mappings?.imdb_id || null,
       kitsu_id: snap?.kitsuId || aniZipData?.mappings?.kitsu_id || null
     };
+    mapped.tmdbId = mapped.mappings.themoviedb_id;
+    mapped.malId = mapped.mappings.mal_id;
+    mapped.imdbId = mapped.mappings.imdb_id;
     mapped.episodesList = episodesList;
     mapped.totalEpisodes = totalEps;
 
@@ -2895,13 +2900,15 @@ app.get('/api/anime/stream/:id/:ep', async (req, res) => {
     let animeTitle = '';
     let malId = null;
     let tmdbId = null;
+    let imdbId = null;
 
     const detailCacheKey = `anime_detail_${id}`;
     const cachedDetail = getCache(detailCacheKey);
     if (cachedDetail?.data) {
       animeTitle = cachedDetail.data.title || cachedDetail.data.titleObj?.romaji || '';
-      malId = cachedDetail.data.mappings?.mal_id || null;
-      tmdbId = cachedDetail.data.mappings?.themoviedb_id || null;
+      malId = cachedDetail.data.mappings?.mal_id || cachedDetail.data.malId || null;
+      tmdbId = cachedDetail.data.mappings?.themoviedb_id || cachedDetail.data.tmdbId || null;
+      imdbId = cachedDetail.data.mappings?.imdb_id || cachedDetail.data.imdbId || null;
     }
 
     if (!animeTitle || !malId || !tmdbId) {
@@ -2910,6 +2917,7 @@ app.get('/api/anime/stream/:id/:ep', async (req, res) => {
         animeTitle = snap.title;
         if (!malId && snap.malId) malId = snap.malId;
         if (!tmdbId && snap.tmdbId) tmdbId = snap.tmdbId;
+        if (!imdbId && snap.imdbId) imdbId = snap.imdbId;
       }
       try {
         const [titleData, zipData] = await Promise.all([
@@ -2922,6 +2930,7 @@ app.get('/api/anime/stream/:id/:ep', async (req, res) => {
         if (zipData?.mappings) {
           malId = zipData.mappings.mal_id || malId;
           tmdbId = zipData.mappings.themoviedb_id || tmdbId;
+          imdbId = zipData.mappings.imdb_id || imdbId;
         }
       } catch (eMeta) {}
     }
@@ -2945,24 +2954,29 @@ app.get('/api/anime/stream/:id/:ep', async (req, res) => {
     if (servers.length === 0) {
       const safeTitle = encodeURIComponent(animeTitle || 'anime');
 
-      if (malId) {
-        servers.push({
-          id: 'server-vidsrc-mal',
-          name: 'Server 1 (VidSrc HD • Super Lancar)',
-          type: 'iframe',
-          url: `https://vidsrc.me/embed/anime?mal=${malId}&ep=${epNum}`,
-          quality: '1080p',
-          isSubIndo: false
-        });
-      }
-
       if (tmdbId) {
         servers.push({
           id: 'server-autoembed-tmdb',
-          name: `Server ${servers.length + 1} (AutoEmbed Cloud CDN)`,
+          name: 'Server 1 (AutoEmbed FHD • Super Lancar)',
           type: 'iframe',
           url: `https://autoembed.co/tv/tmdb/${tmdbId}-1-${epNum}`,
-          quality: 'Auto',
+          quality: '1080p',
+          isSubIndo: false
+        });
+        servers.push({
+          id: 'server-vidsrcto-tv',
+          name: `Server ${servers.length + 1} (VidSrc Pro HD)`,
+          type: 'iframe',
+          url: `https://vidsrc.to/embed/tv/${tmdbId}/1/${epNum}`,
+          quality: '1080p',
+          isSubIndo: false
+        });
+        servers.push({
+          id: 'server-vidsrc-tv',
+          name: `Server ${servers.length + 1} (VidSrc Cloud HD)`,
+          type: 'iframe',
+          url: `https://vidsrc.me/embed/tv?tmdb=${tmdbId}&season=1&episode=${epNum}`,
+          quality: '1080p',
           isSubIndo: false
         });
         servers.push({
@@ -2973,14 +2987,39 @@ app.get('/api/anime/stream/:id/:ep', async (req, res) => {
           quality: '720p',
           isSubIndo: false
         });
+      } else if (imdbId) {
+        servers.push({
+          id: 'server-vidsrcto-imdb',
+          name: 'Server 1 (VidSrc Pro HD)',
+          type: 'iframe',
+          url: `https://vidsrc.to/embed/tv/${imdbId}/1/${epNum}`,
+          quality: '1080p',
+          isSubIndo: false
+        });
+        servers.push({
+          id: 'server-vidsrc-imdb',
+          name: 'Server 2 (VidSrc Cloud HD)',
+          type: 'iframe',
+          url: `https://vidsrc.me/embed/tv?imdb=${imdbId}&season=1&episode=${epNum}`,
+          quality: '1080p',
+          isSubIndo: false
+        });
       }
 
       if (servers.length === 0) {
         servers.push({
-          id: 'server-vidsrc-fallback',
-          name: 'Server 1 (AutoStream • VidSrc)',
+          id: 'server-autoembed-fallback',
+          name: 'Server 1 (AutoEmbed FHD • Super Lancar)',
           type: 'iframe',
-          url: `https://vidsrc.me/embed/anime?title=${safeTitle}&ep=${epNum}`,
+          url: `https://autoembed.co/tv/tmdb/${safeTitle}-1-${epNum}`,
+          quality: '1080p',
+          isSubIndo: false
+        });
+        servers.push({
+          id: 'server-vidsrc-fallback',
+          name: 'Server 2 (VidSrc Cloud HD)',
+          type: 'iframe',
+          url: `https://vidsrc.me/embed/tv?tmdb=${safeTitle}&season=1&episode=${epNum}`,
           quality: '1080p',
           isSubIndo: false
         });

@@ -159,10 +159,7 @@ export async function openAnimeWatch(animeId, epNumber = 1, maybeAnimeData = nul
         anime = data.data;
         state.currentAnime = anime;
         renderAnimeDetails(anime, state.currentAnimeEpisode);
-        // Refresh episode stream if initial render lacked mappings/episodesList
-        if (!maybeAnimeData?.mappings || !maybeAnimeData?.episodesList?.length) {
-          loadEpisode(state.currentAnimeEpisode);
-        }
+        loadEpisode(state.currentAnimeEpisode);
       }
     })
     .catch(err => {
@@ -390,33 +387,38 @@ export async function loadEpisode(epNumber) {
     : (anime.title?.romaji || anime.title?.english || anime.titleObj?.romaji || 'Anime');
   const safeTitle = encodeURIComponent(animeTitle);
 
-  const malId = anime.mappings?.mal_id || null;
-  const tmdbId = anime.mappings?.themoviedb_id || null;
+  const malId = anime.mappings?.mal_id || anime.malId || anime.mal_id || null;
+  const tmdbId = anime.mappings?.themoviedb_id || anime.tmdbId || anime.themoviedb_id || null;
+  const imdbId = anime.mappings?.imdb_id || anime.imdbId || null;
 
   // Get servers from episode data or build instant real anime servers immediately
   let servers = anime.episodesList?.[epNumber - 1]?.servers || [];
 
   if (servers.length === 0) {
-    // Priority 1: VidSrc Anime (Dedicated, fast, 200 OK, X-Frame: NONE)
-    if (malId) {
-      servers.push({
-        id: 'server-vidsrc-mal',
-        name: 'Server 1 (VidSrc HD • Super Lancar)',
-        type: 'iframe',
-        url: `https://vidsrc.me/embed/anime?mal=${malId}&ep=${epNumber}`,
-        quality: '1080p',
-        isSubIndo: false
-      });
-    }
-
-    // Priority 2: AutoEmbed & 2Embed Cloud
+    // Priority 1: AutoEmbed Cloud CDN (Fastest, zero captcha, multi-audio/sub, instant play)
     if (tmdbId) {
       servers.push({
         id: 'server-autoembed-tmdb',
-        name: `Server ${servers.length + 1} (AutoEmbed Cloud CDN)`,
+        name: 'Server 1 (AutoEmbed FHD • Super Lancar)',
         type: 'iframe',
         url: `https://autoembed.co/tv/tmdb/${tmdbId}-1-${epNumber}`,
-        quality: 'Auto',
+        quality: '1080p',
+        isSubIndo: false
+      });
+      servers.push({
+        id: 'server-vidsrcto-tv',
+        name: `Server ${servers.length + 1} (VidSrc Pro HD)`,
+        type: 'iframe',
+        url: `https://vidsrc.to/embed/tv/${tmdbId}/1/${epNumber}`,
+        quality: '1080p',
+        isSubIndo: false
+      });
+      servers.push({
+        id: 'server-vidsrc-tv',
+        name: `Server ${servers.length + 1} (VidSrc Cloud HD)`,
+        type: 'iframe',
+        url: `https://vidsrc.me/embed/tv?tmdb=${tmdbId}&season=1&episode=${epNumber}`,
+        quality: '1080p',
         isSubIndo: false
       });
       servers.push({
@@ -427,14 +429,39 @@ export async function loadEpisode(epNumber) {
         quality: '720p',
         isSubIndo: false
       });
+    } else if (imdbId) {
+      servers.push({
+        id: 'server-vidsrcto-imdb',
+        name: 'Server 1 (VidSrc Pro HD)',
+        type: 'iframe',
+        url: `https://vidsrc.to/embed/tv/${imdbId}/1/${epNumber}`,
+        quality: '1080p',
+        isSubIndo: false
+      });
+      servers.push({
+        id: 'server-vidsrc-imdb',
+        name: 'Server 2 (VidSrc Cloud HD)',
+        type: 'iframe',
+        url: `https://vidsrc.me/embed/tv?imdb=${imdbId}&season=1&episode=${epNumber}`,
+        quality: '1080p',
+        isSubIndo: false
+      });
     }
 
     if (servers.length === 0) {
       servers.push({
-        id: 'server-vidsrc-fallback',
-        name: 'Server 1 (AutoStream • VidSrc)',
+        id: 'server-autoembed-fallback',
+        name: 'Server 1 (AutoEmbed FHD • Super Lancar)',
         type: 'iframe',
-        url: `https://vidsrc.me/embed/anime?title=${safeTitle}&ep=${epNumber}`,
+        url: `https://autoembed.co/tv/tmdb/${safeTitle}-1-${epNumber}`,
+        quality: '1080p',
+        isSubIndo: false
+      });
+      servers.push({
+        id: 'server-vidsrc-fallback',
+        name: 'Server 2 (VidSrc Cloud HD)',
+        type: 'iframe',
+        url: `https://vidsrc.me/embed/tv?tmdb=${safeTitle}&season=1&episode=${epNumber}`,
         quality: '1080p',
         isSubIndo: false
       });

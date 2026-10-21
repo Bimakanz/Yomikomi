@@ -46,24 +46,29 @@ export class AnimeAggregatorService {
       const malId = mappings?.malId;
       const safeTitle = encodeURIComponent(animeTitle);
 
-      if (malId) {
-        combined.push({
-          id: 'server-vidsrc-mal',
-          name: 'Server 1 (VidSrc HD • Super Lancar)',
-          type: 'iframe',
-          url: `https://vidsrc.me/embed/anime?mal=${malId}&ep=${episodeNumber}`,
-          quality: '1080p',
-          isSubIndo: false
-        });
-      }
-
       if (tmdbId) {
         combined.push({
           id: 'server-autoembed-tmdb',
-          name: `Server ${combined.length + 1} (AutoEmbed Cloud CDN)`,
+          name: 'Server 1 (AutoEmbed FHD • Super Lancar)',
           type: 'iframe',
           url: `https://autoembed.co/tv/tmdb/${tmdbId}-1-${episodeNumber}`,
-          quality: 'Auto',
+          quality: '1080p',
+          isSubIndo: false
+        });
+        combined.push({
+          id: 'server-vidsrcto-tv',
+          name: `Server ${combined.length + 1} (VidSrc Pro HD)`,
+          type: 'iframe',
+          url: `https://vidsrc.to/embed/tv/${tmdbId}/1/${episodeNumber}`,
+          quality: '1080p',
+          isSubIndo: false
+        });
+        combined.push({
+          id: 'server-vidsrc-tv',
+          name: `Server ${combined.length + 1} (VidSrc Cloud HD)`,
+          type: 'iframe',
+          url: `https://vidsrc.me/embed/tv?tmdb=${tmdbId}&season=1&episode=${episodeNumber}`,
+          quality: '1080p',
           isSubIndo: false
         });
         combined.push({
@@ -78,10 +83,18 @@ export class AnimeAggregatorService {
 
       if (combined.length === 0) {
         combined.push({
-          id: 'server-vidsrc-fallback',
-          name: 'Server 1 (AutoStream • VidSrc)',
+          id: 'server-autoembed-fallback',
+          name: 'Server 1 (AutoEmbed FHD • Super Lancar)',
           type: 'iframe',
-          url: `https://vidsrc.me/embed/anime?title=${safeTitle}&ep=${episodeNumber}`,
+          url: `https://autoembed.co/tv/tmdb/${safeTitle}-1-${episodeNumber}`,
+          quality: '1080p',
+          isSubIndo: false
+        });
+        combined.push({
+          id: 'server-vidsrc-fallback',
+          name: 'Server 2 (VidSrc Cloud HD)',
+          type: 'iframe',
+          url: `https://vidsrc.me/embed/tv?tmdb=${safeTitle}&season=1&episode=${episodeNumber}`,
           quality: '1080p',
           isSubIndo: false
         });

@@ -289,6 +289,44 @@ app.get('/api/popular', async (req, res) => {
     res.json(data);
   } catch (error) {
     console.error('Error fetching popular manga:', error.message);
+    const cached = getCache('popular_manga');
+    if (cached) return res.json(cached);
+
+    try {
+      const html = await fetchExternalHtml('https://komiku.org/');
+      const $ = cheerio.load(html);
+      const items = [];
+      $('.ls2, .ls4, .ls12').each((_, el) => {
+        const a = $(el).find('a').first();
+        const href = a.attr('href') || '';
+        const rawTitle = $(el).find('h4, h3, .tt').first().text().trim() || a.attr('title') || '';
+        const img = $(el).find('img').first().attr('data-src') || $(el).find('img').first().attr('src') || '';
+        const latestCh = $(el).find('.epx, .lsch, .chapter').first().text().trim();
+        if (href && rawTitle) {
+          const slug = href.replace(/\/+$/, '').split('/').pop();
+          if (!items.some(r => r.slug === slug)) {
+            const title = rawTitle.replace(/^Komik\s*/i, '').trim();
+            items.push({
+              id: `komiku-${slug}`,
+              type: 'manga',
+              attributes: {
+                title: { en: title, id: title },
+                description: { id: 'Manga populer terjemahan bahasa Indonesia.', en: 'Popular manga title.' },
+                status: 'ongoing',
+                lastChapter: latestCh || 'Update',
+                availableTranslatedLanguages: ['id', 'en']
+              },
+              coverUrl: img ? `/api/proxy-image?url=${encodeURIComponent(img)}` : '',
+              source: 'komiku'
+            });
+          }
+        }
+      });
+      if (items.length > 0) {
+        return res.json({ data: items.slice(0, 24) });
+      }
+    } catch (e) {}
+
     res.status(500).json({ error: error.message });
   }
 });
@@ -365,7 +403,7 @@ app.get('/api/search', async (req, res) => {
     res.json(data);
   } catch (error) {
     console.error('Error searching manga:', error.message);
-    res.status(500).json({ error: error.message });
+    res.json({ data: [], error: error.message });
   }
 });
 
@@ -1663,11 +1701,13 @@ app.get('/api/komiku/search', async (req, res) => {
 // 2. Latest Releases on Komiku
 app.get('/api/komiku/latest', async (req, res) => {
   try {
-    const cacheKey = 'komiku_latest';
+    const page = Math.max(parseInt(req.query.page) || 1, 1);
+    const cacheKey = `komiku_latest_p${page}`;
     const cached = getCache(cacheKey);
     if (cached) return res.json(cached);
 
-    const html = await fetchExternalHtml('https://komiku.org/');
+    const targetUrl = page > 1 ? `https://komiku.org/page/${page}/` : 'https://komiku.org/';
+    const html = await fetchExternalHtml(targetUrl);
     const $ = cheerio.load(html);
     const results = [];
 
@@ -1699,7 +1739,7 @@ app.get('/api/komiku/latest', async (req, res) => {
       }
     });
 
-    const response = { source: 'komiku', total: results.length, data: results };
+    const response = { source: 'komiku', page, total: results.length, data: results };
     setCache(cacheKey, response, CACHE_TTL.latest);
     res.json(response);
   } catch (err) {

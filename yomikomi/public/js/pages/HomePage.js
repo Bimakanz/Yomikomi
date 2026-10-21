@@ -77,7 +77,7 @@ export function renderHomePageMarkup() {
       <!-- Manga Grid Section -->
       <div class="section-header">
         <div class="section-title-wrap">
-          <h2 class="section-title" id="grid-section-title">Semua Katalog Komik</h2>
+          <h2 class="section-title" id="grid-section-title">Komik Sedang Tren</h2>
         </div>
       </div>
 
@@ -90,6 +90,14 @@ export function renderHomePageMarkup() {
           <div class="card-skeleton skeleton-pulse"></div>
           <div class="card-skeleton skeleton-pulse"></div>
         </div>
+      </div>
+
+      <!-- Dedicated Load More Button Container -->
+      <div class="load-more-wrap hidden" id="load-more-wrap">
+        <button class="btn-load-more" id="btn-load-more-manga" type="button">
+          <i data-lucide="chevron-down"></i>
+          <span>Muat Lebih Banyak Komik</span>
+        </button>
       </div>
     </section>
   `;
@@ -247,8 +255,8 @@ export function renderFilterTabs(activeMode = state.activeMediaMode) {
     `;
   } else {
     container.innerHTML = `
-      <button class="filter-tab active" data-filter="all">Semua Komik</button>
-      <button class="filter-tab" data-filter="popular">Trending</button>
+      <button class="filter-tab active" data-filter="popular">Trending</button>
+      <button class="filter-tab" data-filter="all">Semua Komik</button>
       <button class="filter-tab" data-filter="latest">Baru Diupdate</button>
       <button class="filter-tab" data-filter="indo">Indo Scan</button>
       <button class="filter-tab" data-filter="english">English</button>
@@ -374,36 +382,29 @@ export function appendMediaToGrid(mediaList, mediaType = state.activeMediaMode) 
 // Backward compatibility alias
 export const renderMangaGrid = renderMediaGrid;
 
-export function renderLoadMoreButton(onClick) {
-  let btnWrap = document.getElementById('load-more-wrap');
-  if (!btnWrap) {
-    btnWrap = document.createElement('div');
-    btnWrap.id = 'load-more-wrap';
-    btnWrap.className = 'load-more-wrap';
-    btnWrap.innerHTML = `
-      <button class="btn-load-more" id="btn-load-more-manga" type="button">
-        <i data-lucide="chevron-down"></i>
-        <span>Muat Lebih Banyak Komik</span>
-      </button>
-    `;
-    const homeSection = document.getElementById('home-section') || document.getElementById('manga-grid')?.parentElement;
-    if (homeSection) homeSection.appendChild(btnWrap);
-  }
+export function showLoadMoreButton(onClick) {
+  const wrap = document.getElementById('load-more-wrap');
   const btn = document.getElementById('btn-load-more-manga');
-  if (btn && onClick) {
-    btn.onclick = onClick;
-  }
+  if (!wrap || !btn) return;
+  wrap.classList.remove('hidden');
+  btn.disabled = false;
+  btn.innerHTML = '<i data-lucide="chevron-down"></i> <span>Muat Lebih Banyak Komik</span>';
+  btn.onclick = (e) => {
+    e.preventDefault();
+    if (typeof onClick === 'function') onClick();
+  };
   initIcons();
 }
 
-export function removeLoadMoreButton() {
-  const btnWrap = document.getElementById('load-more-wrap');
-  if (btnWrap) btnWrap.remove();
+export function hideLoadMoreButton() {
+  const wrap = document.getElementById('load-more-wrap');
+  if (wrap) wrap.classList.add('hidden');
 }
 
 let allMangaOffset = 0;
+let allKomikuPage = 1;
+let komikuCatalogPool = [];
 let isLoadingAllManga = false;
-let hasMoreAllManga = true;
 
 export async function loadAllManga(isAppend = false) {
   const sectionTitle = document.getElementById('grid-section-title');
@@ -411,24 +412,36 @@ export async function loadAllManga(isAppend = false) {
 
   if (!isAppend) {
     allMangaOffset = 0;
-    hasMoreAllManga = true;
-    removeLoadMoreButton();
+    allKomikuPage = 1;
+    komikuCatalogPool = [];
+    hideLoadMoreButton();
     showGridSkeleton();
-  } else if (isLoadingAllManga || !hasMoreAllManga) {
+  } else if (isLoadingAllManga) {
     return;
   }
 
   isLoadingAllManga = true;
   const loadMoreBtn = document.getElementById('btn-load-more-manga');
-  if (loadMoreBtn) {
+  if (loadMoreBtn && isAppend) {
     loadMoreBtn.disabled = true;
     loadMoreBtn.innerHTML = '<span>Memuat lebih banyak...</span>';
   }
 
   try {
+    const currentOffset = allMangaOffset;
+
+    // Fetch next Komiku page if pool is running low
+    let fetchKomikuPromise = Promise.resolve([]);
+    if (komikuCatalogPool.length < 25) {
+      fetchKomikuPromise = fetchKomikuLatest(allKomikuPage).then(items => {
+        allKomikuPage++;
+        return items;
+      });
+    }
+
     const [mdRes, komikuData] = await Promise.allSettled([
-      fetch(`/api/search?limit=60&offset=${allMangaOffset}&order=followedCount`).then(r => r.json()),
-      allMangaOffset === 0 ? fetchKomikuLatest() : Promise.resolve([])
+      fetch(`/api/search?limit=30&offset=${currentOffset}&order=followedCount`).then(r => r.json()),
+      fetchKomikuPromise
     ]);
 
     let mdList = [];
@@ -436,65 +449,82 @@ export async function loadAllManga(isAppend = false) {
       mdList = mdRes.value.data.map(m => ({ ...m, source: 'mangadex' }));
     }
 
-    let kList = [];
-    if (komikuData.status === 'fulfilled' && Array.isArray(komikuData.value)) {
-      kList = komikuData.value.map(k => ({ ...k, source: 'komiku' }));
+    if (komikuData.status === 'fulfilled' && Array.isArray(komikuData.value) && komikuData.value.length > 0) {
+      komikuCatalogPool.push(...komikuData.value);
     }
 
+    // Take next batch from komiku pool
+    const kList = komikuCatalogPool.splice(0, 24).map(k => ({ ...k, source: 'komiku' }));
+
+    // Interleave so user gets a rich mix
     let newItems = [];
-    if (mdList.length > 0 && kList.length > 0) {
-      const maxL = Math.max(mdList.length, kList.length);
-      for (let i = 0; i < maxL; i++) {
-        if (i < mdList.length) newItems.push(mdList[i]);
-        if (i < kList.length) newItems.push(kList[i]);
-      }
-    } else {
+    const maxL = Math.max(mdList.length, kList.length);
+    for (let i = 0; i < maxL; i++) {
+      if (i < kList.length) newItems.push(kList[i]);
+      if (i < mdList.length) newItems.push(mdList[i]);
+    }
+
+    if (newItems.length === 0) {
       newItems = mdList.length > 0 ? mdList : kList;
     }
 
-    if (newItems.length < 30) {
-      hasMoreAllManga = false;
+    // Deduplicate against already rendered items
+    const seenIds = new Set(isAppend ? (state.mangaList || []).map(m => m.id) : []);
+    let uniqueNew = newItems.filter(item => {
+      if (!item || !item.id) return false;
+      if (seenIds.has(item.id)) return false;
+      seenIds.add(item.id);
+      return true;
+    });
+
+    // If uniqueNew is empty (e.g. overlap), pull another batch from komiku
+    if (uniqueNew.length === 0 && allKomikuPage <= 20) {
+      const extraItems = await fetchKomikuLatest(allKomikuPage++);
+      if (Array.isArray(extraItems)) {
+        extraItems.forEach(item => {
+          if (item?.id && !seenIds.has(item.id)) {
+            seenIds.add(item.id);
+            uniqueNew.push({ ...item, source: 'komiku' });
+          }
+        });
+      }
     }
 
-    newItems.forEach(m => {
+    uniqueNew.forEach(m => {
       if (m.source === 'mangadex') {
         CoverCache.set(m.id, getMangaTitle(m.attributes), getCoverUrl(m));
       }
     });
 
     if (isAppend) {
-      state.mangaList = [...(state.mangaList || []), ...newItems];
-      appendMediaToGrid(newItems, 'manga');
+      state.mangaList = [...(state.mangaList || []), ...uniqueNew];
+      appendMediaToGrid(uniqueNew, 'manga');
     } else {
-      state.mangaList = newItems;
-      renderMangaGrid(state.mangaList, 'manga');
+      state.mangaList = uniqueNew;
+      renderMediaGrid(state.mangaList, 'manga');
     }
 
-    allMangaOffset += (mdList.length > 0 ? mdList.length : newItems.length);
+    allMangaOffset += 30;
 
-    if (hasMoreAllManga) {
-      renderLoadMoreButton(() => loadAllManga(true));
-    } else {
-      removeLoadMoreButton();
-    }
+    // Always re-enable and show Load More button
+    showLoadMoreButton(() => loadAllManga(true));
   } catch (err) {
     console.error('Failed to load all manga:', err);
     showToast('Gagal memuat katalog semua komik');
+    showLoadMoreButton(() => loadAllManga(true));
   } finally {
     isLoadingAllManga = false;
-    if (loadMoreBtn && hasMoreAllManga) {
+    if (loadMoreBtn) {
       loadMoreBtn.disabled = false;
-      loadMoreBtn.innerHTML = '<i data-lucide="chevron-down"></i><span>Muat Lebih Banyak Komik</span>';
-      initIcons();
     }
   }
 }
 window.loadAllManga = loadAllManga;
 
 export async function loadPopularManga() {
-  removeLoadMoreButton();
+  hideLoadMoreButton();
   const sectionTitle = document.getElementById('grid-section-title');
-  if (sectionTitle) sectionTitle.textContent = 'Komik Sedang Tren (Trending)';
+  if (sectionTitle) sectionTitle.textContent = 'Komik Sedang Tren';
 
   // Instant 0ms render from memory or sessionStorage cache
   if (!state.popularManga || state.popularManga.length === 0) {
@@ -815,11 +845,11 @@ export function initFilters() {
         window.resetGenreSelection(false);
       }
 
-      removeLoadMoreButton();
-      if (filter === 'all') {
-        loadAllManga();
-      } else if (filter === 'popular') {
+      hideLoadMoreButton();
+      if (filter === 'popular') {
         loadPopularManga();
+      } else if (filter === 'all') {
+        loadAllManga();
       } else if (filter === 'latest') {
         loadLatestManga();
       } else if (filter === 'indo') {
@@ -1072,7 +1102,7 @@ export function initGenreFilter() {
 
     if (reloadDefault) {
       document.querySelectorAll('.filter-tab').forEach(t => {
-        if (t.dataset.filter === 'all') t.classList.add('active');
+        if (t.dataset.filter === 'popular') t.classList.add('active');
         else if (!t.classList.contains('genre-dropdown-toggle')) t.classList.remove('active');
       });
       loadPopularManga();
@@ -1089,7 +1119,7 @@ export function initHomePage() {
     if (sectionTitle) sectionTitle.textContent = 'Anime Paling Populer (Trending)';
     loadPopularAnime();
   } else {
-    loadAllManga();
+    loadPopularManga();
   }
 
   // Reactive listener when user switches media mode from navbar / drawer
@@ -1106,7 +1136,7 @@ export function initHomePage() {
       }
       loadPopularAnime();
     } else {
-      if (sectionTitle) sectionTitle.textContent = 'Komik Paling Populer (Trending)';
+      if (sectionTitle) sectionTitle.textContent = 'Komik Sedang Tren';
       const mangaHeroPool = (state.heroManga && state.heroManga.length >= 3) 
         ? state.heroManga 
         : (state.popularManga && state.popularManga.length >= 3 ? state.popularManga.slice(0, 5) : null);

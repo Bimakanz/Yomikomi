@@ -615,7 +615,8 @@ export async function loadPopularManga() {
       const parsed = JSON.parse(cached);
       const isValid = Array.isArray(parsed) && parsed.length > 0 && parsed.every(p => {
         const t = p.title || p.attributes?.title;
-        return t && t !== 'undefined' && t !== '[object Object]';
+        const isNotKomiku = p.source !== 'komiku' && !String(p.id).startsWith('komiku-');
+        return t && t !== 'undefined' && t !== '[object Object]' && isNotKomiku;
       });
       if (isValid) {
         state.popularManga = parsed;
@@ -635,7 +636,7 @@ export async function loadPopularManga() {
   } catch (e) {}
 
   if (!hasRenderedCache) {
-    if (state.popularManga && state.popularManga.length > 0 && state.popularManga.every(p => p.title && p.title !== 'undefined')) {
+    if (state.popularManga && state.popularManga.length > 0 && state.popularManga.every(p => p.title && p.title !== 'undefined' && p.source !== 'komiku')) {
       renderMangaGrid(state.popularManga);
       hasRenderedCache = true;
       if (state.activeMediaMode !== 'anime' && (state.heroManga?.length >= 3 || state.popularManga?.length >= 3)) {
@@ -654,10 +655,12 @@ export async function loadPopularManga() {
     const data = await res.json();
     const freshList = (data.data || []).map(m => {
       const t = (typeof m.title === 'string' && m.title.trim() && m.title !== 'undefined' ? m.title : getMangaTitle(m.attributes)) || 'Untitled';
+      const cover = m.coverUrl || getCoverUrl(m);
       return {
         ...m,
         title: t,
-        source: m.source || (m.id?.toString().startsWith('komiku-') ? 'komiku' : 'mangadex')
+        coverUrl: cover,
+        source: 'mangadex'
       };
     });
 
@@ -669,7 +672,7 @@ export async function loadPopularManga() {
       } catch (e) {}
 
       freshList.forEach(m => {
-        CoverCache.set(m.id, m.title, getCoverUrl(m));
+        CoverCache.set(m.id, m.title, m.coverUrl || getCoverUrl(m));
       });
       renderMangaGrid(freshList);
 

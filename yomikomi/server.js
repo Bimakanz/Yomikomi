@@ -277,6 +277,177 @@ function fetchMangaDex(pathStr) {
 // ==========================================
 
 // 1. Popular / Trending Manga
+const MANGADEX_POPULAR_SNAPSHOT = [
+  {
+    id: "a7774250-d070-494f-9260-f8232f35213b",
+    type: "manga",
+    attributes: {
+      title: { en: "Chainsaw Man" },
+      description: { en: "Denji's life of poverty is turned upside down when he merges with his pet devil-dog, Pochita!" },
+      status: "ongoing",
+      contentRating: "suggestive",
+      availableTranslatedLanguages: ["en", "id", "ja"]
+    },
+    relationships: [{ type: "cover_art", attributes: { fileName: "81f9b071-ca36-40e9-b57f-d31e582e0e18.jpg" } }],
+    coverUrl: "https://s4.anilist.co/file/anilistcdn/media/manga/cover/medium/bx105778-euxXZEIfDY2u.png",
+    source: "mangadex"
+  },
+  {
+    id: "c52b2ce3-7f95-469c-96b0-474fb724fb76",
+    type: "manga",
+    attributes: {
+      title: { en: "Jujutsu Kaisen" },
+      description: { en: "Yuji Itadori swallows a cursed talisman and finds himself in the world of Jujutsu Sorcerers." },
+      status: "completed",
+      contentRating: "safe",
+      availableTranslatedLanguages: ["en", "id", "ja"]
+    },
+    relationships: [{ type: "cover_art", attributes: { fileName: "32eb7a4d-0453-4318-9717-b61ec084f04d.jpg" } }],
+    coverUrl: "https://s4.anilist.co/file/anilistcdn/media/manga/cover/medium/bx101517-5nFd8b6zmwCj.jpg",
+    source: "mangadex"
+  },
+  {
+    id: "b0b721ff-c388-4486-aa0f-c8b0e921824b",
+    type: "manga",
+    attributes: {
+      title: { en: "Sousou no Frieren" },
+      description: { en: "The elf mage Frieren begins a new journey after the hero's party defeated the Demon King." },
+      status: "ongoing",
+      contentRating: "safe",
+      availableTranslatedLanguages: ["en", "id", "ja"]
+    },
+    relationships: [{ type: "cover_art", attributes: { fileName: "a75871b6-7f1c-4da6-8fcf-ad12b489a5ad.jpg" } }],
+    coverUrl: "https://s4.anilist.co/file/anilistcdn/media/manga/cover/medium/bx118586-sI8Owe5Nlq4M.jpg",
+    source: "mangadex"
+  },
+  {
+    id: "296cbc31-af1a-4b58-a4ef-02ba508d49a3",
+    type: "manga",
+    attributes: {
+      title: { en: "【OSHI NO KO】" },
+      description: { en: "A doctor and his recently-deceased patient are reborn as the twin children of their favorite idol." },
+      status: "completed",
+      contentRating: "safe",
+      availableTranslatedLanguages: ["en", "id", "ja"]
+    },
+    relationships: [{ type: "cover_art", attributes: { fileName: "60bf806f-4d92-4f96-be6d-6ee5e7fc243d.jpg" } }],
+    coverUrl: "https://s4.anilist.co/file/anilistcdn/media/manga/cover/medium/bx117195-k8L209U1hS9T.jpg",
+    source: "mangadex"
+  },
+  {
+    id: "32d76d19-8a05-4db0-9fc2-e0b0648fe9d0",
+    type: "manga",
+    attributes: {
+      title: { en: "Solo Leveling" },
+      description: { en: "Sung Jin-Woo awakens as the world's only player able to see an interface that lets him level up." },
+      status: "completed",
+      contentRating: "safe",
+      availableTranslatedLanguages: ["en", "id", "ko"]
+    },
+    relationships: [{ type: "cover_art", attributes: { fileName: "1b2b8c9e-5b12-4e89-a2e6-764f69741c88.jpg" } }],
+    coverUrl: "https://s4.anilist.co/file/anilistcdn/media/manga/cover/medium/bx105398-b673TaPprNUp.jpg",
+    source: "mangadex"
+  },
+  {
+    id: "423f2ec4-94e8-48a8-a42e-132d32786a7d",
+    type: "manga",
+    attributes: {
+      title: { en: "Dandadan" },
+      description: { en: "An action-packed occult comedy about ghosts, aliens, and high school romance." },
+      status: "ongoing",
+      contentRating: "suggestive",
+      availableTranslatedLanguages: ["en", "id", "ja"]
+    },
+    relationships: [{ type: "cover_art", attributes: { fileName: "4dcbc465-38b4-4e9b-b565-d0ff785cf61e.jpg" } }],
+    coverUrl: "https://s4.anilist.co/file/anilistcdn/media/manga/cover/medium/bx132029-7J6N1kRk0e0M.jpg",
+    source: "mangadex"
+  },
+  {
+    id: "a1c7c817-4e59-43b7-9365-09675a149a6f",
+    type: "manga",
+    attributes: {
+      title: { en: "One Piece" },
+      description: { en: "Monkey D. Luffy sets out to find the legendary treasure One Piece and become the Pirate King." },
+      status: "ongoing",
+      contentRating: "safe",
+      availableTranslatedLanguages: ["en", "id", "ja"]
+    },
+    relationships: [{ type: "cover_art", attributes: { fileName: "87c94ebc-25d2-4467-938d-dc776bf7eb58.jpg" } }],
+    coverUrl: "https://s4.anilist.co/file/anilistcdn/media/manga/cover/medium/bx30013-ulmsSPjWBPut.png",
+    source: "mangadex"
+  },
+  {
+    id: "6e3553b9-ddb5-478f-b522-42480f0d250b",
+    type: "manga",
+    attributes: {
+      title: { en: "Spy x Family" },
+      description: { en: "A spy creates a fake family for his mission, unaware his wife is an assassin and his daughter a telepath." },
+      status: "ongoing",
+      contentRating: "safe",
+      availableTranslatedLanguages: ["en", "id", "ja"]
+    },
+    relationships: [{ type: "cover_art", attributes: { fileName: "7f5d4750-f8fa-4a37-b95b-06e9ec1914eb.jpg" } }],
+    coverUrl: "https://s4.anilist.co/file/anilistcdn/media/manga/cover/medium/bx108556-BexxSgqGvFzX.jpg",
+    source: "mangadex"
+  },
+  {
+    id: "801513ba-a712-498b-87de-7909758d55ac",
+    type: "manga",
+    attributes: {
+      title: { en: "Berserk" },
+      description: { en: "Guts, a former mercenary known as the 'Black Swordsman', is out for revenge." },
+      status: "ongoing",
+      contentRating: "suggestive",
+      availableTranslatedLanguages: ["en", "id", "ja"]
+    },
+    relationships: [{ type: "cover_art", attributes: { fileName: "a1cb5e3f-6799-4d64-b0a6-169bbf977e23.jpg" } }],
+    coverUrl: "https://s4.anilist.co/file/anilistcdn/media/manga/cover/medium/bx30002-3mN5hGk9rL4N.jpg",
+    source: "mangadex"
+  },
+  {
+    id: "2cbdab16-8679-46f3-a444-2439a2632b4b",
+    type: "manga",
+    attributes: {
+      title: { en: "Blue Lock" },
+      description: { en: "300 high school forwards compete in an isolated training facility to become Japan's greatest striker." },
+      status: "ongoing",
+      contentRating: "safe",
+      availableTranslatedLanguages: ["en", "id", "ja"]
+    },
+    relationships: [{ type: "cover_art", attributes: { fileName: "b45455ea-3610-449e-953b-e3c31fc2aaae.jpg" } }],
+    coverUrl: "https://s4.anilist.co/file/anilistcdn/media/manga/cover/medium/bx106130-i4Jk0Z04d0n4.jpg",
+    source: "mangadex"
+  },
+  {
+    id: "11c65d6c-6a10-4497-a61d-65231c5eeff6",
+    type: "manga",
+    attributes: {
+      title: { en: "Kaiju No. 8" },
+      description: { en: "Kafka Hibino gains the power to turn into a kaiju and uses it to join the Defense Force." },
+      status: "ongoing",
+      contentRating: "safe",
+      availableTranslatedLanguages: ["en", "id", "ja"]
+    },
+    relationships: [{ type: "cover_art", attributes: { fileName: "2d5c2e2e-8c34-4a43-9844-32b5003ea29e.jpg" } }],
+    coverUrl: "https://s4.anilist.co/file/anilistcdn/media/manga/cover/medium/bx120760-4K8P1X2M5A2S.jpg",
+    source: "mangadex"
+  },
+  {
+    id: "5d63ce89-99f8-42f2-85c3-8f0691475734",
+    type: "manga",
+    attributes: {
+      title: { en: "Vinland Saga" },
+      description: { en: "Thorfinn pursues revenge against the Viking leader who murdered his father." },
+      status: "ongoing",
+      contentRating: "suggestive",
+      availableTranslatedLanguages: ["en", "id", "ja"]
+    },
+    relationships: [{ type: "cover_art", attributes: { fileName: "2bc1c52b-7c1e-450f-a42e-cf6151f49615.jpg" } }],
+    coverUrl: "https://s4.anilist.co/file/anilistcdn/media/manga/cover/medium/bx30642-NknK6E2H7eE5.jpg",
+    source: "mangadex"
+  }
+];
+
 app.get('/api/popular', async (req, res) => {
   try {
     const cacheKey = 'popular_manga';
@@ -285,11 +456,21 @@ app.get('/api/popular', async (req, res) => {
     if (cached) return res.json(cached);
 
     const data = await fetchMangaDex('/manga?limit=24&includes[]=cover_art&includes[]=author&order[followedCount]=desc&contentRating[]=safe&contentRating[]=suggestive');
-    setCache(cacheKey, data, CACHE_TTL.popular);
-    res.json(data);
+    if (data && Array.isArray(data.data) && data.data.length > 0) {
+      setCache(cacheKey, data, CACHE_TTL.popular);
+      return res.json(data);
+    }
+    const fallbackData = { result: 'ok', response: 'collection', data: MANGADEX_POPULAR_SNAPSHOT };
+    setCache(cacheKey, fallbackData, CACHE_TTL.popular);
+    return res.json(fallbackData);
   } catch (error) {
-    console.error('Error fetching popular manga:', error.message);
-    res.status(500).json({ error: error.message });
+    console.error('Error fetching popular manga from MangaDex:', error.message);
+    const cached = getCache('popular_manga');
+    if (cached) return res.json(cached);
+
+    const fallbackData = { result: 'ok', response: 'collection', data: MANGADEX_POPULAR_SNAPSHOT };
+    setCache('popular_manga', fallbackData, CACHE_TTL.popular);
+    return res.json(fallbackData);
   }
 });
 
@@ -662,7 +843,52 @@ app.get('/api/cover/:mangaId/:filename', (req, res) => {
         return res.end(coverData.buffer);
       }
 
-      // Fallback 3: Clean placeholder image
+      // Fallback 3: AniList High-Resolution Cover Art
+      if (!coverData) {
+        try {
+          let searchTitle = (req.query.title || '').trim();
+          if (!searchTitle) {
+            for (const [key, val] of cache.entries()) {
+              if (val && Array.isArray(val.data)) {
+                const found = val.data.find(m => m && m.id === mangaId);
+                if (found) {
+                  const t = found.title || found.attributes?.title;
+                  if (typeof t === 'string') searchTitle = t;
+                  else if (typeof t === 'object' && t !== null) searchTitle = t.en || t.id || t.romaji || Object.values(t)[0];
+                  if (searchTitle) break;
+                }
+              }
+            }
+          }
+          if (!searchTitle) {
+            const snap = MANGADEX_POPULAR_SNAPSHOT.find(m => m.id === mangaId);
+            if (snap?.coverUrl) {
+              res.setHeader('Cache-Control', 'public, max-age=2592000, s-maxage=2592000, stale-while-revalidate=86400');
+              return res.redirect(302, snap.coverUrl);
+            }
+          }
+          if (searchTitle) {
+            const cleanTitle = searchTitle.replace(/\(.*?\)|\[.*?\]/g, '').replace(/[-_:]/g, ' ').replace(/\s+/g, ' ').trim();
+            const gql = `query ($s: String) { Media(search: $s, type: MANGA) { coverImage { extraLarge large } } }`;
+            const alRes = await fetch('https://graphql.anilist.co', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ query: gql, variables: { s: cleanTitle } }),
+              signal: AbortSignal.timeout(4000)
+            });
+            if (alRes.ok) {
+              const alJson = await alRes.json();
+              const cov = alJson.data?.Media?.coverImage?.extraLarge || alJson.data?.Media?.coverImage?.large;
+              if (cov) {
+                res.setHeader('Cache-Control', 'public, max-age=2592000, s-maxage=2592000, stale-while-revalidate=86400');
+                return res.redirect(302, cov);
+              }
+            }
+          }
+        } catch (eAl) {}
+      }
+
+      // Fallback 4: Clean placeholder image
       res.redirect(302, 'https://placehold.co/300x420/1e2025/ffffff?text=Cover');
     } catch (err) {
       res.redirect(302, 'https://placehold.co/300x420/1e2025/ffffff?text=Cover');

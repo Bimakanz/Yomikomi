@@ -2221,11 +2221,14 @@ function mapAniListMedia(media) {
 const ANIME_POPULAR_SNAPSHOT = [
   {
     id: 151807,
+    malId: 52299,
+    tmdbId: 213026,
+    kitsuId: '46231',
     mediaType: 'anime',
     title: 'Solo Leveling',
     titleObj: { romaji: 'Ore dake Level Up na Ken', english: 'Solo Leveling', native: '俺だけレベルアップな件' },
-    coverUrl: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx151807-m1gynlHQmaW4.png',
-    bannerUrl: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/151807-35jENdhpjK0e.jpg',
+    coverUrl: 'https://media.kitsu.app/anime/46231/poster_image/large-cdadff31f42490b9f48a035939a01a92.jpeg',
+    bannerUrl: 'https://media.kitsu.app/anime/46231/cover_image/large-33273dc297cdc8b10cc1140de07d3dae.jpeg',
     rating: '⭐ 8.4',
     averageScore: 84,
     status: 'RELEASING',
@@ -2236,11 +2239,14 @@ const ANIME_POPULAR_SNAPSHOT = [
   },
   {
     id: 171018,
+    malId: 57334,
+    tmdbId: 242224,
+    kitsuId: '48269',
     mediaType: 'anime',
     title: 'Dandadan',
     titleObj: { romaji: 'Dandadan', english: 'DAN DA DAN', native: 'ダンダダン' },
-    coverUrl: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx171018-b2g2t9wO2N7j.jpg',
-    bannerUrl: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/171018-tQ7o62n62o61.jpg',
+    coverUrl: 'https://media.kitsu.app/anime/48269/poster_image/large-589c017798b98c69e3a615ca4191f49d.jpeg',
+    bannerUrl: 'https://media.kitsu.app/anime/48269/cover_image/large-2a78bed2943524035cc0146c6633d1bf.jpeg',
     rating: '⭐ 8.6',
     averageScore: 86,
     status: 'RELEASING',
@@ -2251,11 +2257,14 @@ const ANIME_POPULAR_SNAPSHOT = [
   },
   {
     id: 154587,
+    malId: 52991,
+    tmdbId: 209867,
+    kitsuId: '46474',
     mediaType: 'anime',
     title: 'Sousou no Frieren',
     titleObj: { romaji: 'Sousou no Frieren', english: 'Frieren: Beyond Journey\'s End', native: '葬送のフリーレン' },
-    coverUrl: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx154587-n1HJZ2GEsJ5b.jpg',
-    bannerUrl: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/154587-ivXNJrKOq6Wf.jpg',
+    coverUrl: 'https://media.kitsu.app/anime/46474/poster_image/large-ec9b98dd5fbf8f92532d1edb45f9e882.jpeg',
+    bannerUrl: 'https://media.kitsu.app/anime/46474/cover_image/large-167edf3e01fac59ce6aacfeb47df5634.jpeg',
     rating: '⭐ 9.1',
     averageScore: 91,
     status: 'FINISHED',
@@ -2266,11 +2275,14 @@ const ANIME_POPULAR_SNAPSHOT = [
   },
   {
     id: 113415,
+    malId: 40748,
+    tmdbId: 95479,
+    kitsuId: '42765',
     mediaType: 'anime',
     title: 'Jujutsu Kaisen',
     titleObj: { romaji: 'Jujutsu Kaisen', english: 'Jujutsu Kaisen', native: '呪術廻戦' },
-    coverUrl: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx113415-bbBWj4pUbAw8.jpg',
-    bannerUrl: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/113415-jQTojadLFjd1.jpg',
+    coverUrl: 'https://media.kitsu.app/anime/42765/poster_image/large-5ce19551c1a6cf995b378205b9149b5c.jpeg',
+    bannerUrl: 'https://media.kitsu.app/anime/cover_images/42765/large.jpg',
     rating: '⭐ 8.6',
     averageScore: 86,
     status: 'FINISHED',
@@ -2281,11 +2293,14 @@ const ANIME_POPULAR_SNAPSHOT = [
   },
   {
     id: 127230,
+    malId: 44511,
+    tmdbId: 114410,
+    kitsuId: '43806',
     mediaType: 'anime',
     title: 'Chainsaw Man',
     titleObj: { romaji: 'Chainsaw Man', english: 'Chainsaw Man', native: 'チェンソーマン' },
-    coverUrl: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx127230-FloXFsyoFpWj.png',
-    bannerUrl: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/127230-TfQmsdfLg9w1.jpg',
+    coverUrl: 'https://media.kitsu.app/anime/43806/poster_image/large-815d6008fb3b56f4291b9f0ffa05cd8f.jpeg',
+    bannerUrl: 'https://media.kitsu.app/anime/43806/cover_image/large-964674a0f11524f62d65dde845ad8e1f.jpeg',
     rating: '⭐ 8.4',
     averageScore: 84,
     status: 'FINISHED',
@@ -2296,11 +2311,14 @@ const ANIME_POPULAR_SNAPSHOT = [
   },
   {
     id: 21,
+    malId: 21,
+    tmdbId: 37854,
+    kitsuId: '12',
     mediaType: 'anime',
     title: 'One Piece',
     titleObj: { romaji: 'ONE PIECE', english: 'One Piece', native: 'ONE PIECE' },
-    coverUrl: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21-6D55gNtdcQpM.jpg',
-    bannerUrl: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/21-wf37VakJ5J0Q.jpg',
+    coverUrl: 'https://media.kitsu.app/anime/poster_images/12/large.jpg',
+    bannerUrl: 'https://media.kitsu.app/anime/12/cover_image/large-3e72f400a87b5241780c5082f0582611.jpeg',
     rating: '⭐ 8.8',
     averageScore: 88,
     status: 'RELEASING',
@@ -2311,11 +2329,14 @@ const ANIME_POPULAR_SNAPSHOT = [
   },
   {
     id: 101922,
+    malId: 38000,
+    tmdbId: 85937,
+    kitsuId: '41370',
     mediaType: 'anime',
     title: 'Kimetsu no Yaiba',
     titleObj: { romaji: 'Kimetsu no Yaiba', english: 'Demon Slayer: Kimetsu no Yaiba', native: '鬼滅の刃' },
-    coverUrl: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx101922-WBsBl0ClmgLd.jpg',
-    bannerUrl: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/101922-YfZhRmwNENCo.jpg',
+    coverUrl: 'https://media.kitsu.app/anime/poster_images/41370/large.jpg',
+    bannerUrl: 'https://media.kitsu.app/anime/41370/cover_image/large-3de3cc6d2b33162c928de10aa201e4ba.jpeg',
     rating: '⭐ 8.5',
     averageScore: 85,
     status: 'FINISHED',
@@ -2326,11 +2347,14 @@ const ANIME_POPULAR_SNAPSHOT = [
   },
   {
     id: 140960,
+    malId: 50265,
+    tmdbId: 120089,
+    kitsuId: '45398',
     mediaType: 'anime',
     title: 'Spy x Family',
     titleObj: { romaji: 'SPY×FAMILY', english: 'Spy x Family', native: 'SPY×FAMILY' },
-    coverUrl: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx140960-vXxiywqZNm7n.jpg',
-    bannerUrl: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/140960-rPO7BwDqH3eH.jpg',
+    coverUrl: 'https://media.kitsu.app/anime/45398/poster_image/large-c26c1e0b77e881fcd66475af6bd22c57.jpeg',
+    bannerUrl: 'https://media.kitsu.app/anime/45398/cover_image/large-1e81255ff9bde22c072c555cc5998805.jpeg',
     rating: '⭐ 8.5',
     averageScore: 85,
     status: 'FINISHED',
@@ -2341,11 +2365,14 @@ const ANIME_POPULAR_SNAPSHOT = [
   },
   {
     id: 150672,
+    malId: 52034,
+    tmdbId: 203737,
+    kitsuId: '46170',
     mediaType: 'anime',
     title: '【OSHI NO KO】',
     titleObj: { romaji: '【OSHI NO KO】', english: '【OSHI NO KO】', native: '【推しの子】' },
-    coverUrl: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx150672-6pe5a9dZkmG9.png',
-    bannerUrl: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/150672-S2j7eP6X0w67.jpg',
+    coverUrl: 'https://media.kitsu.app/anime/46170/poster_image/large-0bad1050afcf9e5320ca46bf17ac007a.jpeg',
+    bannerUrl: 'https://media.kitsu.app/anime/46170/cover_image/large-49585dba0b824dbd0267d5c7ce8ef56f.jpeg',
     rating: '⭐ 8.7',
     averageScore: 87,
     status: 'FINISHED',
@@ -2356,11 +2383,14 @@ const ANIME_POPULAR_SNAPSHOT = [
   },
   {
     id: 153288,
+    malId: 52588,
+    tmdbId: 207374,
+    kitsuId: '46300',
     mediaType: 'anime',
     title: 'Kaiju No. 8',
     titleObj: { romaji: 'Kaijuu 8-gou', english: 'Kaiju No.8', native: '怪獣8号' },
-    coverUrl: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx153288-wK9h7Osl4Z4q.jpg',
-    bannerUrl: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/153288-M39U0cZtFfD1.jpg',
+    coverUrl: 'https://media.kitsu.app/anime/46300/poster_image/large-31cc66fd5854cc555d496ced7ab40c31.jpeg',
+    bannerUrl: 'https://media.kitsu.app/anime/46300/cover_image/large-beb78aec0cb2066bc44ea52f66311e04.jpeg',
     rating: '⭐ 8.2',
     averageScore: 82,
     status: 'FINISHED',
@@ -2371,11 +2401,14 @@ const ANIME_POPULAR_SNAPSHOT = [
   },
   {
     id: 16498,
+    malId: 16498,
+    tmdbId: 1429,
+    kitsuId: '7442',
     mediaType: 'anime',
     title: 'Attack on Titan',
     titleObj: { romaji: 'Shingeki no Kyojin', english: 'Attack on Titan', native: '進撃の巨人' },
-    coverUrl: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx16498-m5ZMNScFl63k.jpg',
-    bannerUrl: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/16498-8jpFCOcDmnei.jpg',
+    coverUrl: 'https://media.kitsu.app/anime/poster_images/7442/large.jpg',
+    bannerUrl: 'https://media.kitsu.app/anime/cover_images/7442/large.jpg',
     rating: '⭐ 8.6',
     averageScore: 86,
     status: 'FINISHED',
@@ -2386,11 +2419,14 @@ const ANIME_POPULAR_SNAPSHOT = [
   },
   {
     id: 114446,
+    malId: 41467,
+    tmdbId: 94664,
+    kitsuId: '43078',
     mediaType: 'anime',
     title: 'Bleach: Thousand-Year Blood War',
     titleObj: { romaji: 'BLEACH: Sennen Kessen-hen', english: 'Bleach: Thousand-Year Blood War', native: 'BLEACH 千年血戦篇' },
-    coverUrl: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx114446-21XU7K2pPjZq.jpg',
-    bannerUrl: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/114446-yKqZgIe7cKeq.jpg',
+    coverUrl: 'https://media.kitsu.app/anime/43078/poster_image/large-bf36dc3ed0097c8b8c49e064bf0eaa79.jpeg',
+    bannerUrl: 'https://media.kitsu.app/anime/43078/cover_image/large-45a93d1d5a68cf93aa314a9efbe8bf72.jpeg',
     rating: '⭐ 8.9',
     averageScore: 89,
     status: 'FINISHED',
@@ -2550,8 +2586,8 @@ app.get('/api/anime/movies', async (req, res) => {
         mediaType: 'anime',
         title: 'Demon Slayer: Mugen Train',
         titleObj: { romaji: 'Kimetsu no Yaiba: Mugen Ressha-hen', english: 'Demon Slayer -Kimetsu no Yaiba- The Movie: Mugen Train' },
-        coverUrl: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx101922-WBsBl0ClmgLd.jpg',
-        bannerUrl: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/101922-YfZhRmwNENCo.jpg',
+        coverUrl: 'https://media.kitsu.app/anime/poster_images/42965/large.jpg',
+        bannerUrl: 'https://media.kitsu.app/anime/41370/cover_image/large-3de3cc6d2b33162c928de10aa201e4ba.jpeg',
         rating: '⭐ 8.7',
         format: 'MOVIE',
         status: 'FINISHED',
@@ -2563,8 +2599,8 @@ app.get('/api/anime/movies', async (req, res) => {
         mediaType: 'anime',
         title: 'Kimi no Na wa. (Your Name)',
         titleObj: { romaji: 'Kimi no Na wa.', english: 'Your Name.' },
-        coverUrl: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21519-9DkWv7Qp3GjF.png',
-        bannerUrl: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/21519-11fI4sU9iL8B.jpg',
+        coverUrl: 'https://media.kitsu.app/anime/poster_images/11614/large.jpg',
+        bannerUrl: 'https://media.kitsu.app/anime/46474/cover_image/large-167edf3e01fac59ce6aacfeb47df5634.jpeg',
         rating: '⭐ 8.9',
         format: 'MOVIE',
         status: 'FINISHED',
@@ -2576,8 +2612,8 @@ app.get('/api/anime/movies', async (req, res) => {
         mediaType: 'anime',
         title: 'Jujutsu Kaisen 0: The Movie',
         titleObj: { romaji: 'Jujutsu Kaisen 0', english: 'Jujutsu Kaisen 0' },
-        coverUrl: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx131573-0wHn9M2B6v6t.jpg',
-        bannerUrl: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/131573-u2bL0a7eGk0s.jpg',
+        coverUrl: 'https://media.kitsu.app/anime/poster_images/44365/large.jpg',
+        bannerUrl: 'https://media.kitsu.app/anime/cover_images/42765/large.jpg',
         rating: '⭐ 8.5',
         format: 'MOVIE',
         status: 'FINISHED',
@@ -2818,8 +2854,13 @@ app.get('/api/anime/:id', async (req, res) => {
       });
     }
 
-    // Attach AniZip mappings
-    mapped.mappings = aniZipData?.mappings || null;
+    // Attach AniZip & Snapshot mappings
+    const snap = ANIME_POPULAR_SNAPSHOT.find(a => String(a.id) === String(id));
+    mapped.mappings = {
+      mal_id: snap?.malId || aniZipData?.mappings?.mal_id || null,
+      themoviedb_id: snap?.tmdbId || aniZipData?.mappings?.themoviedb_id || null,
+      kitsu_id: snap?.kitsuId || aniZipData?.mappings?.kitsu_id || null
+    };
     mapped.episodesList = episodesList;
     mapped.totalEpisodes = totalEps;
 
@@ -2867,6 +2908,8 @@ app.get('/api/anime/stream/:id/:ep', async (req, res) => {
       const snap = ANIME_POPULAR_SNAPSHOT.find(a => String(a.id) === String(id));
       if (snap) {
         animeTitle = snap.title;
+        if (!malId && snap.malId) malId = snap.malId;
+        if (!tmdbId && snap.tmdbId) tmdbId = snap.tmdbId;
       }
       try {
         const [titleData, zipData] = await Promise.all([
@@ -2902,18 +2945,21 @@ app.get('/api/anime/stream/:id/:ep', async (req, res) => {
     if (servers.length === 0) {
       const safeTitle = encodeURIComponent(animeTitle || 'anime');
 
-      if (tmdbId) {
+      if (malId) {
         servers.push({
-          id: 'server-multiembed-tmdb',
-          name: 'Server 1 (FHD AutoStream • Super Lancar)',
+          id: 'server-vidsrc-mal',
+          name: 'Server 1 (VidSrc HD • Super Lancar)',
           type: 'iframe',
-          url: `https://multiembed.mov/?video_id=${tmdbId}&tmdb=1&s=1&e=${epNum}`,
+          url: `https://vidsrc.me/embed/anime?mal=${malId}&ep=${epNum}`,
           quality: '1080p',
           isSubIndo: false
         });
+      }
+
+      if (tmdbId) {
         servers.push({
           id: 'server-autoembed-tmdb',
-          name: `Server ${servers.length + 1} (Fast Cloud CDN)`,
+          name: `Server ${servers.length + 1} (AutoEmbed Cloud CDN)`,
           type: 'iframe',
           url: `https://autoembed.co/tv/tmdb/${tmdbId}-1-${epNum}`,
           quality: 'Auto',
@@ -2929,23 +2975,12 @@ app.get('/api/anime/stream/:id/:ep', async (req, res) => {
         });
       }
 
-      if (malId) {
-        servers.push({
-          id: 'server-vidsrc-mal',
-          name: `Server ${servers.length + 1} (VidSrc Anime • Multi-Sub)`,
-          type: 'iframe',
-          url: `https://vidsrc.pm/embed/anime?mal=${malId}&ep=${epNum}`,
-          quality: '1080p',
-          isSubIndo: false
-        });
-      }
-
       if (servers.length === 0) {
         servers.push({
-          id: 'server-embed-title',
-          name: 'Server 1 (FHD AutoStream • Super Lancar)',
+          id: 'server-vidsrc-fallback',
+          name: 'Server 1 (AutoStream • VidSrc)',
           type: 'iframe',
-          url: `https://multiembed.mov/?video_id=${safeTitle}&s=1&e=${epNum}`,
+          url: `https://vidsrc.me/embed/anime?title=${safeTitle}&ep=${epNum}`,
           quality: '1080p',
           isSubIndo: false
         });

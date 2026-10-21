@@ -397,19 +397,23 @@ export async function loadEpisode(epNumber) {
   let servers = anime.episodesList?.[epNumber - 1]?.servers || [];
 
   if (servers.length === 0) {
-    // Priority 1: MultiEmbed & AutoEmbed (Fastest, zero ad-block/sandbox issues, instant playback)
-    if (tmdbId) {
+    // Priority 1: VidSrc Anime (Dedicated, fast, 200 OK, X-Frame: NONE)
+    if (malId) {
       servers.push({
-        id: 'server-multiembed-tmdb',
-        name: 'Server 1 (FHD AutoStream • Super Lancar)',
+        id: 'server-vidsrc-mal',
+        name: 'Server 1 (VidSrc HD • Super Lancar)',
         type: 'iframe',
-        url: `https://multiembed.mov/?video_id=${tmdbId}&tmdb=1&s=1&e=${epNumber}`,
+        url: `https://vidsrc.me/embed/anime?mal=${malId}&ep=${epNumber}`,
         quality: '1080p',
         isSubIndo: false
       });
+    }
+
+    // Priority 2: AutoEmbed & 2Embed Cloud
+    if (tmdbId) {
       servers.push({
         id: 'server-autoembed-tmdb',
-        name: `Server ${servers.length + 1} (Fast Cloud CDN)`,
+        name: `Server ${servers.length + 1} (AutoEmbed Cloud CDN)`,
         type: 'iframe',
         url: `https://autoembed.co/tv/tmdb/${tmdbId}-1-${epNumber}`,
         quality: 'Auto',
@@ -425,24 +429,12 @@ export async function loadEpisode(epNumber) {
       });
     }
 
-    // Priority 2: VidSrc Anime (Dedicated anime player with multi-subs)
-    if (malId) {
-      servers.push({
-        id: 'server-vidsrc-mal',
-        name: `Server ${servers.length + 1} (VidSrc Anime • Multi-Sub)`,
-        type: 'iframe',
-        url: `https://vidsrc.pm/embed/anime?mal=${malId}&ep=${epNumber}`,
-        quality: '1080p',
-        isSubIndo: false
-      });
-    }
-
     if (servers.length === 0) {
       servers.push({
-        id: 'server-direct-embed',
-        name: 'Server 1 (FHD AutoStream • Super Lancar)',
+        id: 'server-vidsrc-fallback',
+        name: 'Server 1 (AutoStream • VidSrc)',
         type: 'iframe',
-        url: `https://multiembed.mov/?video_id=${safeTitle}&s=1&e=${epNumber}`,
+        url: `https://vidsrc.me/embed/anime?title=${safeTitle}&ep=${epNumber}`,
         quality: '1080p',
         isSubIndo: false
       });

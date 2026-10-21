@@ -146,7 +146,49 @@ export class AnimeIndoProvider {
         }
       }
     } catch (e) {
-      console.warn('[AnimeIndoProvider] Failed to fetch live streams:', (e as any).message);
+      console.warn('[AnimeIndoProvider] Otakudesu failed, trying Samehadaku:', (e as any).message);
+    }
+
+    // Try Samehadaku Scraper if Otakudesu yielded no servers
+    if (servers.length === 0) {
+      try {
+        const sRes = await axios.get(`https://samehadaku.email/?s=${encodeURIComponent(cleanTitle)}`, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+          timeout: this.timeoutMs
+        });
+        const $s = cheerio.load(sRes.data);
+        const firstLink = $s('.animpost .animepost a').first().attr('href') || $s('article a').first().attr('href');
+        if (firstLink) {
+          const detailRes = await axios.get(firstLink, { timeout: this.timeoutMs });
+          const $d = cheerio.load(detailRes.data);
+          let targetEpLink = '';
+          $d('.lastep ul li a, .episodelist ul li a').each((_, el) => {
+            const txt = $d(el).text();
+            if (txt.includes(`Episode ${episodeNumber}`) || txt.includes(`Ep ${episodeNumber}`)) {
+              targetEpLink = $d(el).attr('href') || '';
+              return false;
+            }
+          });
+
+          if (targetEpLink) {
+            const streamPage = await axios.get(targetEpLink, { timeout: this.timeoutMs });
+            const $p = cheerio.load(streamPage.data);
+            const embedSrc = $p('#player-area iframe, .video-content iframe').attr('src');
+            if (embedSrc) {
+              servers.push({
+                id: 'samehadaku-main',
+                name: 'Server 1 (Sub Indo • Samehadaku HD)',
+                type: 'iframe',
+                url: embedSrc,
+                quality: '1080p',
+                isSubIndo: true
+              });
+            }
+          }
+        }
+      } catch (sErr) {
+        console.warn('[AnimeIndoProvider] Samehadaku fallback failed:', (sErr as any).message);
+      }
     }
 
     // Default fast fallback iframe / stream server if scraping is restricted by Cloudflare

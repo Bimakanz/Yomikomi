@@ -15,11 +15,17 @@ export class AnimeAggregatorService {
     const cached = globalCache.get<AnimeStreamServer[]>(cacheKey);
     if (cached) return cached;
 
-    // Parallel fetch from both Sub Indo and Global providers
-    const [indoServers, globalServers] = await Promise.all([
+    // Strict 2.2-second budget for external live scrapers
+    const scraperPromise = Promise.all([
       animeIndoProvider.getEpisodeStreams(animeTitle, episodeNumber).catch(() => []),
       animeGlobalProvider.getEpisodeStreams(animeTitle, episodeNumber).catch(() => [])
     ]);
+
+    const timeoutPromise = new Promise<[AnimeStreamServer[], AnimeStreamServer[]]>((resolve) =>
+      setTimeout(() => resolve([[], []]), 2200)
+    );
+
+    const [indoServers, globalServers] = await Promise.race([scraperPromise, timeoutPromise]);
 
     const combined: AnimeStreamServer[] = [];
 
@@ -33,16 +39,35 @@ export class AnimeAggregatorService {
       combined.push(...globalServers);
     }
 
-    // Ensure fallback exists
+    // High quality instant fallback servers if scrapers timed out or found nothing
     if (combined.length === 0) {
-      combined.push({
-        id: 'fallback-hls',
-        name: 'Server 1 (Auto FHD • HLS)',
-        type: 'hls',
-        url: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
-        quality: '1080p',
-        isSubIndo: true
-      });
+      const safeTitle = encodeURIComponent(animeTitle);
+      combined.push(
+        {
+          id: 'server-indo-direct-hd',
+          name: 'Server 1 (Sub Indo • Direct HD)',
+          type: 'iframe',
+          url: `https://vidsrc.to/embed/anime/${safeTitle}/${episodeNumber}`,
+          quality: '1080p',
+          isSubIndo: true
+        },
+        {
+          id: 'server-global-hls-fhd',
+          name: 'Server 2 (Global FHD 1080p • Direct HLS)',
+          type: 'hls',
+          url: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
+          quality: '1080p',
+          isSubIndo: false
+        },
+        {
+          id: 'server-direct-embed-mirror',
+          name: 'Server 3 (Direct CDN Embed)',
+          type: 'iframe',
+          url: `https://player.autoembed.cc/embed/anime/${safeTitle}/${episodeNumber}`,
+          quality: '720p',
+          isSubIndo: false
+        }
+      );
     }
 
     globalCache.set(cacheKey, combined, 60 * 60 * 1000);

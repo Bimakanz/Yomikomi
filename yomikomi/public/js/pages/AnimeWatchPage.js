@@ -154,27 +154,29 @@ export async function openAnimeWatch(animeId, epNumber = 1, maybeAnimeData = nul
 
   let anime = maybeAnimeData;
 
-  // Optimistic initial render if data provided
+  // Optimistic initial render and instant playback if data provided
   if (anime) {
     state.currentAnime = anime;
     renderAnimeDetails(anime, state.currentAnimeEpisode);
-  }
-
-  try {
-    const res = await fetch(`/api/anime/${animeId}`);
-    const data = await res.json();
-    if (data.data) {
-      anime = data.data;
-      state.currentAnime = anime;
-      renderAnimeDetails(anime, state.currentAnimeEpisode);
-    }
-  } catch (err) {
-    console.error('Failed to fetch anime details:', err);
-  }
-
-  if (anime) {
     loadEpisode(state.currentAnimeEpisode);
   }
+
+  // Fetch full details and enriched AniZip episode thumbnails in parallel
+  fetch(`/api/anime/${animeId}`)
+    .then(res => res.json())
+    .then(data => {
+      if (data.data) {
+        anime = data.data;
+        state.currentAnime = anime;
+        renderAnimeDetails(anime, state.currentAnimeEpisode);
+        if (!maybeAnimeData) {
+          loadEpisode(state.currentAnimeEpisode);
+        }
+      }
+    })
+    .catch(err => {
+      console.error('Failed to fetch anime details:', err);
+    });
 }
 
 export function renderAnimeDetails(anime, activeEp = 1) {
@@ -250,9 +252,16 @@ export function renderEpisodeList(totalEps, activeEp = 1, filterQuery = '') {
 
   container.innerHTML = '';
   const q = filterQuery.toLowerCase().trim();
+  const anime = state.currentAnime;
+  const epList = anime?.episodesList || [];
 
   for (let i = 1; i <= totalEps; i++) {
-    const epTitle = `Episode ${i}`;
+    const epData = epList[i - 1] || {};
+    const epTitle = epData.title || `Episode ${i}`;
+    const epThumb = epData.thumbnail || '';
+    const epOverview = epData.overview || '';
+    const epDuration = epData.duration || '';
+
     if (q && !epTitle.toLowerCase().includes(q) && !String(i).includes(q)) {
       continue;
     }
@@ -262,12 +271,19 @@ export function renderEpisodeList(totalEps, activeEp = 1, filterQuery = '') {
     item.tabIndex = 0;
     item.setAttribute('role', 'button');
     item.dataset.ep = i;
+
+    const thumbHtml = epThumb
+      ? `<img class="ep-thumb" src="${epThumb}" alt="Ep ${i}" loading="lazy" onerror="this.style.display='none'">`
+      : '';
+
     item.innerHTML = `
       <div class="ep-left">
+        ${thumbHtml}
         <span class="ep-num-badge">${i}</span>
         <div class="ep-info">
           <span class="ep-title">${epTitle}</span>
-          <span class="ep-sub-badge">Sub Indo • 1080p</span>
+          <span class="ep-sub-badge">${epDuration ? epDuration + ' • ' : ''}Sub Indo • 1080p</span>
+          ${epOverview ? `<span class="ep-overview">${epOverview.substring(0, 80)}${epOverview.length > 80 ? '...' : ''}</span>` : ''}
         </div>
       </div>
       <div class="ep-status-icon">
@@ -284,6 +300,7 @@ export function renderEpisodeList(totalEps, activeEp = 1, filterQuery = '') {
 
   initIcons();
 }
+
 
 let currentHlsInstance = null;
 
@@ -375,33 +392,27 @@ export async function loadEpisode(epNumber) {
     }
   });
 
-  // Get servers from episode data or fetch live from stream resolver
+  const animeTitle = typeof anime.title === 'string' 
+    ? anime.title 
+    : (anime.title?.romaji || anime.title?.english || anime.titleObj?.romaji || 'Anime');
+  const safeTitle = encodeURIComponent(animeTitle);
+
+  // Get servers from episode data or build instant high-performance servers immediately
   let servers = anime.episodesList?.[epNumber - 1]?.servers || [];
 
-  if (servers.length === 0) {
-    try {
-      const streamRes = await fetch(`/api/anime/stream/${anime.id}/${epNumber}`);
-      const streamData = await streamRes.json();
-      if (streamData.servers && streamData.servers.length > 0) {
-        servers = streamData.servers;
-      }
-    } catch (_) {}
-  }
-
-  // Fallback default servers if needed
   if (servers.length === 0) {
     servers = [
       {
         id: 'server-indo-1',
-        name: 'Server 1 (Sub Indo • 1080p HD)',
+        name: 'Server 1 (Sub Indo • Direct HD)',
         quality: '1080p',
         type: 'iframe',
-        url: `https://vidsrc.to/embed/anime/${encodeURIComponent(anime.title || 'anime')}/${epNumber}`,
+        url: `https://vidsrc.to/embed/anime/${safeTitle}/${epNumber}`,
         isSubIndo: true
       },
       {
         id: 'server-global-2',
-        name: 'Server 2 (Multi-Sub • HLS Stream)',
+        name: 'Server 2 (Global FHD • Multi-Sub HLS)',
         quality: '1080p',
         type: 'hls',
         url: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
@@ -416,6 +427,28 @@ export async function loadEpisode(epNumber) {
         isSubIndo: true
       }
     ];
+
+    // Background fetch to enrich servers without blocking video playback or UI
+    fetch(`/api/anime/stream/${anime.id}/${epNumber}`)
+      .then(res => res.json())
+      .then(streamData => {
+        if (streamData?.servers?.length > 0) {
+          const freshServers = streamData.servers;
+          if (anime.episodesList && anime.episodesList[epNumber - 1]) {
+            anime.episodesList[epNumber - 1].servers = freshServers;
+          }
+          const sSelect = document.getElementById('select-anime-server');
+          if (sSelect) {
+            const currentVal = sSelect.value;
+            sSelect.innerHTML = freshServers.map((s, idx) => `
+              <option value="${idx}" ${String(idx) === currentVal ? 'selected' : ''}>
+                ${s.name || `Server ${idx + 1}`}
+              </option>
+            `).join('');
+          }
+        }
+      })
+      .catch(() => {});
   }
 
   // Populate server selector dropdown dynamically

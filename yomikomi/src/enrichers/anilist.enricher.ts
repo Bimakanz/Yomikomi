@@ -187,3 +187,59 @@ export async function enrichWithAniList(detail: MangaDetail): Promise<MangaDetai
 
   return enriched;
 }
+
+/**
+ * Jikan API v4 Fallback for Anime Metadata
+ */
+export async function fetchJikanFallback(title: string): Promise<AniListMetadata | null> {
+  const cleaned = cleanSearchTitle(title);
+  if (!cleaned) return null;
+
+  const cacheKey = `jikan_fallback_${cleaned.toLowerCase()}`;
+  const cached = globalCache.get<AniListMetadata>(cacheKey);
+  if (cached) return cached;
+
+  try {
+    const res = await axios.get(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(cleaned)}&limit=1`, {
+      timeout: 5000,
+      headers: { 'User-Agent': 'Yomikomi/2.0' }
+    });
+
+    const item = res.data?.data?.[0];
+    if (!item) return null;
+
+    const mapped: AniListMetadata = {
+      id: item.mal_id,
+      title: {
+        romaji: item.title,
+        english: item.title_english || item.title,
+        native: item.title_japanese || item.title
+      },
+      bannerImage: item.images?.webp?.large_image_url || item.images?.jpg?.large_image_url,
+      coverImage: {
+        extraLarge: item.images?.webp?.large_image_url || item.images?.jpg?.large_image_url,
+        large: item.images?.webp?.image_url || item.images?.jpg?.image_url
+      },
+      description: item.synopsis || '',
+      averageScore: item.score ? Math.round(item.score * 10) : undefined,
+      genres: (item.genres || []).map((g: any) => g.name),
+      status: item.status === 'Currently Airing' ? 'RELEASING' : 'FINISHED',
+      format: item.type || 'TV',
+      episodes: item.episodes || null
+    };
+
+    globalCache.set(cacheKey, mapped, 24 * 60 * 60 * 1000);
+    return mapped;
+  } catch (err) {
+    return null;
+  }
+}
+
+/**
+ * Fetch Anime metadata with AniList primary and Jikan v4 fallback
+ */
+export async function fetchAnimeMetadataWithFallback(title: string): Promise<AniListMetadata | null> {
+  const aniData = await fetchAniListMetadata(title);
+  if (aniData) return aniData;
+  return fetchJikanFallback(title);
+}

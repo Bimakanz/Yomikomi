@@ -369,10 +369,12 @@ export async function openMangaDetail(mangaId, maybeMangaData = null) {
   }
 
   // MangaDex or standard manga
-  const existing = state.mangaList?.find(m => m.id === mangaId);
+  const existing = maybeMangaData || state.mangaList?.find(m => m.id === mangaId);
+  const preservedKomikuSlug = maybeMangaData?.komikuSlug || existing?.komikuSlug;
+
   if (existing) {
-    state.currentManga = existing;
-    renderMangaDetailHero(existing);
+    state.currentManga = { ...existing, ...(preservedKomikuSlug ? { komikuSlug: preservedKomikuSlug } : {}) };
+    renderMangaDetailHero(state.currentManga);
   } else if (heroContent) {
     heroContent.innerHTML = `<div class="spinner" style="margin: 3rem auto;"></div>`;
   }
@@ -388,11 +390,21 @@ export async function openMangaDetail(mangaId, maybeMangaData = null) {
     const res = await fetch(`/api/manga/${mangaId}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    state.currentManga = data.data;
+    const activeKomikuSlug = preservedKomikuSlug || state.currentManga?.komikuSlug || data.data.komikuSlug;
+    state.currentManga = {
+      ...data.data,
+      ...(activeKomikuSlug ? { komikuSlug: activeKomikuSlug } : {})
+    };
 
     CoverCache.set(data.data.id, getMangaTitle(data.data.attributes), getCoverUrl(data.data));
     setMangaDetailCached(mangaId, state.currentManga);
     renderMangaDetailHero(state.currentManga);
+
+    // If initial fetch resulted in 0 chapters across both languages or missing ID chapters when komikuSlug is known, re-run with complete metadata
+    const currentTotalChapters = (state.unifiedChapters?.id?.length || 0) + (state.unifiedChapters?.en?.length || 0);
+    if (currentTotalChapters === 0 || (activeKomikuSlug && (state.unifiedChapters?.id?.length || 0) === 0)) {
+      loadUnifiedChapters(mangaId, state.currentManga);
+    }
   } catch (error) {
     console.error('Failed to load manga detail:', error);
     if (typeof OfflineManager !== 'undefined' && OfflineManager.db?.manga) {

@@ -222,54 +222,57 @@ export async function fetchAndMergeUnifiedChapters(mangaId, mangaData = null, pr
       return prefetchedKomikuChapters;
     }
 
-    if (isKomikuManga && cleanSlug) {
+    const explicitKomikuSlug = currentManga?.komikuSlug || mangaData?.komikuSlug || (isKomikuManga ? cleanSlug : null);
+    if (explicitKomikuSlug) {
       try {
-        const kDetail = await fetchKomikuManga(cleanSlug);
-        return kDetail?.chapters || [];
+        const kDetail = await fetchKomikuManga(explicitKomikuSlug);
+        if (kDetail?.chapters && kDetail.chapters.length > 0) {
+          return kDetail.chapters;
+        }
       } catch (err) {
-        console.warn('[SmartMerger] Failed fetching Komiku chapters by slug:', err.message);
-        return [];
+        console.warn('[SmartMerger] Failed fetching Komiku chapters by explicit slug:', err.message);
       }
-    } else {
-      for (const query of titleCandidates.slice(0, 4)) {
-        try {
-          const kResults = await fetchKomikuSearch(query);
-          if (kResults && kResults.length > 0) {
-            const matches = filterAndSortMatchingComics(titleCandidates, kResults);
-            if (matches.length > 0) {
-              const matchedComic = matches[0];
-              const kDetail = await fetchKomikuManga(matchedComic.slug);
-              if (kDetail?.chapters && kDetail.chapters.length > 0) {
-                return kDetail.chapters;
-              }
-            }
-          }
-        } catch (e) { }
-      }
-
-      for (const query of titleCandidates.slice(0, 2)) {
-        try {
-          const bRes = await fetch(`/api/external/search?q=${encodeURIComponent(query)}`);
-          const bData = await bRes.json();
-          if (bData.data && bData.data.length > 0) {
-            const matches = filterAndSortMatchingComics(titleCandidates, bData.data);
-            if (matches.length > 0) {
-              const chRes = await fetch(`/api/external/chapters?url=${encodeURIComponent(matches[0].url)}`);
-              const chData = await chRes.json();
-              if (chData.chapters && chData.chapters.length > 0) {
-                return chData.chapters.map(c => ({
-                  ...c,
-                  source: 'bacakomik',
-                  language: 'id'
-                }));
-              }
-            }
-          }
-        } catch (e) { }
-      }
-
-      return [];
     }
+
+    for (const query of titleCandidates.slice(0, 4)) {
+      try {
+        const kResults = await fetchKomikuSearch(query);
+        if (kResults && kResults.length > 0) {
+          const matches = filterAndSortMatchingComics(titleCandidates, kResults);
+          if (matches.length > 0) {
+            const matchedComic = matches[0];
+            const kDetail = await fetchKomikuManga(matchedComic.slug);
+            if (kDetail?.chapters && kDetail.chapters.length > 0) {
+              return kDetail.chapters;
+            }
+          }
+        }
+      } catch (e) { }
+    }
+
+    for (const query of titleCandidates.slice(0, 3)) {
+      try {
+        const bRes = await fetch(`/api/external/search?q=${encodeURIComponent(query)}`);
+        const bData = await bRes.json();
+        if (bData.data && bData.data.length > 0) {
+          const matches = filterAndSortMatchingComics(titleCandidates, bData.data);
+          if (matches.length > 0) {
+            const targetUrlOrSlug = matches[0].url || matches[0].slug || matches[0].id;
+            const chRes = await fetch(`/api/external/chapters?url=${encodeURIComponent(targetUrlOrSlug)}`);
+            const chData = await chRes.json();
+            if (chData.chapters && chData.chapters.length > 0) {
+              return chData.chapters.map(c => ({
+                ...c,
+                source: 'bacakomik',
+                language: 'id'
+              }));
+            }
+          }
+        }
+      } catch (e) { }
+    }
+
+    return [];
   };
 
   const [mdResult, komikuResult] = await Promise.allSettled([
@@ -283,14 +286,15 @@ export async function fetchAndMergeUnifiedChapters(mangaId, mangaData = null, pr
   let englishMirrorChapters = [];
   const mdHasEn = mdChapters.some(c => c.attributes?.translatedLanguage === 'en');
   if (!mdHasEn) {
-    for (const query of titleCandidates.slice(0, 2)) {
+    for (const query of titleCandidates.slice(0, 3)) {
       try {
         const enRes = await fetch(`/api/external/en/search?q=${encodeURIComponent(query)}`);
         const enData = await enRes.json();
         if (enData.data && enData.data.length > 0) {
           const matches = filterAndSortMatchingComics(titleCandidates, enData.data);
           if (matches.length > 0) {
-            const chRes = await fetch(`/api/external/en/chapters?url=${encodeURIComponent(matches[0].url)}`);
+            const targetUrlOrSlug = matches[0].url || matches[0].slug || matches[0].id;
+            const chRes = await fetch(`/api/external/en/chapters?url=${encodeURIComponent(targetUrlOrSlug)}`);
             const chData = await chRes.json();
             if (chData.chapters && chData.chapters.length > 0) {
               englishMirrorChapters = chData.chapters;

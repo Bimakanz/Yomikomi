@@ -7,6 +7,7 @@ import { searchManga } from '../services/mangadex.js';
 import { fetchKomikuSearch } from '../services/api.js';
 import { getMangaTitle, getCoverUrl, getLanguageFlag, initIcons } from '../state.js';
 import { attachMangaCardHoverPrefetch } from '../services/mangaCache.js';
+import { calculateTitleSimilarity } from './ChapterList.js';
 
 let searchDebounceTimeout = null;
 let currentSearchMediaType = 'all'; // 'all', 'manga', 'anime'
@@ -214,13 +215,63 @@ async function performSearch(query, onSelectManga) {
       }
     }
 
-    // Interleave results so user gets a balanced, fast preview of matches
+    // Unify MangaDex & Komiku manga into exactly 1 card per title ("1 komik 1 sumber")
+    const unifiedMangaList = [];
+    const matchedKomikuSlugs = new Set();
+
+    mangadexResults.forEach(mdItem => {
+      const mdTitle = getMangaTitle(mdItem.attributes) || '';
+      const allCheckTitles = [mdTitle];
+      if (mdItem.attributes?.altTitles && Array.isArray(mdItem.attributes.altTitles)) {
+        mdItem.attributes.altTitles.forEach(at => {
+          Object.values(at).forEach(val => {
+            if (val && typeof val === 'string' && !allCheckTitles.includes(val)) {
+              allCheckTitles.push(val);
+            }
+          });
+        });
+      }
+
+      let bestMatch = null;
+      let highestSimilarity = 0;
+
+      komikuResults.forEach(kmItem => {
+        if (matchedKomikuSlugs.has(kmItem.slug)) return;
+        for (const titleCandidate of allCheckTitles) {
+          const sim = calculateTitleSimilarity(titleCandidate, kmItem.title);
+          if (sim > highestSimilarity) {
+            highestSimilarity = sim;
+            bestMatch = kmItem;
+          }
+        }
+      });
+
+      if (bestMatch && highestSimilarity >= 0.5) {
+        matchedKomikuSlugs.add(bestMatch.slug);
+        unifiedMangaList.push({
+          ...mdItem,
+          komikuSlug: bestMatch.slug,
+          komikuTitle: bestMatch.title,
+          komikuData: bestMatch
+        });
+      } else {
+        unifiedMangaList.push(mdItem);
+      }
+    });
+
+    // Append unmatched Komiku results (titles that only exist on Komiku)
+    komikuResults.forEach(kmItem => {
+      if (!matchedKomikuSlugs.has(kmItem.slug)) {
+        unifiedMangaList.push(kmItem);
+      }
+    });
+
+    // Interleave unified manga results with anime results
     const results = [];
-    const maxLen = Math.max(mangadexResults.length, komikuResults.length, animeResults.length);
+    const maxLen = Math.max(unifiedMangaList.length, animeResults.length);
     for (let i = 0; i < maxLen; i++) {
       if (i < animeResults.length && shouldSearchAnime) results.push(animeResults[i]);
-      if (i < mangadexResults.length && shouldSearchManga) results.push(mangadexResults[i]);
-      if (i < komikuResults.length && shouldSearchManga) results.push(komikuResults[i]);
+      if (i < unifiedMangaList.length && shouldSearchManga) results.push(unifiedMangaList[i]);
     }
 
     if (results.length === 0) {
@@ -246,7 +297,7 @@ async function performSearch(query, onSelectManga) {
       const statusClass = 'status-' + status.toLowerCase();
       
       const rating = isAnime ? item.rating : (item.attributes?.rating ? `⭐ ${item.attributes.rating}` : '');
-      const typeLabel = isAnime ? '🎬 Anime' : (isKomiku ? '📖 Komik ID' : '📖 Komik');
+      const typeLabel = isAnime ? 'Anime' : 'Komik';
 
       const resultRow = document.createElement('div');
       resultRow.className = 'search-result-item';

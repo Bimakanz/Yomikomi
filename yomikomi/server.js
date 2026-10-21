@@ -308,6 +308,8 @@ app.get('/api/popular', async (req, res) => {
             const title = rawTitle.replace(/^Komik\s*/i, '').trim();
             items.push({
               id: `komiku-${slug}`,
+              slug,
+              title,
               type: 'manga',
               attributes: {
                 title: { en: title, id: title },
@@ -344,6 +346,46 @@ app.get('/api/latest', async (req, res) => {
     res.json(data);
   } catch (error) {
     console.error('Error fetching latest manga:', error.message);
+    const cached = getCache('latest_manga');
+    if (cached) return res.json(cached);
+
+    try {
+      const html = await fetchExternalHtml('https://komiku.org/');
+      const $ = cheerio.load(html);
+      const items = [];
+      $('.ls2, .ls4, .ls12').each((_, el) => {
+        const a = $(el).find('a').first();
+        const href = a.attr('href') || '';
+        const rawTitle = $(el).find('h4, h3, .tt').first().text().trim() || a.attr('title') || '';
+        const img = $(el).find('img').first().attr('data-src') || $(el).find('img').first().attr('src') || '';
+        const latestCh = $(el).find('.epx, .lsch, .chapter').first().text().trim();
+        if (href && rawTitle) {
+          const slug = href.replace(/\/+$/, '').split('/').pop();
+          if (!items.some(r => r.slug === slug)) {
+            const title = rawTitle.replace(/^Komik\s*/i, '').trim();
+            items.push({
+              id: `komiku-${slug}`,
+              slug,
+              title,
+              type: 'manga',
+              attributes: {
+                title: { en: title, id: title },
+                description: { id: 'Manga rilis chapter terbaru.', en: 'Latest released manga chapter.' },
+                status: 'ongoing',
+                lastChapter: latestCh || 'Update',
+                availableTranslatedLanguages: ['id', 'en']
+              },
+              coverUrl: img ? `/api/proxy-image?url=${encodeURIComponent(img)}` : '',
+              source: 'komiku'
+            });
+          }
+        }
+      });
+      if (items.length > 0) {
+        return res.json({ data: items.slice(0, 24) });
+      }
+    } catch (e) {}
+
     res.status(500).json({ error: error.message });
   }
 });
@@ -682,12 +724,57 @@ app.get('/api/cover/:mangaId/:filename', (req, res) => {
       if (!coverData) {
         try {
           const wsrvUrl = `https://wsrv.nl/?url=https://uploads.mangadex.org/covers/${mangaId}/${filename}&output=jpg&q=80`;
-          const wsrvRes = await fetch(wsrvUrl, { signal: AbortSignal.timeout(5000) });
+          const wsrvRes = await fetch(wsrvUrl, { signal: AbortSignal.timeout(4000) });
           if (wsrvRes.ok) {
             const arrBuf = await wsrvRes.arrayBuffer();
             coverData = { buffer: Buffer.from(arrBuf), contentType: 'image/jpeg' };
           }
         } catch (e3) {}
+      }
+
+      // Fallback 3: AniList High-Resolution Cover Art by Title
+      if (!coverData) {
+        try {
+          let searchTitle = (req.query.title || '').trim();
+          if (!searchTitle) {
+            for (const [key, val] of cache.entries()) {
+              if (val && Array.isArray(val.data)) {
+                const found = val.data.find(m => m && m.id === mangaId);
+                if (found) {
+                  const t = found.title || found.attributes?.title;
+                  if (typeof t === 'string') searchTitle = t;
+                  else if (typeof t === 'object' && t !== null) searchTitle = t.en || t.id || t.romaji || Object.values(t)[0];
+                  if (searchTitle) break;
+                }
+              }
+            }
+          }
+
+          if (searchTitle) {
+            const cleanSearchTitle = searchTitle.replace(/[\[\(][^\]\)]*[\]\)]/g, ' ').replace(/\s+/g, ' ').trim();
+            const gqlQuery = `query ($s: String) { Media(search: $s, type: MANGA) { coverImage { large medium } } }`;
+            const alRes = await fetch('https://graphql.anilist.co', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ query: gqlQuery, variables: { s: cleanSearchTitle } }),
+              signal: AbortSignal.timeout(4500)
+            });
+            if (alRes.ok) {
+              const alJson = await alRes.json();
+              const alImgUrl = alJson.data?.Media?.coverImage?.large || alJson.data?.Media?.coverImage?.medium;
+              if (alImgUrl) {
+                const imgFetch = await fetch(alImgUrl, { signal: AbortSignal.timeout(5000) });
+                if (imgFetch.ok) {
+                  const arr = await imgFetch.arrayBuffer();
+                  coverData = {
+                    buffer: Buffer.from(arr),
+                    contentType: imgFetch.headers.get('content-type') || 'image/jpeg'
+                  };
+                }
+              }
+            }
+          }
+        } catch (eAl) {}
       }
 
       if (coverData && coverData.buffer && coverData.buffer.length > 500) {
@@ -701,7 +788,7 @@ app.get('/api/cover/:mangaId/:filename', (req, res) => {
         return res.end(coverData.buffer);
       }
 
-      // Fallback 3: Clean placeholder image
+      // Fallback 4: Clean placeholder image
       res.redirect(302, 'https://placehold.co/300x420/1e2025/ffffff?text=Cover');
     } catch (err) {
       res.redirect(302, 'https://placehold.co/300x420/1e2025/ffffff?text=Cover');

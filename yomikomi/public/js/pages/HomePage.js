@@ -22,6 +22,16 @@ import { renderHeroBanner } from '../components/HeroBanner.js';
 import { fetchKomikuLatest } from '../services/api.js';
 import { attachMangaCardHoverPrefetch } from '../services/mangaCache.js';
 
+// Helper: Clean chapter badge formatting (e.g. "Ch. 12", "Ch. 15.1")
+export function formatChapterBadge(raw) {
+  if (!raw) return 'Ch. 1';
+  let s = String(raw).trim();
+  // Strip duplicate 'Ch.' or 'Chapter' prefixes e.g. "Ch. Chapter 127", "Chapter 127", "Ch 127", "Ch."
+  s = s.replace(/^(?:ch(?:\.|apter)?\s*)+/i, '').trim();
+  if (!s || /^update$/i.test(s)) return 'Update';
+  return `Ch. ${s}`;
+}
+
 export function renderHomePageMarkup() {
   return `
     <section class="view-section active" id="view-home">
@@ -176,7 +186,7 @@ export function renderContinueRow() {
     }
     const lastLabel = isItemAnime 
       ? (item.episodeTitle || `Ep. ${item.episode || 1}`) 
-      : (item.chapterNum ? `Ch. ${item.chapterNum}` : (item.chapterTitle || 'Chapter'));
+      : formatChapterBadge(item.chapterNum || item.chapterTitle || '1');
     const progress = item.progress || (item.pageIndex && item.totalPages ? `${Math.round(((item.pageIndex + 1) / item.totalPages) * 100)}%` : '85%');
 
     const card = document.createElement('div');
@@ -276,8 +286,22 @@ export function renderFilterTabs(activeMode = state.activeMediaMode) {
 export function createMediaCard(item, mediaType = state.activeMediaMode) {
   const isAnime = mediaType === 'anime' || item.mediaType === 'anime';
   const isKomiku = item.source === 'komiku' || item.id?.toString().startsWith('komiku-');
-  const title = isAnime ? item.title : (isKomiku ? item.title : getMangaTitle(item.attributes));
-  const coverUrl = isAnime ? item.coverUrl : (isKomiku ? item.coverUrl : getCoverUrl(item));
+  
+  let title = 'Untitled';
+  if (isAnime) {
+    title = item.title || 'Untitled';
+  } else if (typeof item.title === 'string' && item.title.trim() && item.title !== 'undefined') {
+    title = item.title.trim();
+  } else if (item.attributes) {
+    title = getMangaTitle(item.attributes);
+  } else if (typeof item.title === 'object' && item.title !== null) {
+    title = item.title.id || item.title.en || item.title.romaji || 'Untitled';
+  }
+
+  const coverUrl = isAnime 
+    ? (item.coverUrl || 'https://placehold.co/300x420/1e2025/ffffff?text=Anime')
+    : (item.coverUrl && !item.coverUrl.includes('placehold.co') ? item.coverUrl : getCoverUrl(item));
+
   const status = isAnime
     ? (item.status || 'RELEASING').toUpperCase()
     : (isKomiku 
@@ -292,11 +316,10 @@ export function createMediaCard(item, mediaType = state.activeMediaMode) {
   const cleanRating = numRatingMatch ? numRatingMatch[0] : '';
 
   // Latest chapter / episode badge
-  const lastBadge = isAnime
-    ? (item.latestEpisode || `Ep. ${item.episodes || '1'} • Sub`)
-    : (isKomiku
-        ? (item.latestChapter || item.lastChapter || 'Update')
-        : (item.attributes?.lastChapter ? `Ch. ${item.attributes.lastChapter}` : 'Update'));
+  const rawCh = isKomiku
+    ? (item.latestChapter || item.lastChapter || 'Update')
+    : (item.attributes?.lastChapter || item.lastChapter || 'Update');
+  const lastBadge = isAnime ? (item.latestEpisode || `Ep. ${item.episodes || '1'} • Sub`) : formatChapterBadge(rawCh);
 
   const formatBadge = isAnime ? (item.format || 'ANIME') : (item.type || 'MANGA');
 
@@ -526,56 +549,77 @@ export async function loadPopularManga() {
   const sectionTitle = document.getElementById('grid-section-title');
   if (sectionTitle) sectionTitle.textContent = 'Komik Sedang Tren';
 
-  // Instant 0ms render from memory or sessionStorage cache
-  if (!state.popularManga || state.popularManga.length === 0) {
-    try {
-      const cached = sessionStorage.getItem('yomikomi_popular_cache');
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          state.popularManga = parsed;
-          state.mangaList = parsed;
-          renderMangaGrid(parsed);
-          if (parsed.length >= 3) {
-            state.heroManga = parsed.slice(0, 5);
-            if (state.activeMediaMode !== 'anime') {
-              renderHeroBanner(state.heroManga);
-            }
+  // Instant 0ms render from memory or sessionStorage cache if valid
+  let hasRenderedCache = false;
+  try {
+    const cached = sessionStorage.getItem('yomikomi_popular_cache');
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      const isValid = Array.isArray(parsed) && parsed.length > 0 && parsed.every(p => {
+        const t = p.title || p.attributes?.title;
+        return t && t !== 'undefined' && t !== '[object Object]';
+      });
+      if (isValid) {
+        state.popularManga = parsed;
+        state.mangaList = parsed;
+        renderMangaGrid(parsed);
+        hasRenderedCache = true;
+        if (parsed.length >= 3) {
+          state.heroManga = parsed.slice(0, 5);
+          if (state.activeMediaMode !== 'anime') {
+            renderHeroBanner(state.heroManga);
           }
         }
+      } else {
+        sessionStorage.removeItem('yomikomi_popular_cache');
       }
-    } catch (e) {}
-  } else {
-    renderMangaGrid(state.popularManga);
-    if (state.activeMediaMode !== 'anime' && (state.heroManga?.length >= 3 || state.popularManga?.length >= 3)) {
-      renderHeroBanner(state.heroManga || state.popularManga.slice(0, 5));
+    }
+  } catch (e) {}
+
+  if (!hasRenderedCache) {
+    if (state.popularManga && state.popularManga.length > 0 && state.popularManga.every(p => p.title && p.title !== 'undefined')) {
+      renderMangaGrid(state.popularManga);
+      hasRenderedCache = true;
+      if (state.activeMediaMode !== 'anime' && (state.heroManga?.length >= 3 || state.popularManga?.length >= 3)) {
+        renderHeroBanner(state.heroManga || state.popularManga.slice(0, 5));
+      }
     }
   }
 
   // Only show skeleton if zero data is cached
-  if (!state.mangaList || state.mangaList.length === 0) {
+  if (!hasRenderedCache) {
     showGridSkeleton();
   }
 
   try {
     const res = await fetch('/api/popular');
     const data = await res.json();
-    const freshList = (data.data || []).map(m => ({ ...m, source: 'mangadex' }));
-    state.popularManga = freshList;
-    state.mangaList = freshList;
-    try {
-      sessionStorage.setItem('yomikomi_popular_cache', JSON.stringify(freshList));
-    } catch (e) {}
-
-    freshList.forEach(m => {
-      CoverCache.set(m.id, getMangaTitle(m.attributes), getCoverUrl(m));
+    const freshList = (data.data || []).map(m => {
+      const t = (typeof m.title === 'string' && m.title.trim() && m.title !== 'undefined' ? m.title : getMangaTitle(m.attributes)) || 'Untitled';
+      return {
+        ...m,
+        title: t,
+        source: m.source || (m.id?.toString().startsWith('komiku-') ? 'komiku' : 'mangadex')
+      };
     });
-    renderMangaGrid(freshList);
 
-    if (freshList.length >= 3) {
-      state.heroManga = freshList.slice(0, 5);
-      if (state.activeMediaMode !== 'anime') {
-        renderHeroBanner(state.heroManga);
+    if (freshList.length > 0) {
+      state.popularManga = freshList;
+      state.mangaList = freshList;
+      try {
+        sessionStorage.setItem('yomikomi_popular_cache', JSON.stringify(freshList));
+      } catch (e) {}
+
+      freshList.forEach(m => {
+        CoverCache.set(m.id, m.title, getCoverUrl(m));
+      });
+      renderMangaGrid(freshList);
+
+      if (freshList.length >= 3) {
+        state.heroManga = freshList.slice(0, 5);
+        if (state.activeMediaMode !== 'anime') {
+          renderHeroBanner(state.heroManga);
+        }
       }
     }
   } catch (error) {
@@ -593,9 +637,37 @@ export async function loadLatestManga() {
   showGridSkeleton();
 
   try {
-    const res = await fetch('/api/latest');
-    const data = await res.json();
-    state.mangaList = (data.data || []).map(m => ({ ...m, source: 'mangadex' }));
+    const [latestSettled, komikuSettled] = await Promise.allSettled([
+      fetch('/api/latest').then(r => r.json()),
+      fetchKomikuLatest(1)
+    ]);
+
+    let mdList = [];
+    if (latestSettled.status === 'fulfilled' && Array.isArray(latestSettled.value?.data)) {
+      mdList = latestSettled.value.data.map(m => {
+        const t = (typeof m.title === 'string' && m.title.trim() && m.title !== 'undefined' ? m.title : getMangaTitle(m.attributes)) || 'Untitled';
+        return {
+          ...m,
+          title: t,
+          source: m.source || (m.id?.toString().startsWith('komiku-') ? 'komiku' : 'mangadex')
+        };
+      });
+    }
+
+    let komikuList = [];
+    if (komikuSettled.status === 'fulfilled' && Array.isArray(komikuSettled.value)) {
+      komikuList = komikuSettled.value.map(k => ({ ...k, source: 'komiku' }));
+    }
+
+    // Interleave so user gets both global and Indonesian fresh releases with reliable covers
+    const combined = [];
+    const maxL = Math.max(komikuList.length, mdList.length);
+    for (let i = 0; i < maxL; i++) {
+      if (i < komikuList.length) combined.push(komikuList[i]);
+      if (i < mdList.length) combined.push(mdList[i]);
+    }
+
+    state.mangaList = combined.length > 0 ? combined : (komikuList.length > 0 ? komikuList : mdList);
     renderMangaGrid(state.mangaList);
   } catch (error) {
     console.error('Failed to load latest manga:', error);

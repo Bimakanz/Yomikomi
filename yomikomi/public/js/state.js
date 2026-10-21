@@ -554,15 +554,19 @@ export function getMangaTitle(attributes) {
 // Helper: Extract Cover Art URL with Disk Cache & Proxy fallback
 export function getCoverUrl(manga) {
   if (!manga) return 'https://placehold.co/300x420/1e2025/ffffff?text=No+Cover';
-  if (manga.coverUrl) return manga.coverUrl;
+  if (manga.coverUrl && !manga.coverUrl.includes('placehold.co')) return manga.coverUrl;
+  const title = (typeof manga.title === 'string' && manga.title !== 'undefined' ? manga.title : getMangaTitle(manga.attributes)) || '';
   const coverRel = manga.relationships?.find(r => r.type === 'cover_art');
   if (coverRel?.attributes?.fileName) {
     const fn = coverRel.attributes.fileName;
     const thumbFn = (fn.endsWith('.256.jpg') || fn.endsWith('.512.jpg')) ? fn : `${fn}.512.jpg`;
-    return `/api/cover/${manga.id}/${thumbFn}`;
+    return `/api/cover/${manga.id}/${thumbFn}?title=${encodeURIComponent(title)}`;
   }
   const cached = CoverCache.get(manga.id);
-  if (cached?.coverUrl) return cached.coverUrl;
+  if (cached?.coverUrl && !cached.coverUrl.includes('placehold.co')) return cached.coverUrl;
+  if (manga.id && title && title !== 'Judul Tidak Tersedia') {
+    return `/api/cover/${manga.id}/cover.jpg?title=${encodeURIComponent(title)}`;
+  }
   return 'https://placehold.co/300x420/1e2025/ffffff?text=No+Cover';
 }
 

@@ -304,18 +304,20 @@ export function renderPlayerEngine(server) {
     currentHlsInstance = null;
   }
 
-  // Dual-Engine 1: Safe Sandboxed Iframe (Sub Indo Embed Scraper)
-  // 100% ad-free & blocks rogue redirects / popup gambling ads
+  // Dual-Engine 1: Clean High-Performance Iframe Player (Zero Sandbox restrictions)
   if (server.type === 'iframe') {
     wrapper.innerHTML = `
       <iframe
         id="anime-iframe-player"
         class="anime-iframe-player"
         src="${server.url}"
-        sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
-        allowfullscreen
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+        allowfullscreen="true"
+        webkitallowfullscreen="true"
+        mozallowfullscreen="true"
         scrolling="no"
         frameborder="0"
+        referrerpolicy="no-referrer"
         title="Anime Stream Player">
       </iframe>
     `;
@@ -395,23 +397,22 @@ export async function loadEpisode(epNumber) {
   let servers = anime.episodesList?.[epNumber - 1]?.servers || [];
 
   if (servers.length === 0) {
-    if (malId) {
-      servers.push({
-        id: 'server-vidsrc-mal',
-        name: 'Server 1 (Global HD • Multi-Sub)',
-        type: 'iframe',
-        url: `https://vidsrc.pm/embed/anime?mal=${malId}&ep=${epNumber}`,
-        quality: '1080p',
-        isSubIndo: false
-      });
-    }
+    // Priority 1: MultiEmbed & AutoEmbed (Fastest, zero ad-block/sandbox issues, instant playback)
     if (tmdbId) {
       servers.push({
         id: 'server-multiembed-tmdb',
-        name: `Server ${servers.length + 1} (AutoStream FHD)`,
+        name: 'Server 1 (FHD AutoStream • Super Lancar)',
         type: 'iframe',
         url: `https://multiembed.mov/?video_id=${tmdbId}&tmdb=1&s=1&e=${epNumber}`,
         quality: '1080p',
+        isSubIndo: false
+      });
+      servers.push({
+        id: 'server-autoembed-tmdb',
+        name: `Server ${servers.length + 1} (Fast Cloud CDN)`,
+        type: 'iframe',
+        url: `https://autoembed.co/tv/tmdb/${tmdbId}-1-${epNumber}`,
+        quality: 'Auto',
         isSubIndo: false
       });
       servers.push({
@@ -422,19 +423,24 @@ export async function loadEpisode(epNumber) {
         quality: '720p',
         isSubIndo: false
       });
+    }
+
+    // Priority 2: VidSrc Anime (Dedicated anime player with multi-subs)
+    if (malId) {
       servers.push({
-        id: 'server-autoembed-tmdb',
-        name: `Server ${servers.length + 1} (Fast CDN)`,
+        id: 'server-vidsrc-mal',
+        name: `Server ${servers.length + 1} (VidSrc Anime • Multi-Sub)`,
         type: 'iframe',
-        url: `https://autoembed.co/tv/tmdb/${tmdbId}-1-${epNumber}`,
-        quality: 'Auto',
+        url: `https://vidsrc.pm/embed/anime?mal=${malId}&ep=${epNumber}`,
+        quality: '1080p',
         isSubIndo: false
       });
     }
+
     if (servers.length === 0) {
       servers.push({
         id: 'server-direct-embed',
-        name: 'Server 1 (Direct Stream HD)',
+        name: 'Server 1 (FHD AutoStream • Super Lancar)',
         type: 'iframe',
         url: `https://multiembed.mov/?video_id=${safeTitle}&s=1&e=${epNumber}`,
         quality: '1080p',

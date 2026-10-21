@@ -122,9 +122,9 @@ export class AnimeIndoProvider {
           if (defaultIframe) {
             servers.push({
               id: 'indo-desu-main',
-              name: 'Server 1 (Sub Indo • DesuStream HD)',
+              name: 'Server Sub Indo (DesuStream HD)',
               type: 'iframe',
-              url: defaultIframe,
+              url: `/api/proxy/stream?url=${encodeURIComponent(defaultIframe)}`,
               quality: '720p',
               isSubIndo: true
             });
@@ -163,9 +163,9 @@ export class AnimeIndoProvider {
             if (embedSrc) {
               servers.push({
                 id: 'samehadaku-main',
-                name: 'Server 1 (Sub Indo • Samehadaku HD)',
+                name: 'Server Sub Indo (Samehadaku HD)',
                 type: 'iframe',
-                url: embedSrc,
+                url: `/api/proxy/stream?url=${encodeURIComponent(embedSrc)}`,
                 quality: '1080p',
                 isSubIndo: true
               });

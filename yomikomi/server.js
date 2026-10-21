@@ -1851,6 +1851,33 @@ app.get('/api/v2/proxy/image', (req, res) => {
   res.redirect(`/api/proxy-image?url=${encodeURIComponent(u)}`);
 });
 
+// Stream Embed Proxy: Strips X-Frame-Options and frame-ancestors CSP so video embeds load without restriction
+app.get('/api/proxy/stream', async (req, res) => {
+  const targetUrl = req.query.url;
+  if (!targetUrl) return res.status(400).send('Missing url parameter');
+  try {
+    const response = await fetch(targetUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Referer': 'https://otakudesu.best/'
+      },
+      signal: AbortSignal.timeout(8000)
+    });
+    const html = await response.text();
+    res.removeHeader('X-Frame-Options');
+    res.removeHeader('Content-Security-Policy');
+    res.setHeader('Content-Type', 'text/html; charset=UTF-8');
+    const origin = new URL(targetUrl).origin;
+    let modifiedHtml = html;
+    if (!modifiedHtml.includes('<base')) {
+      modifiedHtml = modifiedHtml.replace('<head>', `<head><base href="${origin}/">`);
+    }
+    res.send(modifiedHtml);
+  } catch (err) {
+    res.status(502).send('Stream Proxy Error: ' + err.message);
+  }
+});
+
 // Multi-Source Search (Promise.allSettled)
 app.get('/api/v2/search', async (req, res) => {
   if (!aggregatorService) return res.status(503).json({ error: 'Service initializing' });
@@ -2351,24 +2378,21 @@ app.get('/api/anime/stream/:id/:ep', async (req, res) => {
     if (servers.length === 0) {
       const safeTitle = encodeURIComponent(animeTitle || 'anime');
 
-      if (malId) {
-        servers.push({
-          id: 'server-vidsrc-mal',
-          name: 'Server 1 (Global HD • Multi-Sub)',
-          type: 'iframe',
-          url: `https://vidsrc.pm/embed/anime?mal=${malId}&ep=${epNum}`,
-          quality: '1080p',
-          isSubIndo: false
-        });
-      }
-
       if (tmdbId) {
         servers.push({
           id: 'server-multiembed-tmdb',
-          name: `Server ${servers.length + 1} (AutoStream FHD)`,
+          name: 'Server 1 (FHD AutoStream • Super Lancar)',
           type: 'iframe',
           url: `https://multiembed.mov/?video_id=${tmdbId}&tmdb=1&s=1&e=${epNum}`,
           quality: '1080p',
+          isSubIndo: false
+        });
+        servers.push({
+          id: 'server-autoembed-tmdb',
+          name: `Server ${servers.length + 1} (Fast Cloud CDN)`,
+          type: 'iframe',
+          url: `https://autoembed.co/tv/tmdb/${tmdbId}-1-${epNum}`,
+          quality: 'Auto',
           isSubIndo: false
         });
         servers.push({
@@ -2379,12 +2403,15 @@ app.get('/api/anime/stream/:id/:ep', async (req, res) => {
           quality: '720p',
           isSubIndo: false
         });
+      }
+
+      if (malId) {
         servers.push({
-          id: 'server-autoembed-tmdb',
-          name: `Server ${servers.length + 1} (Fast CDN)`,
+          id: 'server-vidsrc-mal',
+          name: `Server ${servers.length + 1} (VidSrc Anime • Multi-Sub)`,
           type: 'iframe',
-          url: `https://autoembed.co/tv/tmdb/${tmdbId}-1-${epNum}`,
-          quality: 'Auto',
+          url: `https://vidsrc.pm/embed/anime?mal=${malId}&ep=${epNum}`,
+          quality: '1080p',
           isSubIndo: false
         });
       }
@@ -2392,7 +2419,7 @@ app.get('/api/anime/stream/:id/:ep', async (req, res) => {
       if (servers.length === 0) {
         servers.push({
           id: 'server-embed-title',
-          name: 'Server 1 (Direct Stream HD)',
+          name: 'Server 1 (FHD AutoStream • Super Lancar)',
           type: 'iframe',
           url: `https://multiembed.mov/?video_id=${safeTitle}&s=1&e=${epNum}`,
           quality: '1080p',

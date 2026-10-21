@@ -11,6 +11,7 @@ import {
   getCoverUrl,
   CoverCache,
   getStoredList,
+  saveStoredList,
   STORAGE_KEY_HISTORY,
   getAnimeHistory,
   MANGADEX_GENRES,
@@ -160,6 +161,8 @@ export function renderContinueRow() {
   section.classList.remove('hidden');
   container.innerHTML = '';
 
+  let historyChanged = false;
+
   validItems.forEach(item => {
     const isItemAnime = item.mediaType === 'anime' || !!item.animeId;
     let title = 'Untitled';
@@ -173,17 +176,68 @@ export function renderContinueRow() {
       title = item.mangaTitle;
     }
 
-    let coverUrl = item.coverUrl && !item.coverUrl.includes('placehold.co') ? item.coverUrl : null;
-    if (!coverUrl && isItemAnime) {
-      const foundAnime = [...(state.popularAnime || []), ...(state.seasonalAnime || []), ...(state.latestAnime || [])].find(a => String(a.id) === String(item.animeId));
-      if (foundAnime && foundAnime.coverUrl) {
-        coverUrl = foundAnime.coverUrl;
-        item.coverUrl = foundAnime.coverUrl;
+    const cleanTitle = title.replace(/\.{2,}/g, '').trim();
+    let coverUrl = item.coverUrl && !item.coverUrl.includes('placehold.co') && !item.coverUrl.includes('No+Cover') ? item.coverUrl : null;
+
+    if (!coverUrl) {
+      if (isItemAnime) {
+        const foundAnime = [...(state.popularAnime || []), ...(state.seasonalAnime || []), ...(state.latestAnime || [])].find(a => String(a.id) === String(item.animeId || item.id));
+        if (foundAnime && foundAnime.coverUrl) {
+          coverUrl = foundAnime.coverUrl;
+          item.coverUrl = foundAnime.coverUrl;
+          historyChanged = true;
+        }
+      } else {
+        const mId = item.mangaId || item.id;
+        // 1. Check persistent CoverCache (support both string and object shapes)
+        if (mId) {
+          const cached = CoverCache.get(mId);
+          const cachedCover = typeof cached === 'string' ? cached : cached?.coverUrl;
+          if (cachedCover && !cachedCover.includes('placehold.co') && !cachedCover.includes('No+Cover')) {
+            coverUrl = cachedCover;
+          }
+        }
+
+        // 2. Check loaded lists in memory
+        if (!coverUrl) {
+          const foundManga = [...(state.popularManga || []), ...(state.mangaList || []), ...(state.heroManga || [])].find(m => 
+            (m.id && String(m.id) === String(mId)) ||
+            (m.title && typeof m.title === 'string' && m.title.toLowerCase() === title.toLowerCase())
+          );
+          if (foundManga) {
+            const resolved = getCoverUrl(foundManga);
+            if (resolved && !resolved.includes('placehold.co') && !resolved.includes('No+Cover')) {
+              coverUrl = resolved;
+            }
+          }
+        }
+
+        // 3. Fallback to getCoverUrl helper
+        if (!coverUrl) {
+          const resolved = getCoverUrl(item);
+          if (resolved && !resolved.includes('placehold.co') && !resolved.includes('No+Cover')) {
+            coverUrl = resolved;
+          }
+        }
+
+        // 4. Guaranteed fallback: API Cover Proxy with clean title
+        if (!coverUrl) {
+          coverUrl = `/api/cover/${encodeURIComponent(mId || 'manga')}/cover.jpg?title=${encodeURIComponent(cleanTitle || title)}`;
+        }
+
+        if (coverUrl) {
+          item.coverUrl = coverUrl;
+          historyChanged = true;
+        }
       }
     }
+
     if (!coverUrl) {
-      coverUrl = isItemAnime ? 'https://placehold.co/100x140/1e2025/ffffff?text=Anime' : 'https://placehold.co/100x140/1e2025/ffffff?text=Cover';
+      coverUrl = isItemAnime 
+        ? 'https://placehold.co/100x140/1e2025/ffffff?text=Anime' 
+        : `/api/cover/${encodeURIComponent(item.mangaId || item.id || 'manga')}/cover.jpg?title=${encodeURIComponent(cleanTitle || title)}`;
     }
+
     const lastLabel = isItemAnime 
       ? (item.episodeTitle || `Ep. ${item.episode || 1}`) 
       : formatChapterBadge(item.chapterNum || item.chapterTitle || '1');
@@ -195,7 +249,7 @@ export function renderContinueRow() {
     card.tabIndex = 0;
     card.innerHTML = `
       <div class="continue-poster-wrap">
-        <img class="continue-poster" src="${coverUrl}" alt="${title}" loading="lazy" onerror="this.src='https://placehold.co/100x140/1e2025/ffffff?text=Cover';">
+        <img class="continue-poster" src="${coverUrl}" alt="${title}" loading="lazy" onerror="if(!this.dataset.retried){this.dataset.retried='1';this.src='/api/cover/${encodeURIComponent(item.mangaId || item.id || 'manga')}/cover.jpg?title=${encodeURIComponent(cleanTitle || title)}';}">
         <span class="continue-type-badge">${isItemAnime ? 'Anime' : 'Komik'}</span>
       </div>
       <div class="continue-info">
@@ -231,6 +285,10 @@ export function renderContinueRow() {
     card.addEventListener('click', handleAction);
     container.appendChild(card);
   });
+
+  if (historyChanged && !isAnimeMode) {
+    saveStoredList(STORAGE_KEY_HISTORY, mangaHist);
+  }
 
   document.getElementById('btn-continue-all')?.addEventListener('click', () => {
     if (typeof window.switchView === 'function') {

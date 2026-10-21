@@ -67,16 +67,25 @@ export async function saveReadingHistory(manga, chapter) {
   const title = (manga.attributes ? getMangaTitle(manga.attributes) : '') || manga.title || 'Manga Tanpa Judul';
   let coverUrl = getCoverUrl(manga);
 
-  if (!coverUrl || coverUrl.includes('No+Cover')) {
-    if (manga.coverUrl && !manga.coverUrl.includes('No+Cover')) {
+  if (!coverUrl || coverUrl.includes('No+Cover') || coverUrl.includes('placehold.co')) {
+    if (manga.coverUrl && !manga.coverUrl.includes('No+Cover') && !manga.coverUrl.includes('placehold.co')) {
       coverUrl = manga.coverUrl;
     } else if (typeof OfflineManager !== 'undefined' && OfflineManager.db?.manga) {
       try {
         const offM = await OfflineManager.db.manga.get(manga.id);
-        if (offM?.coverUrl && !offM.coverUrl.includes('No+Cover')) {
+        if (offM?.coverUrl && !offM.coverUrl.includes('No+Cover') && !offM.coverUrl.includes('placehold.co')) {
           coverUrl = offM.coverUrl;
         }
       } catch (e) { }
+    }
+  }
+
+  // Guaranteed fallback: API Cover proxy by title instead of dead placeholder
+  if (!coverUrl || coverUrl.includes('No+Cover') || coverUrl.includes('placehold.co')) {
+    const mId = manga.id || manga.mangaId;
+    const cleanTitle = (typeof title === 'string' ? title : '').replace(/\.{2,}/g, '').trim();
+    if (cleanTitle && cleanTitle !== 'Judul Tidak Tersedia') {
+      coverUrl = `/api/cover/${encodeURIComponent(mId || 'manga')}/cover.jpg?title=${encodeURIComponent(cleanTitle)}`;
     }
   }
 

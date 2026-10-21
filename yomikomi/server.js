@@ -732,7 +732,7 @@ app.get('/api/cover/:mangaId/:filename', (req, res) => {
         } catch (e3) {}
       }
 
-      // Fallback 3: AniList High-Resolution Cover Art by Title
+      // Fallback 3: AniList High-Resolution Cover Art by Title & MangaDex API lookup
       if (!coverData) {
         try {
           let searchTitle = (req.query.title || '').trim();
@@ -750,31 +750,101 @@ app.get('/api/cover/:mangaId/:filename', (req, res) => {
             }
           }
 
-          if (searchTitle) {
-            const cleanSearchTitle = searchTitle.replace(/[\[\(][^\]\)]*[\]\)]/g, ' ').replace(/\s+/g, ' ').trim();
-            const gqlQuery = `query ($s: String) { Media(search: $s, type: MANGA) { coverImage { large medium } } }`;
-            const alRes = await fetch('https://graphql.anilist.co', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ query: gqlQuery, variables: { s: cleanSearchTitle } }),
-              signal: AbortSignal.timeout(4500)
+          // If still no title and mangaId looks like a MangaDex UUID, query MangaDex API directly
+          if (!searchTitle && mangaId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(mangaId)) {
+            try {
+              const mdManga = await fetchMangaDex(`/manga/${mangaId}?includes[]=cover_art`);
+              if (mdManga?.data) {
+                const t = mdManga.data.attributes?.title;
+                if (t) searchTitle = t.en || t.ja || t['ja-ro'] || Object.values(t)[0] || '';
+                const covRel = mdManga.data.relationships?.find(r => r.type === 'cover_art');
+                if (covRel?.attributes?.fileName) {
+                  try {
+                    const fn = covRel.attributes.fileName;
+                    coverData = await fetchMangaDexCover(`${fn}.512.jpg`);
+                  } catch (eCov) {}
+                }
+              }
+            } catch (eMd) {}
+          }
+
+          if (!coverData && searchTitle) {
+            // Clean title: remove trailing dots, brackets, and extra spaces
+            let cleanSearchTitle = searchTitle
+              .replace(/\.{2,}/g, ' ')
+              .replace(/[\[\(][^\]\)]*[\]\)]/g, ' ')
+              .replace(/\s+/g, ' ')
+              .trim();
+
+            const gqlQuery = `query ($s: String) { Media(search: $s, type: MANGA) { title { romaji english } coverImage { large medium } } }`;
+            const queryAniList = async (t) => {
+              try {
+                const alRes = await fetch('https://graphql.anilist.co', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ query: gqlQuery, variables: { s: t } }),
+                  signal: AbortSignal.timeout(4500)
+                });
+                if (!alRes.ok) return null;
+                const alJson = await alRes.json();
+                return alJson.data?.Media?.coverImage?.large || alJson.data?.Media?.coverImage?.medium || null;
+              } catch {
+                return null;
+              }
+            };
+
+            let alImgUrl = await queryAniList(cleanSearchTitle);
+
+            // If direct search failed and title was truncated (e.g. ended with incomplete word like "datt")
+            if (!alImgUrl) {
+              const words = cleanSearchTitle.split(' ');
+              if (words.length > 2) {
+                const shorter = words.slice(0, words.length - 1).join(' ');
+                alImgUrl = await queryAniList(shorter);
+              }
+            }
+
+            if (alImgUrl) {
+              const imgFetch = await fetch(alImgUrl, { signal: AbortSignal.timeout(5000) });
+              if (imgFetch.ok) {
+                const arr = await imgFetch.arrayBuffer();
+                coverData = {
+                  buffer: Buffer.from(arr),
+                  contentType: imgFetch.headers.get('content-type') || 'image/jpeg'
+                };
+              }
+            }
+          }
+        } catch (eAl) {}
+      }
+
+      // Fallback 4: ComicK Search API
+      if (!coverData) {
+        try {
+          const rawTitle = (req.query.title || '').replace(/\.{2,}/g, ' ').replace(/[\[\(][^\]\)]*[\]\)]/g, ' ').trim();
+          if (rawTitle) {
+            const cmkRes = await fetch(`https://api.comick.fun/v1.0/search?q=${encodeURIComponent(rawTitle)}&limit=1`, {
+              headers: { 'User-Agent': 'Mozilla/5.0' },
+              signal: AbortSignal.timeout(4000)
             });
-            if (alRes.ok) {
-              const alJson = await alRes.json();
-              const alImgUrl = alJson.data?.Media?.coverImage?.large || alJson.data?.Media?.coverImage?.medium;
-              if (alImgUrl) {
-                const imgFetch = await fetch(alImgUrl, { signal: AbortSignal.timeout(5000) });
-                if (imgFetch.ok) {
-                  const arr = await imgFetch.arrayBuffer();
+            if (cmkRes.ok) {
+              const cmkJson = await cmkRes.json();
+              const first = Array.isArray(cmkJson) ? cmkJson[0] : cmkJson?.data?.[0];
+              const cmkCover = first?.md_covers?.[0]?.b2key || first?.cover_url;
+              if (cmkCover) {
+                const fullCmkUrl = cmkCover.startsWith('http') ? cmkCover : `https://meo.comick.pictures/${cmkCover}`;
+                const cmkFetch = await fetch(fullCmkUrl, { signal: AbortSignal.timeout(5000) });
+                if (cmkFetch.ok) {
+                  const arr = await cmkFetch.arrayBuffer();
                   coverData = {
                     buffer: Buffer.from(arr),
-                    contentType: imgFetch.headers.get('content-type') || 'image/jpeg'
+                    contentType: cmkFetch.headers.get('content-type') || 'image/jpeg'
                   };
                 }
               }
             }
           }
-        } catch (eAl) {}
+        } catch (eCmk) {}
       }
 
       if (coverData && coverData.buffer && coverData.buffer.length > 500) {
@@ -788,10 +858,40 @@ app.get('/api/cover/:mangaId/:filename', (req, res) => {
         return res.end(coverData.buffer);
       }
 
-      // Fallback 4: Clean placeholder image
-      res.redirect(302, 'https://placehold.co/300x420/1e2025/ffffff?text=Cover');
+      // Fallback 5: Dynamic Sleek SVG Card Placeholder (Never broken ugly text box)
+      const displayTitle = (req.query.title || 'Manga').replace(/\.{2,}/g, '').trim().slice(0, 26);
+      const safeTitleSvg = displayTitle.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]));
+      const fallbackSvg = Buffer.from(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="420" viewBox="0 0 300 420">` +
+        `<defs><linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#181922"/><stop offset="100%" stop-color="#0e1017"/></linearGradient></defs>` +
+        `<rect width="300" height="420" rx="14" fill="url(#bg)"/>` +
+        `<rect x="1" y="1" width="298" height="418" rx="13" fill="none" stroke="#252733" stroke-width="1.5"/>` +
+        `<circle cx="150" cy="175" r="42" fill="#20222e"/>` +
+        `<path d="M136 164h28a6 6 0 0 1 6 6v26a6 6 0 0 0-6-6h-28a6 6 0 0 0-6 6v-26a6 6 0 0 1 6-6z" fill="none" stroke="#ff4757" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>` +
+        `<text x="150" y="255" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="600" fill="#a0a5b8" text-anchor="middle">${safeTitleSvg}</text>` +
+        `</svg>`
+      );
+      res.writeHead(200, {
+        'Content-Type': 'image/svg+xml; charset=utf-8',
+        'Cache-Control': 'public, max-age=86400'
+      });
+      return res.end(fallbackSvg);
     } catch (err) {
-      res.redirect(302, 'https://placehold.co/300x420/1e2025/ffffff?text=Cover');
+      const displayTitle = (req.query.title || 'Manga').replace(/\.{2,}/g, '').trim().slice(0, 26);
+      const safeTitleSvg = displayTitle.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]));
+      const fallbackSvg = Buffer.from(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="420" viewBox="0 0 300 420">` +
+        `<defs><linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#181922"/><stop offset="100%" stop-color="#0e1017"/></linearGradient></defs>` +
+        `<rect width="300" height="420" rx="14" fill="url(#bg)"/>` +
+        `<circle cx="150" cy="175" r="42" fill="#20222e"/>` +
+        `<text x="150" y="255" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="600" fill="#a0a5b8" text-anchor="middle">${safeTitleSvg}</text>` +
+        `</svg>`
+      );
+      res.writeHead(200, {
+        'Content-Type': 'image/svg+xml; charset=utf-8',
+        'Cache-Control': 'public, max-age=86400'
+      });
+      return res.end(fallbackSvg);
     }
   })();
 });

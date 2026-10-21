@@ -986,6 +986,9 @@ app.get(['/api/proxy-image', '/api/proxy/image'], async (req, res) => {
       if (h.includes('komiku.org') || h.includes('komiku.to') || h.includes('komiku')) {
         return 'https://komiku.org/';
       }
+      if (h.includes('comick.art') || h.includes('comick') || h.includes('comicknew.pictures')) {
+        return 'https://comick.art/';
+      }
       return `${u.protocol}//${u.host}/`;
     }
 
@@ -2106,16 +2109,38 @@ app.get('/api/comick/manga/:slug', async (req, res) => {
     if (cached) return res.json(cached);
 
     const info = await comickProvider.fetchMangaInfo(slug);
-    const chapters = (info.chapters || []).map((ch, idx) => ({
-      id: ch.id,
-      number: ch.chapterNumber ? parseFloat(ch.chapterNumber) : (idx + 1),
-      chapterNumStr: String(ch.chapterNumber || idx + 1),
-      title: ch.title ? `Chapter ${ch.chapterNumber}: ${ch.title}` : `Chapter ${ch.chapterNumber || idx + 1}`,
-      releaseDate: ch.releaseDate || '',
-      language: ch.lang || 'en',
-      source: 'comick',
-      scanlationGroup: 'ComicK Scan'
-    }));
+    const chapters = (info.chapters || []).map((ch, idx) => {
+      const chNum = ch.chapterNumber ? parseFloat(ch.chapterNumber) : (idx + 1);
+      const chNumStr = String(ch.chapterNumber || idx + 1);
+
+      // Clean title: If title equals chapter number or is empty, normalize to "Chapter X"
+      const rawTitle = (ch.title || '').trim();
+      const isRedundant = !rawTitle || 
+        rawTitle === chNumStr || 
+        rawTitle.toLowerCase() === `chapter ${chNumStr}` ||
+        /^\d+(\.\d+)?$/.test(rawTitle);
+
+      const hasArabic = /[\u0600-\u06FF]/.test(rawTitle);
+
+      let cleanTitle = `Chapter ${chNumStr}`;
+      let subTitle = '';
+      if (!isRedundant && !hasArabic) {
+        subTitle = rawTitle;
+        cleanTitle = `Chapter ${chNumStr}: ${rawTitle}`;
+      }
+
+      return {
+        id: ch.id,
+        number: isNaN(chNum) ? (idx + 1) : chNum,
+        chapterNumStr: chNumStr,
+        title: cleanTitle,
+        subTitle,
+        releaseDate: '',
+        language: ch.lang || 'en',
+        source: 'comick',
+        scanlationGroup: ''
+      };
+    });
 
     const payload = {
       id: `comick-${slug}`,
@@ -2146,7 +2171,11 @@ app.get('/api/comick/chapter-pages', async (req, res) => {
     if (cached) return res.json(cached);
 
     const pagesResult = await comickProvider.fetchChapterPages(chapterId);
-    const pages = (pagesResult || []).map(p => (p && typeof p === 'object' ? (p.img || p.imageUrl || p.url) : p)).filter(Boolean);
+    const rawPages = (pagesResult || [])
+      .map(p => (p && typeof p === 'object' ? (p.img || p.imageUrl || p.url) : p))
+      .filter(Boolean);
+    // Proxy through /api/proxy-image so cdn1.comicknew.pictures receives Referer: https://comick.art/ and returns 200 OK
+    const pages = rawPages.map(url => `/api/proxy-image?url=${encodeURIComponent(url)}`);
     const payload = { pages, total: pages.length };
 
     setCache(cacheKey, payload, CACHE_TTL.atHome);

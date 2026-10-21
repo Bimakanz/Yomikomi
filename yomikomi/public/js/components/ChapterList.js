@@ -222,6 +222,18 @@ export async function fetchAndMergeUnifiedChapters(mangaId, mangaData = null, pr
       return prefetchedKomikuChapters;
     }
 
+    const explicitKomikuSlug = currentManga?.komikuSlug || currentManga?.attributes?.komikuSlug;
+    if (explicitKomikuSlug) {
+      try {
+        const kDetail = await fetchKomikuManga(explicitKomikuSlug);
+        if (kDetail?.chapters && kDetail.chapters.length > 0) {
+          return kDetail.chapters;
+        }
+      } catch (err) {
+        console.warn('[SmartMerger] Failed fetching explicit Komiku chapters:', err.message);
+      }
+    }
+
     if (isKomikuManga && cleanSlug) {
       try {
         const kDetail = await fetchKomikuManga(cleanSlug);

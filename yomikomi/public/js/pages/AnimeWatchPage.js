@@ -220,7 +220,7 @@ export function renderAnimeDetails(anime, activeEp = 1) {
       crosslinkSlot.innerHTML = `
         <button class="btn-crosslink btn-manga-crosslink" id="btn-watch-manga-crosslink" type="button" title="Baca Sumber Manga: ${mangaTitle}">
           <i data-lucide="book-open"></i>
-          <span>📖 Baca Komik: ${mangaTitle}</span>
+          <span>Baca Komik: ${mangaTitle}</span>
         </button>
       `;
       crosslinkSlot.querySelector('#btn-watch-manga-crosslink')?.addEventListener('click', () => {

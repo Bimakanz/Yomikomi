@@ -34,7 +34,6 @@ export function renderHomePageMarkup() {
       <div class="continue-section hidden" id="continue-section">
         <div class="continue-header">
           <div class="continue-title-wrap">
-            <span class="continue-icon">▶️</span>
             <h3 class="continue-title">Lanjutkan</h3>
           </div>
           <button class="continue-see-all-btn" id="btn-continue-all" type="button">Lihat Riwayat</button>
@@ -180,7 +179,7 @@ export function renderContinueRow() {
     card.innerHTML = `
       <div class="continue-poster-wrap">
         <img class="continue-poster" src="${coverUrl}" alt="${title}" loading="lazy" onerror="this.src='https://placehold.co/100x140/1e2025/ffffff?text=Cover';">
-        <span class="continue-type-badge">${isItemAnime ? '🎬 Anime' : '📖 Komik'}</span>
+        <span class="continue-type-badge">${isItemAnime ? 'Anime' : 'Komik'}</span>
       </div>
       <div class="continue-info">
         <h4 class="continue-item-title" title="${title}">${title}</h4>
@@ -375,7 +374,7 @@ export async function loadPopularManga() {
           state.popularManga = parsed;
           state.mangaList = parsed;
           renderMangaGrid(parsed);
-          if (parsed.length >= 3 && state.heroManga.length === 0) {
+          if (parsed.length >= 3 && state.activeMediaMode !== 'anime') {
             state.heroManga = parsed.slice(0, 5);
             renderHeroBanner(state.heroManga);
           }
@@ -406,7 +405,7 @@ export async function loadPopularManga() {
     });
     renderMangaGrid(freshList);
 
-    if (freshList.length >= 3 && state.heroManga.length === 0) {
+    if (freshList.length >= 3 && state.activeMediaMode !== 'anime') {
       state.heroManga = freshList.slice(0, 5);
       renderHeroBanner(state.heroManga);
     }
@@ -596,7 +595,8 @@ export async function loadPopularAnime() {
     renderMediaGrid(list, 'anime');
 
     if (list.length >= 3 && state.activeMediaMode === 'anime') {
-      renderHeroBanner(list.slice(0, 5));
+      state.heroManga = list.slice(0, 5);
+      renderHeroBanner(state.heroManga);
     }
   } catch (error) {
     console.error('Failed to load popular anime:', error);
@@ -972,9 +972,17 @@ export function initHomePage() {
 
     if (newMode === 'anime') {
       if (sectionTitle) sectionTitle.textContent = 'Anime Paling Populer (Trending)';
+      if (state.popularAnime && state.popularAnime.length >= 3) {
+        state.heroManga = state.popularAnime.slice(0, 5);
+        renderHeroBanner(state.heroManga);
+      }
       loadPopularAnime();
     } else {
       if (sectionTitle) sectionTitle.textContent = 'Komik Paling Populer (Trending)';
+      if (state.popularManga && state.popularManga.length >= 3) {
+        state.heroManga = state.popularManga.slice(0, 5);
+        renderHeroBanner(state.heroManga);
+      }
       loadPopularManga();
     }
   });

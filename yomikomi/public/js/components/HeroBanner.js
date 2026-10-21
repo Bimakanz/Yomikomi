@@ -42,7 +42,7 @@ export function renderHeroBanner(containerOrItems, maybeItems, onReadClick, onDe
       <div class="hero-content">
         <div class="hero-badge-row">
           <span class="badge-tag accent">
-            <span>${isAnime ? '🎬 Populer' : '📖 Populer'}</span>
+            <span>${isAnime ? 'Populer Anime' : 'Populer Komik'}</span>
           </span>
           <span class="badge-tag">${status}</span>
           ${tags.map(t => `<span class="badge-tag">${t}</span>`).join('')}

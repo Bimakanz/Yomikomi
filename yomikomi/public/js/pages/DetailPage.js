@@ -170,7 +170,7 @@ export function renderMangaDetailHero(manga) {
       slot.innerHTML = `
         <button class="btn-crosslink btn-anime-crosslink" id="btn-detail-anime-crosslink" type="button" title="Tonton Adaptasi Anime: ${meta.relatedAnime.title?.romaji || ''}">
           <i data-lucide="film"></i>
-          <span>🎬 Tonton Anime</span>
+          <span>Tonton Anime</span>
         </button>
       `;
       slot.querySelector('#btn-detail-anime-crosslink')?.addEventListener('click', () => {
@@ -183,7 +183,7 @@ export function renderMangaDetailHero(manga) {
       slot.innerHTML = `
         <button class="btn-crosslink btn-manga-crosslink" id="btn-detail-manga-crosslink" type="button" title="Baca Sumber Manga: ${meta.relatedManga.title?.romaji || ''}">
           <i data-lucide="book-open"></i>
-          <span>📖 Baca Komik</span>
+          <span>Baca Komik</span>
         </button>
       `;
       slot.querySelector('#btn-detail-manga-crosslink')?.addEventListener('click', () => {
@@ -369,7 +369,7 @@ export async function openMangaDetail(mangaId, maybeMangaData = null) {
   }
 
   // MangaDex or standard manga
-  const existing = state.mangaList?.find(m => m.id === mangaId);
+  const existing = maybeMangaData || state.mangaList?.find(m => m.id === mangaId);
   if (existing) {
     state.currentManga = existing;
     renderMangaDetailHero(existing);
@@ -388,7 +388,16 @@ export async function openMangaDetail(mangaId, maybeMangaData = null) {
     const res = await fetch(`/api/manga/${mangaId}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    state.currentManga = data.data;
+    state.currentManga = {
+      ...data.data,
+      ...(maybeMangaData?.komikuSlug ? {
+        komikuSlug: maybeMangaData.komikuSlug,
+        komikuTitle: maybeMangaData.komikuTitle
+      } : (state.currentManga?.komikuSlug ? {
+        komikuSlug: state.currentManga.komikuSlug,
+        komikuTitle: state.currentManga.komikuTitle
+      } : {}))
+    };
 
     CoverCache.set(data.data.id, getMangaTitle(data.data.attributes), getCoverUrl(data.data));
     setMangaDetailCached(mangaId, state.currentManga);
